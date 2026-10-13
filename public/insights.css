@@ -13,3 +13,72 @@
 .base-day-track i,.production-track i{background:var(--trl-texto)}
 @media(min-width:900px){.filter-row,.base-filters,.production-filters,.gusa-toolbar{position:sticky;top:0;z-index:10;box-shadow:0 8px 18px rgba(0,0,0,.07)}}
 @media print{.filter-row,.base-filters,.production-filters,.gusa-toolbar{position:static;box-shadow:none}.chart-data{display:none}}
+/* Selo de atualização da base (cabeçalho) */
+.data-seal{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:6px 10px;border:1px solid var(--trl-cinza-200);border-radius:var(--trl-radius);background:var(--trl-branco);color:var(--trl-cinza-800);font-size:.75rem;font-weight:600;line-height:1.3;font-variant-numeric:tabular-nums}
+.data-seal::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--trl-cinza-400)}
+.data-seal[data-level="ok"]::before{background:var(--trl-status-ok)}
+.data-seal[data-level="warning"]{border-color:var(--trl-status-atencao-40);background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.data-seal[data-level="warning"]::before{background:var(--trl-status-atencao)}
+.data-seal[data-level="critical"]{border-color:var(--trl-vermelho-40);background:var(--trl-vermelho-15);color:var(--trl-vermelho)}
+.data-seal[data-level="critical"]::before{background:var(--trl-status-critico)}
+.data-seal[hidden]{display:none}
+@media(max-width:1050px){.header-actions .updated.data-seal{display:inline-flex}.header-actions .updated.data-seal[hidden]{display:none}}
+/* Variação dos KPIs contra o período anterior: positivo em grafite, negativo em vermelho */
+.kpi-card .kpi-delta{display:block;margin-top:6px;font-size:.76rem;font-weight:700;color:var(--trl-cinza-600);font-variant-numeric:tabular-nums}
+.kpi-card .kpi-delta[data-direction="up"]{color:var(--trl-chart-positive)}
+.kpi-card .kpi-delta[data-direction="down"]{color:var(--trl-chart-negative)}
+.kpi-card .kpi-delta[hidden]{display:none}
+@media(max-width:720px){.topbar .header-actions{display:contents}.topbar .export-menu{grid-column:3;grid-row:1;justify-self:end}.topbar .data-seal{grid-column:1/-1;grid-row:2;justify-self:start}}
+/* Participação por carga: ranking de barras horizontais */
+.cargo-rank-total{margin:4px 0 14px;color:var(--trl-cinza-600);font-size:.84rem}
+.cargo-rank-total strong{font-family:var(--trl-font-titulo);font-size:1.05rem;color:var(--trl-texto);margin-right:4px}
+.cargo-rank{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.cargo-rank-row{display:grid;grid-template-columns:minmax(120px,260px) minmax(0,1fr) minmax(170px,auto);gap:14px;align-items:center;font-size:.84rem}
+.cargo-rank-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--trl-texto)}
+.cargo-rank-track{height:14px;background:var(--trl-cinza-100);border-radius:3px;overflow:hidden}
+.cargo-rank-track i{display:block;height:100%;background:var(--trl-vermelho-40);border-radius:0 3px 3px 0}
+.cargo-rank-row.is-top .cargo-rank-track i{background:var(--trl-vermelho)}
+.cargo-rank-value{text-align:right;white-space:nowrap;color:var(--trl-cinza-600);font-variant-numeric:tabular-nums}
+.cargo-rank-value b{font-family:var(--trl-font-titulo);font-size:.95rem;color:var(--trl-texto);margin-right:6px}
+@media(max-width:720px){.cargo-rank{gap:14px}.cargo-rank-row{grid-template-columns:minmax(0,1fr) auto;row-gap:6px;column-gap:10px}.cargo-rank-track{grid-column:1/-1;grid-row:2}.cargo-rank-value{grid-column:2;grid-row:1}}
+/* Evolução mensal: dois painéis (volume e navios) no mesmo canvas */
+#chartStage{height:480px}
+@media(max-width:720px){#chartStage{height:440px}}
+.legend .legend-volume{background:var(--trl-vermelho)}
+.legend .legend-vessels{background:var(--trl-texto)}
+/* Descarga diária: linha do ritmo diário do plano */
+.base-day-track{position:relative}
+.base-day-target{position:absolute;left:-3px;right:-3px;height:0;border-top:2px dashed var(--trl-vermelho);pointer-events:none}
+.base-target-legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:10px 0 0;font-size:.8rem;color:var(--trl-cinza-800)}
+.base-target-legend i{display:inline-block;width:22px;border-top:2px dashed var(--trl-vermelho)}
+.base-target-legend strong{font-family:var(--trl-font-titulo);font-size:.92rem;color:var(--trl-texto)}
+.base-target-legend[hidden]{display:none}
+/* Logo horizontal no cabeçalho (desktop). Altura de 40px fica acima da redução mínima do
+   brandbook (25 mm de largura ≈ 94px), com área de respiro à direita antes do divisor. */
+@media(min-width:1051px){
+  .topbar .brand-block{display:flex;align-items:center;gap:0}
+  .topbar .brand-logo{display:block;width:auto;height:40px;margin:4px 22px 4px 4px;object-fit:contain;transition:opacity .18s}
+  .topbar .brand-block>div{padding-left:22px;border-left:1px solid var(--trl-cinza-200)}
+  .topbar .brand-block .eyebrow{display:none}
+  body.menu-open .topbar .brand-logo{opacity:0;visibility:hidden}
+}
+/* Cabeçalho da exportação (PDF e imagem): logo, título, filtros, geração e data dos dados */
+.export-stage .export-stage-header{display:flex;align-items:center;justify-content:flex-start;gap:0}
+.export-stage .export-logo{display:block;height:56px;width:auto;margin:4px 30px 4px 0}
+.export-stage .export-title{flex:1;min-width:0;padding-left:30px;border-left:1px solid var(--trl-cinza-200)}
+.export-stage .export-title small{font-family:var(--trl-font-titulo);color:var(--trl-vermelho);font-size:12px;font-weight:700;letter-spacing:.14em}
+.export-stage .export-title h1{font-family:var(--trl-font-titulo);font-size:30px;margin:4px 0 4px;color:var(--trl-texto)}
+.export-stage .export-title p{font-family:var(--trl-font-corpo);font-size:14px;color:var(--trl-cinza-600);margin:0}
+.export-stage .export-meta{display:grid;gap:4px;text-align:right;font-family:var(--trl-font-corpo);font-size:12px;color:var(--trl-cinza-600);white-space:nowrap}
+.export-stage .export-meta .export-data{font-weight:600;color:var(--trl-texto)}
+.export-stage .export-meta .export-data:empty{display:none}
+/* Botão "Atualizar dados" no cabeçalho */
+.refresh-button{display:flex;align-items:center;gap:7px;border:1px solid var(--trl-cinza-200);border-radius:7px;background:var(--trl-branco);color:var(--trl-texto);padding:10px 12px;font:inherit;font-size:.8rem;font-weight:800;white-space:nowrap;cursor:pointer}
+.refresh-button:hover,.refresh-button:focus-visible{border-color:var(--trl-vermelho);color:var(--trl-vermelho)}
+.refresh-button:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:2px}
+.refresh-button:disabled{cursor:wait;opacity:.75}
+.refresh-button.is-busy svg{animation:trl-spin 1s linear infinite}
+@keyframes trl-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.refresh-button.is-busy svg{animation:none}}
+@media(max-width:1250px){.refresh-button span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.refresh-button{padding:9px}}
+@media(max-width:720px){.topbar{grid-template-columns:auto minmax(0,1fr) auto auto}.topbar .refresh-button{grid-column:3;grid-row:1}.topbar .export-menu{grid-column:4}}
