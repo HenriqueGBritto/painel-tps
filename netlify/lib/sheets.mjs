@@ -104,11 +104,11 @@ export function parseSheet(kind, bytes, fetchedAt = new Date()) {
 const cache = new Map();
 
 /** Lê e interpreta a planilha, com cache curto na memória da função. */
-export async function loadSheet(kind, { fetcher = fetch, now = Date.now } = {}) {
+export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force = false } = {}) {
   const id = sourceId(kind);
   if (!id) throw new Error(`Link da planilha não configurado (${SHEETS[kind].env}).`);
   const cached = cache.get(kind);
-  if (cached && cached.id === id && now() - cached.at < CACHE_MS) return cached.data;
+  if (!force && cached && cached.id === id && now() - cached.at < CACHE_MS) return cached.data;
   const bytes = await downloadWorkbook(id, fetcher);
   const parseStarted = Date.now();
   const data = parseSheet(kind, bytes, new Date(now()));
