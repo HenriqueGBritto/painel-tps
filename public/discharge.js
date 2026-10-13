@@ -5,11 +5,10 @@
   const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
   const $ = id => document.getElementById(id);
   const state = { data: null, ready: false, chartPoints: [] };
-  const timeFormat = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
-  const sourceNote = () => {
-    const data = state.data || {};
-    if (data.origin === "fallback") return "planilha do Google indisponível no momento · exibindo a última base salva";
-    return data.generatedAt ? `planilha lida em ${timeFormat.format(new Date(data.generatedAt))}` : "base atualizada";
+  const fullDate = value => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
+  const isLastDischargeWindow = (start, end) => {
+    const range = TpsMetrics.lastDischargeWindow(state.data.dischargeDays);
+    return range.hasData && range.start === start && range.end === end;
   };
   const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const tons = value => `${number.format(value)} t`;
@@ -30,10 +29,12 @@
   function fillSelect(id, values, allLabel) {
     $(id).innerHTML = `<option value="">${allLabel}</option>${values.map(value => `<option value="${value}">${value}</option>`).join("")}`;
   }
+  /* Padrão e botão "Últimos 7 dias": os 7 dias que terminam na última descarga registrada,
+     para nunca abrir num período vazio quando a planilha está alguns dias atrasada. */
   function lastWeek() {
-    const end = todayISO();
-    $("dischargeEnd").value = end;
-    $("dischargeStart").value = addDays(end, -7);
+    const range = TpsMetrics.lastDischargeWindow(state.data?.dischargeDays || [], 7, todayISO());
+    $("dischargeEnd").value = range.end;
+    $("dischargeStart").value = range.start;
     $("dischargeYear").value = "";
     $("dischargeMonth").value = "";
     renderDischarge();
@@ -71,8 +72,8 @@
     $("dischargeWagons").textContent = integer.format(wagons);
     $("dischargeAverage").textContent = tons(days.length ? total / days.length : 0);
     $("dischargeStopTime").textContent = duration(stopped);
-    $("dischargeStatus").textContent = `${dateLabel(start)} a ${dateLabel(end)} · ${days.length} dias com descarga · ${sourceNote()}`;
-    $("dischargeStatus").dataset.kind = state.data.origin === "fallback" ? "warning" : "";
+    const context = isLastDischargeWindow(start, end) ? " · 7 dias até a última descarga registrada" : "";
+    $("dischargeStatus").textContent = `Exibindo ${fullDate(start)} a ${fullDate(end)}${context} · ${days.length} ${days.length === 1 ? "dia" : "dias"} com descarga`;
     $("dischargeMethodNote").textContent = `Descarga reconhecida pela data da coluna “DATA DA DESCARGA” e status “FINALIZADO”. ${state.data.inProgress?.records || 0} registros “EM DESCARGA” sem data de conclusão não entram no volume realizado.`;
     renderDaily(days, start, end);
     renderPlan(start, end);
@@ -108,10 +109,18 @@
     chart.classList.toggle("is-monthly",monthly);
     chart.closest(".base-chart-scroll").classList.toggle("long-range",monthly);
     $("dischargeChartDetail").textContent="Passe o mouse ou toque em uma coluna para ver o valor exato.";
+    // Linha de referência: ritmo diário necessário para cumprir o plano do mês (plano ÷ dias do mês).
+    const targets = monthly ? { days: [], segments: [] } : TpsMetrics.dailyTargets(state.data.plans || [], start, end);
+    const rates = targets.days.map(day => day.rate);
+    points.forEach((point, index) => { point.target = rates[index] || null; });
+    const legend = $("dischargeTargetLegend");
+    legend.hidden = !targets.segments.length;
+    legend.innerHTML = targets.segments.length ? `<i aria-hidden="true"></i>Ritmo diário do plano: ${[...new Map(targets.segments.map(seg => [`${seg.year}-${seg.month}`, seg])).values()].map(seg => `<strong>${integer.format(seg.rate)} t/dia</strong> em ${months[seg.month - 1].slice(0, 3).toLowerCase()}/${seg.year}`).join(" · ")} (plano do mês ÷ dias do mês)` : "";
     if (!points.some(point => point.value > 0)) { chart.innerHTML = '<p class="base-empty">Sem descarga concluída neste período.</p>'; return; }
-    const max = Math.max(...points.map(point => point.value));
+    // Com linha de meta, 8% de folga no topo para a linha não encostar nos rótulos.
+    const max = Math.max(...points.map(point => point.value), ...rates.filter(rate => rate !== null)) * (targets.segments.length ? 1.08 : 1);
     chart.style.setProperty("--chart-columns",Math.max(7,points.length));
-    chart.innerHTML=points.map((point,index)=>`<div class="base-day" data-index="${index}" role="img" aria-label="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}" title="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}"><div class="base-day-value">${point.value?(points.length>14&&!monthly?`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:1}).format(point.value/1000)} mil`:integer.format(point.value)):"0"}</div><div class="base-day-track"><i style="height:${point.value?Math.max(3,point.value/max*100):0}%"></i></div><span>${point.showLabel===false?"":escape(point.label)}</span></div>`).join("");
+    chart.innerHTML=points.map((point,index)=>`<div class="base-day" data-index="${index}" role="img" aria-label="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}${rates[index]?` · ritmo do plano ${escape(tons(rates[index]))}`:""}" title="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}${rates[index]?` · ritmo do plano ${escape(tons(rates[index]))}`:""}"><div class="base-day-value">${point.value?(points.length>14&&!monthly?`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:1}).format(point.value/1000)} mil`:integer.format(point.value)):"0"}</div><div class="base-day-track"><i style="height:${point.value?Math.max(3,point.value/max*100):0}%"></i>${rates[index]?`<b class="base-day-target" style="bottom:${rates[index]/max*100}%"></b>`:""}</div><span>${point.showLabel===false?"":escape(point.label)}</span></div>`).join("");
   }
   function renderPlan(start, end) {
     const selected = state.data.plans.filter(item => monthKey(item.year, item.month) >= start.slice(0, 7) && monthKey(item.year, item.month) <= end.slice(0, 7));
@@ -176,29 +185,54 @@
     lastWeek();
     renderWeighing();
   }
-  async function load() {
-    if (state.ready) return;
-    $("dischargeStatus").textContent = "Lendo a planilha de indicadores no Google…";
-    const response = await fetch("/api/discharge");
-    if (!response.ok) throw new Error("Não foi possível carregar a base de descarga.");
-    const data = await response.json();
-    initialize(data);
-    const link = $("dischargeSheetLink");
-    if (link && data.sheetUrl) { link.href = data.sheetUrl; link.hidden = false; }
-    state.ready = true;
+  let loading = null;
+  function load() {
+    if (state.ready) return Promise.resolve();
+    loading ||= (async () => {
+      $("dischargeStatus").textContent = "Lendo a planilha de indicadores no Google…";
+      window.renderDataSeal?.();
+      const response = await fetch("/api/discharge");
+      if (!response.ok) throw new Error("Não foi possível carregar a base de descarga.");
+      const data = await response.json();
+      initialize(data);
+      const link = $("dischargeSheetLink");
+      if (link && data.sheetUrl) { link.href = data.sheetUrl; link.hidden = false; }
+      state.ready = true;
+      window.renderDataSeal?.();
+      window.onDischargeReady?.();
+    })().finally(() => { loading = null; });
+    return loading;
   }
   function setup() {
     const chart=$("dischargeDailyChart");
-    const showDay=event=>{const item=event.target.closest(".base-day");if(!item||!chart.contains(item))return;const point=state.chartPoints[Number(item.dataset.index)];if(point)$("dischargeChartDetail").textContent=`${point.fullLabel||point.label} · ${tons(point.value)}`};
+    const showDay=event=>{const item=event.target.closest(".base-day");if(!item||!chart.contains(item))return;const point=state.chartPoints[Number(item.dataset.index)];if(point)$("dischargeChartDetail").textContent=`${point.fullLabel||point.label} · ${tons(point.value)}${point.target?` · ritmo do plano ${tons(point.target)}`:""}`};
     chart.addEventListener("pointerover",showDay);
     chart.addEventListener("click",showDay);
-    $("dischargeYear").addEventListener("change", setPeriodFromSelect);
-    $("dischargeMonth").addEventListener("change", setPeriodFromSelect);
-    $("dischargeStart").addEventListener("change", applyDateInputs);
-    $("dischargeEnd").addEventListener("change", applyDateInputs);
-    $("dischargeLastWeek").addEventListener("click", lastWeek);
-    $("weighingYear").addEventListener("change", renderWeighing);
-    $("weighingMonth").addEventListener("change", renderWeighing);
+    const userChange = handler => event => { handler(event); window.syncUrl?.(); };
+    $("dischargeYear").addEventListener("change", userChange(setPeriodFromSelect));
+    $("dischargeMonth").addEventListener("change", userChange(setPeriodFromSelect));
+    $("dischargeStart").addEventListener("change", userChange(applyDateInputs));
+    $("dischargeEnd").addEventListener("change", userChange(applyDateInputs));
+    $("dischargeLastWeek").addEventListener("click", userChange(lastWeek));
+    $("weighingYear").addEventListener("change", userChange(renderWeighing));
+    $("weighingMonth").addEventListener("change", userChange(renderWeighing));
   }
-  window.dischargePanel = { setup, getUpdatedAt: () => state.ready ? state.data?.generatedAt : null, load: () => load().catch(error => { $("dischargeStatus").textContent = error.message; $("weighingStatus").textContent = error.message; }) };
+  window.dischargePanel = { setup, getUpdatedAt: () => state.ready ? state.data?.generatedAt : null,
+    getMeta: () => state.data ? { origin: state.data.origin, lastRecordAt: state.data.lastRecordAt, generatedAt: state.data.generatedAt, fallbackReason: state.data.fallbackReason } : null,
+    isLoading: () => !state.ready,
+    getRange: () => ({ start: $("dischargeStart").value || null, end: $("dischargeEnd").value || null }),
+    /* Abre um intervalo vindo da URL; sem intervalo, volta ao padrão (7 dias até a última descarga). */
+    setRange: (start, end) => {
+      if (!state.ready) return;
+      if (start && end) { $("dischargeStart").value = start; $("dischargeEnd").value = end; $("dischargeYear").value = ""; $("dischargeMonth").value = ""; renderDischarge(); }
+      else lastWeek();
+    },
+    getWeighing: () => ({ year: Number($("weighingYear").value) || null, month: Number($("weighingMonth").value) || null }),
+    setWeighing: (year, month) => {
+      if (!state.ready) return;
+      const yearSelect = $("weighingYear");
+      if (year && [...yearSelect.options].some(option => option.value === String(year))) yearSelect.value = String(year);
+      $("weighingMonth").value = month ? String(month) : "";
+      renderWeighing();
+    }, load: () => load().catch(error => { $("dischargeStatus").textContent = error.message; $("weighingStatus").textContent = error.message; }) };
 })();
