@@ -1,7 +1,7 @@
 /* Leitura direta das planilhas no Google Drive.
    Cada planilha precisa estar compartilhada como "Qualquer pessoa com o link – Leitor".
    Os IDs podem ser trocados no Netlify sem novo código, pelas variáveis
-   TPS_SHEET_OPERATIONS e TPS_SHEET_DISCHARGE. */
+   TPS_SHEET_OPERATIONS, TPS_SHEET_LINEUP e TPS_SHEET_DISCHARGE. */
 import { XLSX, parseOperationsWorkbook, parseDischargeWorkbook } from "./parsers.mjs";
 import { readColumns } from "./fast-xlsx.mjs";
 
@@ -13,8 +13,10 @@ export const SHEETS = {
     env: "TPS_SHEET_OPERATIONS",
     defaultId: "1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm", // dados_navios_dinamico_triunfo.xlsm
     label: "dados_navios_dinamico_triunfo",
-    tabs: ["2024", "2025", "2026", "BASE_GUSA_2026", "LINEUP"],
-    readOptions: { cellDates: false }
+    tabs: ["2024", "2025", "2026", "BASE_GUSA_2026"],
+    readOptions: { cellDates: false },
+    // A aba LINEUP fica na planilha de produção "outras" (Google Planilhas nativo), com a mesma estrutura de antes.
+    lineup: { env: "TPS_SHEET_LINEUP", defaultId: "1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU", tab: "LINEUP", order: ["sheets", "drive"] }
   },
   discharge: {
     env: "TPS_SHEET_DISCHARGE",
@@ -40,6 +42,12 @@ export function sheetId(value) {
 export function sourceId(kind, env = process.env) {
   const config = SHEETS[kind];
   if (!config) throw new Error("Base desconhecida.");
+  return sheetId(env[config.env]) || sheetId(config.defaultId);
+}
+
+/** Planilha de onde vem a aba LINEUP. */
+export function lineupId(env = process.env) {
+  const config = SHEETS.operations.lineup;
   return sheetId(env[config.env]) || sheetId(config.defaultId);
 }
 
@@ -84,15 +92,25 @@ export async function downloadWorkbook(id, fetcher = fetch, order = ["drive", "s
   throw new Error(lastError);
 }
 
-export function parseSheet(kind, bytes, fetchedAt = new Date()) {
+/* Junta a aba LINEUP de outra planilha à de navios. Sem lineupBytes, vale a LINEUP da própria planilha. */
+function attachLineup(workbook, lineupBytes) {
+  if (!lineupBytes) return workbook;
+  const { tab } = SHEETS.operations.lineup;
+  const source = XLSX.read(lineupBytes, { type: "array", sheets: [tab], cellText: false, cellHTML: false, cellFormula: false, cellDates: false });
+  if (!source.Sheets[tab]) throw new Error(`Aba ${tab} ausente na planilha de produção.`);
+  workbook.Sheets[tab] = source.Sheets[tab];
+  return workbook;
+}
+
+export function parseSheet(kind, bytes, fetchedAt = new Date(), { lineupBytes = null } = {}) {
   const config = SHEETS[kind];
   // Só os valores interessam: pular texto formatado, HTML e fórmulas deixa a leitura bem mais rápida.
   const workbook = config.columns
     ? readColumns(bytes, config.columns, { cellDates: false })
-    : XLSX.read(bytes, { type: "array", sheets: config.tabs, cellText: false, cellHTML: false, cellFormula: false, ...config.readOptions });
+    : XLSX.read(bytes, { type: "array", sheets: lineupBytes || !config.lineup ? config.tabs : [...config.tabs, config.lineup.tab], cellText: false, cellHTML: false, cellFormula: false, ...config.readOptions });
   const source = `${config.label} (Google Planilhas)`;
   const data = kind === "operations"
-    ? parseOperationsWorkbook(workbook, source)
+    ? parseOperationsWorkbook(attachLineup(workbook, lineupBytes), source)
     : parseDischargeWorkbook(workbook, source, fetchedAt.getTime());
   if (kind === "discharge" && !data.dischargeDays.length) throw new Error("Nenhuma descarga concluída foi encontrada na planilha.");
   data.generatedAt = fetchedAt.toISOString();
@@ -107,13 +125,18 @@ const cache = new Map();
 export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force = false } = {}) {
   const id = sourceId(kind);
   if (!id) throw new Error(`Link da planilha não configurado (${SHEETS[kind].env}).`);
+  const extraId = kind === "operations" ? lineupId() : null;
+  const key = `${id}|${extraId || ""}`;
   const cached = cache.get(kind);
-  if (!force && cached && cached.id === id && now() - cached.at < CACHE_MS) return cached.data;
-  const bytes = await downloadWorkbook(id, fetcher);
+  if (!force && cached && cached.id === key && now() - cached.at < CACHE_MS) return cached.data;
+  const [bytes, lineupBytes] = await Promise.all([
+    downloadWorkbook(id, fetcher),
+    extraId ? downloadWorkbook(extraId, fetcher, SHEETS.operations.lineup.order) : null
+  ]);
   const parseStarted = Date.now();
-  const data = parseSheet(kind, bytes, new Date(now()));
+  const data = parseSheet(kind, bytes, new Date(now()), { lineupBytes });
   console.log(`Planilha ${kind} interpretada em ${Date.now() - parseStarted} ms.`);
-  cache.set(kind, { id, at: now(), data });
+  cache.set(kind, { id: key, at: now(), data });
   return data;
 }
 
