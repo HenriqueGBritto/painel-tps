@@ -34,15 +34,24 @@ test("cópia antiga demais é relida; se a leitura falhar, a antiga continua val
   await assert.rejects(loadForServing("discharge", { loader: failing, now }), /Google fora/, "sem cópia nenhuma, o erro sobe para a reserva da API");
 });
 
-test("botão: dentro de 5 minutos devolve a cópia existente", async () => {
+test("botão: com as duas cópias lidas há menos de 5 minutos, devolve a cópia existente", async () => {
   const base = Date.parse("2026-10-13T12:00:00Z");
   saved.set("snapshot-operations", { generatedAt: "2026-10-13T12:00:00Z" });
-  saved.set("snapshot-discharge", { generatedAt: "2026-10-13T11:00:00Z" });
+  saved.set("snapshot-discharge", { generatedAt: "2026-10-13T11:59:00Z" });
   const calls = [];
   const result = await requestRefresh({ loader: loaderAt("novo", calls), now: () => base + 2 * 60000 });
   assert.equal(result.status, "recent");
-  assert.equal(result.retryInMs, MIN_REFRESH_MS - 2 * 60000);
+  assert.equal(result.retryInMs, MIN_REFRESH_MS - 3 * 60000, "conta a partir da cópia mais antiga");
   assert.equal(calls.length, 0);
+});
+
+test("botão: base sem cópia (leitura anterior falhou) não fica bloqueada pela outra", async () => {
+  const now = Date.parse("2026-10-13T12:02:00Z");
+  saved.set("snapshot-discharge", { generatedAt: "2026-10-13T12:00:00Z" });
+  const calls = [];
+  const result = await requestRefresh({ loader: loaderAt("2026-10-13T12:02:00Z", calls), now: () => now });
+  assert.equal(result.status, "refreshed");
+  assert.ok(calls.includes("operations"));
 });
 
 test("botão: depois do intervalo relê as duas planilhas e guarda", async () => {
