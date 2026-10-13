@@ -63,9 +63,10 @@ export async function refreshKinds(kinds = KINDS, { loader = freshSheet, now = D
 export async function requestRefresh({ loader = freshSheet, now = Date.now } = {}) {
   const current = now();
   const snapshots = await Promise.all(KINDS.map(readSnapshot));
-  const newest = Math.min(...snapshots.map(snapshot => snapshot ? ageOf(snapshot, current) : Infinity));
-  if (newest < MIN_REFRESH_MS) {
-    return { status: "recent", retryInMs: MIN_REFRESH_MS - newest, generatedAt: snapshots.map(s => s?.generatedAt).filter(Boolean).sort().at(-1) };
+  // Vale a cópia mais antiga: se uma base não tem cópia (ou a leitura dela falhou), o botão pode tentar de novo.
+  const oldest = Math.max(...snapshots.map(snapshot => snapshot ? ageOf(snapshot, current) : Infinity));
+  if (oldest < MIN_REFRESH_MS) {
+    return { status: "recent", retryInMs: MIN_REFRESH_MS - oldest, generatedAt: snapshots.map(s => s?.generatedAt).filter(Boolean).sort().at(-1) };
   }
   const lock = await store().get("refresh-lock");
   if (lock && current - Date.parse(lock.at) < LOCK_MS) return { status: "running" };
