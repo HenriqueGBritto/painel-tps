@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Painel interativo das operações portuárias da Triunfo Logística.">
+  <title>Painel de Operações | Triunfo Logística</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preload" href="/fonts/din-bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/poppins-regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="brand.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="discharge.css">
+  <link rel="stylesheet" href="navigation.css">
+  <link rel="stylesheet" href="insights.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Menu principal">
+      <div class="sidebar-brand"><img src="/logo-triunfo-branco.svg" alt="Triunfo Logística"><span>PAINEL DE OPERAÇÕES</span></div>
+      <nav class="side-nav" aria-label="Menu principal">
+        <button type="button" class="side-link active" data-menu="indicadores" aria-current="page"><span aria-hidden="true">▦</span> Indicadores</button>
+        <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
+        <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
+      </nav>
+      <div class="sidebar-foot">TRIUNFO LOGÍSTICA</div>
+    </aside>
+    <header class="topbar">
+      <button type="button" class="mobile-menu-button" id="mobileMenuButton" aria-label="Abrir menu lateral" aria-controls="sidebar" aria-expanded="false" title="Abrir menu">☰</button>
+      <div class="brand-block">
+        <img class="brand-logo" src="/logo-triunfo-cor.svg" alt="Triunfo Logística">
+        <div>
+          <p class="eyebrow">TRIUNFO LOGÍSTICA</p>
+          <h1>Painel de Operações</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="updated" id="updatedAt">Base operacional</span>
+        <details class="export-menu" id="exportMenu"><summary aria-label="Exportar visão atual" title="Exportar visão atual"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg><span>Exportar</span></summary><div class="export-menu-options"><button type="button" id="exportPdf">PDF em paisagem</button><button type="button" id="exportImage">Imagem em paisagem</button></div></details>
+      </div>
+    </header>
+
+    <main>
+      <nav class="subnav" id="indicatorNav" aria-label="Categorias de indicadores">
+        <button type="button" class="subtab active" data-indicator="operacional" aria-current="page">Operacional</button>
+        <button type="button" class="subtab" data-indicator="ocupacao">Ocupação</button>
+        <button type="button" class="subtab" data-indicator="descarga">Descarga</button>
+        <button type="button" class="subtab" data-indicator="pesagem">Pesagem</button>
+      </nav>
+      <nav class="subnav" id="lineupNav" aria-label="Seções do lineup" hidden>
+        <button type="button" class="subtab active" data-lineup="planejamento" aria-current="page">Planejamento</button>
+        <button type="button" class="subtab" data-lineup="mares">Tábua de maré</button>
+      </nav>
+      <section id="geral" class="tab-panel active">
+        <div class="view-title" id="generalTitle"><p class="eyebrow">INDICADORES</p><h2>Operacional</h2></div>
+        <div class="filter-row" aria-label="Filtros do painel">
+          <div class="filter-group">
+            <label class="filter-label">Ano</label>
+            <details class="multi-select" id="yearDropdown">
+              <summary><span id="yearSummary">Todos os anos</span><i>⌄</i></summary>
+              <div class="dropdown-menu" id="yearFilters"></div>
+            </details>
+          </div>
+          <div class="filter-group month-group">
+            <label class="filter-label">Mês</label>
+            <details class="multi-select" id="monthDropdown">
+              <summary><span id="monthSummary">Todos os meses</span><i>⌄</i></summary>
+              <div class="dropdown-menu month-options" id="monthFilters"></div>
+            </details>
+          </div>
+          <button class="clear-button" id="clearFilters">Limpar filtros</button>
+        </div>
+
+        <div class="selection-summary" id="selectionSummary" aria-live="polite"></div>
+
+        <section class="kpi-grid" aria-label="Indicadores principais">
+          <article class="kpi-card kpi-dark kpi-action" data-category="operacional" data-detail="vessels" role="button" tabindex="0" aria-label="Ver detalhes dos navios atendidos e em atendimento">
+            <div class="kpi-icon" aria-hidden="true">▰</div>
+            <p>Navios atendidos</p>
+            <strong id="kpiVessels">—</strong>
+            <span id="kpiVesselsNote">operações concluídas</span>
+          </article>
+          <article class="kpi-card kpi-action" data-category="operacional" data-detail="volume" role="button" tabindex="0" aria-label="Ver volume por navio">
+            <div class="kpi-icon amber" aria-hidden="true">↗</div>
+            <p>Volume total</p>
+            <strong id="kpiTons">—</strong>
+            <span>toneladas movimentadas</span>
+          </article>
+          <article class="kpi-card" data-category="operacional">
+            <div class="kpi-icon blue" aria-hidden="true">≈</div>
+            <p>Prancha média/dia</p>
+            <strong id="kpiProductivity">—</strong>
+            <span>toneladas por dia operacional</span>
+          </article>
+          <article class="kpi-card kpi-action" data-category="ocupacao" data-detail="occupancy" role="button" tabindex="0" aria-label="Ver ocupação de berço por navio">
+            <div class="kpi-icon teal" aria-hidden="true">◫</div>
+            <p>Ocupação média de berço</p>
+            <strong id="kpiOccupancy">—</strong>
+            <span id="kpiOccupancyNote">tempo ocupado no período</span>
+          </article>
+        </section>
+
+        <section class="active-card" id="activeOverview" data-category="operacional" hidden><div class="card-heading"><div><p class="eyebrow">OPERAÇÕES ATUAIS</p><h2>Navios em andamento</h2></div><span class="active-note">Clique em um navio para ver detalhes</span></div><div class="active-list" id="activeOverviewList"></div></section>
+
+        <section class="mini-card occupancy-by-berth" data-category="ocupacao"><div class="card-heading compact"><div><p class="eyebrow">OCUPAÇÃO DE BERÇO</p><h2>Por berço</h2></div></div><div id="occupancyBreakdown" class="occupancy-list"></div></section>
+
+        <section class="chart-card" data-category="operacional">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">DESEMPENHO OPERACIONAL</p>
+              <h2>Evolução mensal</h2>
+            </div>
+            <div class="legend" aria-label="Legenda do gráfico">
+              <span><i class="legend-bar"></i>Volume (t)</span>
+              <span><i class="legend-line"></i>Navios</span>
+            </div>
+          </div>
+          <p class="chart-hint">Mês pela data de início da operação. Clique em uma coluna para ver os navios.</p>
+          <div class="chart-scroll" aria-label="Deslize horizontalmente para ver todos os meses">
+            <div class="chart-wrap" id="chartStage">
+              <canvas id="monthlyChart" role="img" aria-label="Gráfico mensal de volume em toneladas e quantidade de navios"></canvas>
+              <div class="chart-tooltip" id="chartTooltip" role="status"></div>
+            </div>
+          </div>
+          <p class="chart-insight" id="monthlyInsight"></p>
+          <details class="chart-data"><summary>Ver valores mensais em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Mês</th><th>Volume (t)</th><th>Navios</th></tr></thead><tbody id="monthlyDataRows"></tbody></table></div></details>
+        </section>
+
+        <section class="chart-card cargo-chart-card" data-category="operacional" aria-labelledby="cargoChartTitle">
+          <div class="card-heading">
+            <div><p class="eyebrow">COMPOSIÇÃO DO VOLUME</p><h2 id="cargoChartTitle">Participação por carga</h2></div>
+          </div>
+          <p class="chart-hint">Percentual de cada carga no volume total das operações concluídas.</p>
+          <div class="cargo-chart-layout" id="cargoChart"></div>
+          <p class="chart-insight" id="cargoInsight"></p>
+        </section>
+
+        <section class="bottom-grid" data-category="operacional">
+          <article class="mini-card">
+            <div class="card-heading compact">
+              <div><p class="eyebrow">COMPOSIÇÃO</p><h2>Volume por operação</h2></div>
+            </div>
+            <div id="operationBreakdown" class="bar-list"></div>
+            <p class="chart-insight" id="operationInsight"></p>
+          </article>
+          <article class="mini-card">
+            <div class="card-heading compact">
+              <div><p class="eyebrow">INFRAESTRUTURA</p><h2>Toneladas por berço</h2></div>
+            </div>
+            <div id="berthBreakdown" class="bar-list"></div>
+            <p class="chart-insight" id="berthInsight"></p>
+          </article>
+        </section>
+      </section>
+
+      <section id="descarga" class="tab-panel operational-base-panel">
+        <div class="base-heading"><div><p class="eyebrow">BASE DE INDICADORES OPERACIONAIS</p><h2>Descarga de ferro gusa</h2><p>Volume e ocorrências pela data da descarga.</p></div><a class="base-upload" id="dischargeSheetLink" href="#" target="_blank" rel="noopener" hidden>Abrir planilha <span aria-hidden="true">↗</span></a></div>
+        <div class="base-filters" aria-label="Filtros de descarga"><label>Ano<select id="dischargeYear"></select></label><label>Mês<select id="dischargeMonth"></select></label><label>De<input id="dischargeStart" type="date"></label><label>Até<input id="dischargeEnd" type="date"></label><button type="button" id="dischargeLastWeek" class="base-reset">Últimos 7 dias</button></div>
+        <p class="base-status" id="dischargeStatus" role="status" aria-live="polite"></p>
+        <div class="base-kpis" aria-label="Resumo da descarga"><article><span>VOLUME DESCARREGADO</span><strong id="dischargeTons">—</strong><small>toneladas no período</small></article><article><span>VAGÕES DESCARREGADOS</span><strong id="dischargeWagons">—</strong><small>conforme a coluna VGS DESCARREGADOS</small></article><article><span>MÉDIA DIÁRIA</span><strong id="dischargeAverage">—</strong><small>dias com descarga registrada</small></article><article><span>TEMPO DE OCORRÊNCIAS</span><strong id="dischargeStopTime">—</strong><small>paradas com duração informada</small></article></div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EVOLUÇÃO DIÁRIA</p><h3>Toneladas descarregadas</h3></div><span id="dischargeChartCaption"></span></div><div class="base-chart-scroll"><div class="base-day-chart" id="dischargeDailyChart"></div></div><p class="base-chart-detail" id="dischargeChartDetail" role="status">Passe o mouse ou toque em uma coluna para ver o valor exato.</p><p class="chart-insight" id="dischargeDailyInsight"></p><details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Período</th><th>Volume (t)</th></tr></thead><tbody id="dischargeDailyRows"></tbody></table></div></details><p class="base-footnote" id="dischargeMethodNote">A descarga é reconhecida pela data da coluna “DATA DA DESCARGA” e pelo status “FINALIZADO”. Registros em descarga sem data de conclusão não entram no volume realizado.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PLANO DE DESCARGA</p><h3>Desafio, plano e realizado</h3></div><span id="dischargePlanPeriod"></span></div><div class="base-plan-cards" id="dischargePlanCards"></div><div class="base-plan-history" id="dischargePlanHistory"></div><p class="base-footnote">Os três valores são metas e realizado do mês completo na planilha; não são rateados pelo filtro de dias. Meses sem plano informado não aparecem.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">OCORRÊNCIAS DA DESCARGA</p><h3>Tempo por ocorrência</h3></div><span id="dischargeOccurrenceCaption"></span></div><div class="base-occurrence-list" id="dischargeOccurrenceList"></div><p class="base-footnote">Duração da coluna “TEMPO”. Linhas de recebimento com 00:00 não são somadas como paralisação; o número de registros continua visível.</p></section>
+      </section>
+      <section id="pesagem" class="tab-panel operational-base-panel">
+        <div class="base-heading"><div><p class="eyebrow">BASE DE INDICADORES OPERACIONAIS</p><h2>Pesagem por navio</h2><p>Comparação entre nota fiscal, peso descarregado e arqueação.</p></div></div>
+        <div class="base-filters" aria-label="Filtros de pesagem"><label>Ano<select id="weighingYear"></select></label><label>Mês<select id="weighingMonth"></select></label></div>
+        <p class="base-status" id="weighingStatus" role="status" aria-live="polite"></p>
+        <div class="base-kpis weighing-kpis" aria-label="Resumo da pesagem"><article><span>PESO NF</span><strong id="weighingInvoice">—</strong><small>toneladas</small></article><article><span>PESO DESCARREGADO</span><strong id="weighingUnloaded">—</strong><small>toneladas · base de pesagens</small></article><article><span>PESO ARQUEADO</span><strong id="weighingDraft">—</strong><small>toneladas</small></article><article><span>DESCARREGADO − NF</span><strong id="weighingUnloadedDelta">—</strong><small id="weighingUnloadedPct">diferença sobre a NF</small></article><article><span>ARQUEADO − NF</span><strong id="weighingDraftDelta">—</strong><small id="weighingDraftPct">diferença sobre a NF</small></article><article><span>ARQUEADO − DESCARREGADO</span><strong id="weighingDraftUnloadedDelta">—</strong><small id="weighingDraftUnloadedPct">diferença sobre o descarregado</small></article></div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">CONCILIAÇÃO POR NAVIO</p><h3>Pesos e diferenças</h3></div><span id="weighingCount"></span></div><div class="base-table-scroll"><table class="base-table" id="weighingTable"><thead><tr><th>Navio</th><th>NF (t)</th><th>Descarregado (t)</th><th>Arqueado (t)</th><th>Desc. × NF</th><th>Arq. × NF</th><th>Arq. × Desc.</th></tr></thead><tbody></tbody></table></div><p class="base-footnote">A aba “Base Pesagens” é consolidada por navio e registra o mês, não o dia da pesagem. As diferenças com NF usam a NF como referência; Arq. × Desc. usa o descarregado. Valores além de ±0,5% são destacados.</p></section>
+      </section>
+      <section id="lineup" class="tab-panel">
+        <div class="lineup-toolbar">
+          <div><p class="eyebrow">PLANEJAMENTO DE BERÇOS</p><h2>Lineup de navios</h2><p>Janelas previstas de atracação e desatracação por berço.</p></div>
+          <div class="lineup-controls"><label for="lineupStart">Início</label><input id="lineupStart" type="date"><label for="lineupDays">Período</label><select id="lineupDays"><option value="3">3 dias</option><option value="5">5 dias</option><option value="7">7 dias</option><option value="10" selected>10 dias</option><option value="15">15 dias</option><option value="20">20 dias</option><option value="30">30 dias</option><option value="45">45 dias</option><option value="60">60 dias</option></select></div>
+        </div>
+        <div class="lineup-summary" id="lineupSummary" aria-live="polite"></div>
+        <div class="lineup-card"><div class="lineup-scroll"><div id="lineupGantt" class="lineup-gantt"></div></div></div>
+        <p class="lineup-footnote">Cada faixa representa a janela planejada na aba LINEUP. O planejamento pode mudar; o painel lê a planilha no Google a cada acesso.</p>
+      </section>
+      <section id="mares" class="tab-panel">
+        <div class="tides-toolbar"><div><p class="eyebrow">PORTO DO RIO DE JANEIRO · ILHA FISCAL</p><h2>Tábua de maré</h2><p>Previsões de horários e alturas publicadas pela Marinha para 2026.</p></div><label>Data<input id="tideDate" type="date" min="2026-01-01" max="2026-12-31"></label></div>
+        <div id="tideStatus" class="tide-status" role="status"></div>
+        <div id="tideDays" class="tide-days"></div>
+        <p class="tide-source">Fonte: <a href="https://www.marinha.mil.br/chm/sites/www.marinha.mil.br.chm/files/dados_de_mare/40%20-%20PORTO%20DO%20RIO%20DE%20JANEIRO%20-%20I%20FISCAL%20-%20130%20-%20132.pdf" target="_blank" rel="noopener noreferrer">Centro de Hidrografia da Marinha — Porto do Rio de Janeiro, Ilha Fiscal, 2026</a>. Horários no fuso UTC−3; alturas em metros. A maior altura prevista não determina, sozinha, uma janela segura para navegar. São previsões, não medições em tempo real, e não substituem informações oficiais de navegação.</p>
+      </section>
+      <section id="producao" class="tab-panel">
+        <div class="production-heading"><div><p class="eyebrow">ACOMPANHAMENTO DE NAVIOS</p><h2>Produção</h2><p>Dados dos períodos registrados nas planilhas de produção.</p></div><button type="button" id="productionRefresh" class="production-refresh" aria-label="Atualizar produção">Atualizar dados</button></div>
+        <div class="production-filters" aria-label="Filtros de produção"><label for="productionCargo">Tipo de carga<select id="productionCargo" disabled><option>Carregando cargas…</option></select></label><label for="productionVessel">Navio<select id="productionVessel" disabled><option>Carregando navios…</option></select></label></div>
+        <p id="productionStatus" class="production-status" role="status" aria-live="polite">Aguardando consulta das planilhas.</p>
+        <div id="productionContent"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="vesselDrawer" aria-hidden="true" aria-labelledby="drawerTitle">
+    <div class="drawer-header">
+      <div><p class="eyebrow">DETALHAMENTO MENSAL</p><h2 id="drawerTitle">Navios do mês</h2></div>
+      <button id="closeDrawer" class="icon-button" aria-label="Fechar detalhamento">×</button>
+    </div>
+    <div class="drawer-summary" id="drawerSummary"></div>
+    <div class="vessel-list" id="vesselList"></div>
+  </aside>
+
+  <div class="export-status" id="exportStatus" role="status" aria-live="polite" hidden></div>
+  <script src="xlsx.full.min.js"></script>
+  <script src="production.js"></script>
+  <script src="discharge.js"></script>
+  <script src="app.js"></script>
+  <script src="export.js"></script>
+</body>
+</html>

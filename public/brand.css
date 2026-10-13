@@ -1,0 +1,113 @@
+/* ============================================================
+   Identidade visual Triunfo Logística — BrandBook v1.5
+   Carregado ANTES dos demais CSS: define fontes e tokens.
+   Regra do projeto: nenhuma cor fora destes tokens.
+   ============================================================ */
+@font-face{font-family:"DIN";src:url("/fonts/din-regular.woff2") format("woff2");font-weight:300 400;font-style:normal;font-display:swap}
+@font-face{font-family:"DIN";src:url("/fonts/din-medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"DIN";src:url("/fonts/din-bold.woff2") format("woff2");font-weight:600 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Poppins";src:url("/fonts/poppins-regular.woff2") format("woff2");font-weight:300 400;font-style:normal;font-display:swap}
+@font-face{font-family:"Poppins";src:url("/fonts/poppins-medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"Poppins";src:url("/fonts/poppins-semibold.woff2") format("woff2");font-weight:600 900;font-style:normal;font-display:swap}
+
+:root {
+  /* --- Cores institucionais (brandbook) --- */
+  --trl-vermelho: #DA202C;
+  --trl-preto: #000000;
+  --trl-cinza: #8A8C91;
+  --trl-branco: #FFFFFF;
+
+  /* --- Paleta estendida (template oficial de apresentações) --- */
+  --trl-texto: #2F2F2F;          /* preto suave p/ texto em tela */
+  --trl-vermelho-70: #EB777E;    /* tints de vermelho */
+  --trl-vermelho-40: #F2A4A9;
+  --trl-vermelho-15: #F8D2D4;
+  --trl-cinza-800: #444444;
+  --trl-cinza-600: #636363;
+  --trl-cinza-400: #979797;
+  --trl-cinza-300: #B0B0B0;
+  --trl-cinza-200: #D5D5D5;
+  --trl-cinza-100: #EAEAEA;
+
+  /* --- Papéis semânticos --- */
+  --trl-bg: var(--trl-branco);
+  --trl-bg-alt: var(--trl-cinza-100);
+  --trl-bg-dark: var(--trl-preto);
+  --trl-fg: var(--trl-texto);
+  --trl-fg-muted: var(--trl-cinza-600);
+  --trl-fg-subtle: var(--trl-cinza);
+  --trl-accent: var(--trl-vermelho);
+  --trl-border: var(--trl-cinza-200);
+
+  /* --- Dataviz ---
+     Ordem categórica FIXA (validada p/ daltonismo: melhor separação possível
+     dentro da paleta monocromática da marca). Máximo 4 séries por gráfico;
+     mais que isso: agrupar em "Outros" ou usar small multiples.
+     Rótulos diretos/legenda são OBRIGATÓRIOS (a marca não tem variedade de
+     matiz, então cor nunca é o único código de identidade). */
+  --trl-chart-1: #DA202C;
+  --trl-chart-2: #2F2F2F;
+  --trl-chart-3: #F2A4A9;  /* exige rótulo visível (contraste < 3:1) */
+  --trl-chart-4: #636363;
+  /* Sequencial (magnitude, claro -> escuro): */
+  --trl-seq-1: #F8D2D4; --trl-seq-2: #F2A4A9; --trl-seq-3: #EB777E; --trl-seq-4: #DA202C;
+  /* Divergente: vermelho <- neutro -> grafite */
+  --trl-div-neg: #DA202C; --trl-div-mid: #EAEAEA; --trl-div-pos: #2F2F2F;
+  --trl-chart-positive: #2F2F2F; /* não inventar verde: usar grafite p/ positivo */
+  --trl-chart-negative: #DA202C; /* vermelho p/ negativo/alerta */
+  --trl-chart-grid: #EAEAEA;
+
+  /* --- Sinalização de status (semáforo, badge, avisos) ---
+     Exceção pontual à paleta monocromática acima: só para indicadores de
+     3 níveis (no alvo / em risco / fora da meta), nunca em gráficos/dataviz
+     (ali o positivo continua grafite — ver --trl-chart-positive). */
+  --trl-status-ok: #2E7D32;
+  --trl-status-ok-40: #A8CDAA;
+  --trl-status-ok-15: #E3F1E4;
+  --trl-status-atencao: #8A6100;
+  --trl-status-atencao-40: #D9B36B;
+  --trl-status-atencao-15: #F7EDD9;
+  --trl-status-critico: var(--trl-vermelho);
+
+  /* --- Tipografia ---
+     DIN: títulos e destaques (fonte comercial da TRL — embutir woff2 ou fallback)
+     Poppins: corpo de texto (Google Fonts / SIL OFL) */
+  --trl-font-titulo: 'DIN', 'Arial Narrow', Arial, sans-serif;
+  --trl-font-corpo: 'Poppins', Helvetica, Arial, sans-serif;
+
+  /* Escala tipográfica (tela) */
+  --trl-fs-display: 2.5rem;   /* 40px — DIN Bold */
+  --trl-fs-h1: 1.75rem;       /* 28px — DIN Bold */
+  --trl-fs-h2: 1.375rem;      /* 22px — DIN Bold */
+  --trl-fs-h3: 1.0625rem;     /* 17px — DIN Medium */
+  --trl-fs-body: 0.9375rem;   /* 15px — Poppins Regular */
+  --trl-fs-small: 0.8125rem;  /* 13px */
+  --trl-fs-caption: 0.75rem;  /* 12px — Poppins, cor --trl-fg-subtle */
+
+  /* --- Espaçamento e forma --- */
+  --trl-space-1: 4px;
+  --trl-space-2: 8px;
+  --trl-space-3: 16px;
+  --trl-space-4: 24px;
+  --trl-space-5: 40px;
+  --trl-space-6: 64px;
+  --trl-radius: 8px;          /* cantos levemente arredondados (padrão do template) */
+  --trl-radius-lg: 16px;
+  --trl-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Tipografia da marca ---
+   DIN (títulos e números de destaque) · Poppins (texto corrido) */
+body{font-family:var(--trl-font-corpo)}
+h1,h2,h3,h4,.eyebrow,
+.kpi-card strong,.base-kpis strong,.base-plan-cards strong,.gusa-kpi strong,.gusa-moved-card strong,
+.cargo-total strong,.production-card strong,.production-time-grid strong,.production-stop-summary strong,
+.production-hold-detail-head strong,.production-crew-rates strong,.production-forecast-grid strong,
+.export-production-brand strong,.export-production-kpis strong,.export-production-shift-stops>strong,
+.export-production-time-stats strong,.tide-event strong,.drawer-stat strong{font-family:var(--trl-font-titulo)}
+
+/* --- Ajustes de largura: a Poppins é mais larga que a fonte anterior --- */
+@media (max-width:520px){
+  .subnav .subtab{padding:10px 9px;font-size:.8rem}
+  .bar-list .bar-row{grid-template-columns:minmax(104px,1.3fr) 2fr auto;gap:8px;font-size:.78rem}
+}
