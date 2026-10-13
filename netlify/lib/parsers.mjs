@@ -78,12 +78,14 @@ export function parseOperationsWorkbook(workbook, source) {
   const hasOffshoreWeight = lineupRows[0]?.some(cell => /AO\s+LARGO/i.test(String(cell || "")));
   const geportColumn = lineupRows[0]?.findIndex(cell => /GEPORT/i.test(String(cell || ""))) ?? -1;
   const offset = hasOffshoreWeight ? 1 : 0;
+  // Berço em maiúsculas, como na planilha de navios, para o Gantt juntar navio atracado e previsto na mesma linha.
+  const upper = value => value === null || value === undefined ? value : String(value).toLocaleUpperCase("pt-BR");
   const lineupCell = (row, index) => row[index + (geportColumn >= 0 && geportColumn <= index ? 1 : 0)];
   const lineupRecords = lineupRows.slice(1).filter(row => lineupCell(row, 0)).map((row, index) => ({
     id: `lineup-${index + 1}`, vessel: String(lineupCell(row, 0)).trim(), geport: geportColumn >= 0 ? String(row[geportColumn] ?? "").trim() : "",
     operation: label(lineupCell(row, 2)), cargo: label(lineupCell(row, 3)),
     plannedBerthTons: maybeNum(lineupCell(row, 4)), plannedOffshoreTons: hasOffshoreWeight ? maybeNum(lineupCell(row, 5)) : null,
-    client: label(lineupCell(row, 5 + offset)), berth: label(lineupCell(row, 6 + offset)), agent: label(lineupCell(row, 7 + offset)),
+    client: label(lineupCell(row, 5 + offset)), berth: label(upper(lineupCell(row, 6 + offset))), agent: label(lineupCell(row, 7 + offset)),
     progress: maybeNum(lineupCell(row, 8 + offset)), plannedBerthStart: iso(lineupCell(row, 9 + offset)), plannedBerthEnd: iso(lineupCell(row, 10 + offset))
   }));
   if (!records.length) throw new Error("Nenhuma operação concluída foi encontrada nas abas anuais.");

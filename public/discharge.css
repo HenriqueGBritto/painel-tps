@@ -70,4 +70,3 @@
 @media(max-width:720px){.base-day-chart{min-width:0}.base-day-chart.is-compact .base-day>span{font-size:.67rem}.base-day-chart.is-compact .base-day-value{font-size:.56rem}}
 a.base-upload{display:inline-flex;align-items:center;text-decoration:none}
 a.base-upload[hidden]{display:none}
-.base-status[data-kind="warning"],.updated[data-kind="warning"]{color:var(--trl-status-atencao);font-weight:600}

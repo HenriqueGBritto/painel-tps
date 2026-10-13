@@ -21,7 +21,7 @@ function setupFilters() {
   $("monthFilters").innerHTML = MONTHS_FULL.map((m, i) => `<label class="filter-option"><input type="checkbox" value="${i + 1}" aria-label="${m}"><span>${m}</span></label>`).join("");
   bindFilterGroup("yearFilters", state.years);
   bindFilterGroup("monthFilters", state.months);
-  $("clearFilters").addEventListener("click", () => { state.years.clear(); state.months.clear(); document.querySelectorAll(".filter-option input").forEach(c => c.checked=false); updateFilterSummaries(); render(); });
+  $("clearFilters").addEventListener("click", () => { state.years.clear(); state.months.clear(); document.querySelectorAll(".filter-option input").forEach(c => c.checked=false); updateFilterSummaries(); render(); syncUrl(); });
   document.addEventListener("click", event => document.querySelectorAll(".multi-select[open]").forEach(d => { if(!d.contains(event.target)) d.removeAttribute("open"); }));
 }
 
@@ -30,7 +30,7 @@ function bindFilterGroup(id, selection) {
     const input = event.target.closest("input"); if (!input) return;
     const value = Number(input.value);
     input.checked ? selection.add(value) : selection.delete(value);
-    updateFilterSummaries(); render();
+    updateFilterSummaries(); render(); syncUrl();
   });
 }
 
@@ -39,46 +39,40 @@ function updateFilterSummaries(){
   $("monthSummary").textContent=state.months.size===0?"Todos os meses":state.months.size===1?MONTHS_FULL[[...state.months][0]-1]:`${state.months.size} meses selecionados`;
 }
 
-function overlapHours(start, end, windowStart, windowEnd) {
-  const a = Math.max(start.getTime(), windowStart.getTime());
-  const b = Math.min(end.getTime(), windowEnd.getTime());
-  return Math.max(0, b - a) / 36e5;
+/* Cálculos dos KPIs em metrics.js (testados em tests/metrics.test.mjs). */
+function occupancy(records, periodRecords = records) {
+  return TpsMetrics.occupancy(records, state.years, state.months, periodRecords);
 }
 
-function occupancy(records, periodRecords = records) {
-  if (!records.length) return 0;
-  const selectedYears = state.years.size ? [...state.years] : [...new Set(periodRecords.map(r => r.year))];
-  const selectedMonths = state.months.size ? [...state.months] : [...Array(12)].map((_, i) => i + 1);
-  const windows = [];
-  selectedYears.forEach(y => selectedMonths.forEach(m => windows.push([new Date(y, m - 1, 1), new Date(y, m, 1)])));
-  const berthNames = [...new Set(records.map(r => r.berth))];
-  if (!berthNames.length) return 0;
-  const capacity = windows.reduce((sum, [a, b]) => sum + (b - a) / 36e5, 0);
-  let totalRatio = 0;
-  berthNames.forEach(berth => {
-    const intervals = records.filter(r => r.berth === berth).map(r => [parseDate(r.berthStart), parseDate(r.berthEnd)]).filter(([a,b]) => a && b && b > a);
-    let used = 0;
-    windows.forEach(([wa, wb]) => {
-      const clipped = intervals.map(([a,b]) => [new Date(Math.max(a,wa)), new Date(Math.min(b,wb))]).filter(([a,b]) => b > a).sort((x,y) => x[0] - y[0]);
-      let merged = [];
-      clipped.forEach(([a,b]) => { const last = merged.at(-1); if (last && a <= last[1]) last[1] = new Date(Math.max(last[1], b)); else merged.push([a,b]); });
-      used += merged.reduce((s,[a,b]) => s + overlapHours(a,b,wa,wb), 0);
-    });
-    totalRatio += capacity ? used / capacity : 0;
+const KPI_FIELDS = [["vessels", "kpiVesselsDelta"], ["tons", "kpiTonsDelta"], ["productivity", "kpiProductivityDelta"], ["occupancy", "kpiOccupancyDelta"]];
+
+/* Variação contra o período anterior equivalente. Positivo em grafite, negativo em vermelho. */
+function renderKpiDeltas(current) {
+  const period = TpsMetrics.previousPeriod(state.years, state.months, new Date());
+  const previous = period ? TpsMetrics.previousKpis(state.records, period) : null;
+  KPI_FIELDS.forEach(([field, id]) => {
+    const node = $(id);
+    if (!node) return;
+    // Em período em andamento a ocupação usa a capacidade do mês inteiro; a comparação ficaria distorcida.
+    const change = period && !(field === "occupancy" && period.inProgress) ? TpsMetrics.kpiVariation(field, current, previous) : null;
+    node.hidden = !change;
+    if (!change) { node.textContent = ""; delete node.dataset.direction; return; }
+    const arrow = change.direction === "up" ? "▲" : change.direction === "down" ? "▼" : "=";
+    node.dataset.direction = change.direction;
+    node.textContent = `${arrow} ${fmtOne.format(Math.abs(change.pct))}% vs. ${period.label}`;
+    node.setAttribute("aria-label", `${change.direction === "up" ? "Alta" : change.direction === "down" ? "Queda" : "Estável"} de ${fmtOne.format(Math.abs(change.pct))}% em relação a ${period.label}`);
   });
-  return totalRatio / berthNames.length * 100;
 }
 
 function render() {
   const data = selected();
   $("chartTooltip").style.opacity = 0;
-  const totalTons = data.reduce((s,r) => s + r.tons, 0);
-  const productivity = data.filter(r => r.productivity > 0);
-  const weightedProductivity = productivity.length ? productivity.reduce((s,r) => s + r.productivity, 0) / productivity.length : 0;
-  $("kpiVessels").textContent = fmtInt.format(data.length);
-  $("kpiTons").textContent = fmtTwo.format(totalTons) + " t";
-  $("kpiProductivity").textContent = fmtTwo.format(weightedProductivity) + " t/dia";
-  $("kpiOccupancy").textContent = fmtOne.format(occupancy(data)) + "%";
+  const kpi = TpsMetrics.kpis(state.records, state.years, state.months);
+  $("kpiVessels").textContent = fmtInt.format(kpi.vessels);
+  $("kpiTons").textContent = fmtTwo.format(kpi.tons) + " t";
+  $("kpiProductivity").textContent = fmtTwo.format(kpi.productivity) + " t/dia";
+  $("kpiOccupancy").textContent = fmtOne.format(kpi.occupancy) + "%";
+  renderKpiDeltas(kpi);
   const activeCount = activeSelection().length;
   $("kpiVesselsNote").textContent = `${fmtInt.format(activeCount)} ${activeCount===1?"navio em atendimento":"navios em atendimento"}`;
   $("selectionSummary").textContent = selectionText(data.length);
@@ -129,59 +123,64 @@ function monthlyData(records) {
   return keys.map(key => { const [year,month] = key.split("-").map(Number); const rows = records.filter(r => r.year === year && r.month === month); return { key, year, month, label: `${MONTHS[month-1]}/${String(year).slice(-2)}`, rows, tons: rows.reduce((s,r)=>s+r.tons,0), vessels: rows.length }; });
 }
 
+/* Evolução mensal em dois painéis alinhados pelo mesmo eixo de meses:
+   volume (t) em cima, em vermelho, e navios embaixo, em grafite. Cada painel tem o seu eixo Y. */
 function renderChart(records) {
   const canvas = $("monthlyChart"), wrap = canvas.parentElement, scroller = wrap.parentElement, ratio = window.devicePixelRatio || 1;
   const points = monthlyData(records); state.chartPoints = [];
   $("monthlyDataRows").innerHTML = points.map(p => `<tr><td>${MONTHS_FULL[p.month-1]} ${p.year}</td><td>${fmtTwo.format(p.tons)}</td><td>${p.vessels}</td></tr>`).join("") || '<tr><td colspan="3">Sem dados no período.</td></tr>';
   const peak = [...points].sort((a,b) => b.tons-a.tons)[0];
   $("monthlyInsight").textContent = peak ? `Leitura: maior volume em ${MONTHS_FULL[peak.month-1]} de ${peak.year}, com ${fmtTwo.format(peak.tons)} t e ${peak.vessels} navios. Volume e quantidade de navios usam o mês de início da operação.` : "Leitura: não há operações concluídas para os filtros selecionados.";
-  wrap.style.width = `${Math.max(scroller.clientWidth, points.length * 58 + 112)}px`;
+  wrap.style.width = `${Math.max(scroller.clientWidth, points.length * 58 + 96)}px`;
   const width = wrap.clientWidth, height = wrap.clientHeight; canvas.width = width * ratio; canvas.height = height * ratio;
   const ctx = canvas.getContext("2d"); ctx.scale(ratio, ratio); ctx.clearRect(0,0,width,height);
   if (!points.length) { ctx.fillStyle="#8A8C91"; ctx.font="700 15px DIN, Arial Narrow, Arial, sans-serif"; ctx.textAlign="center"; ctx.fillText("Nenhum dado para os filtros selecionados", width/2, height/2); return; }
-  const pad = { left:68, right:48, top:42, bottom:67 }; const cw = width-pad.left-pad.right, ch=height-pad.top-pad.bottom;
-  const maxTons = Math.ceil(Math.max(...points.map(p=>p.tons))*1.16/50000)*50000 || 1;
-  const maxVessels = Math.ceil(Math.max(...points.map(p=>p.vessels))*1.18/5)*5 || 1;
-  ctx.font="12px Poppins, Helvetica, Arial, sans-serif"; ctx.textBaseline="middle";
-  for(let i=0;i<=4;i++){
-    const y=pad.top+ch*i/4;
-    ctx.strokeStyle="#EAEAEA";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(width-pad.right,y);ctx.stroke();
-    ctx.fillStyle="#636363";ctx.textAlign="right";ctx.fillText(fmtInt.format(maxTons*(1-i/4)),pad.left-11,y);
-    ctx.textAlign="left";ctx.fillText(fmtInt.format(maxVessels*(1-i/4)),width-pad.right+10,y);
-  }
-  const slot=cw/points.length, barW=Math.min(24,slot*.52), baseline=pad.top+ch;
-  points.forEach((p,i)=>{
-    const x=pad.left+slot*i+slot/2, bh=ch*p.tons/maxTons, y=baseline-bh;
-    ctx.fillStyle="#2F2F2F";roundRect(ctx,x-barW/2,y,barW,bh,3);ctx.fill();
-    ctx.fillStyle="#636363";ctx.textAlign="center";ctx.font="12px Poppins, Helvetica, Arial, sans-serif";ctx.fillText(MONTHS[p.month-1],x,baseline+19);
-    state.chartPoints.push({x:x-barW/2,y,w:barW,h:bh,point:p});
+  const pad = { left:68, right:28, top:28, bottom:62 }, gapBetween = 44;
+  const plotH = height - pad.top - pad.bottom - gapBetween;
+  const panels = [
+    { key:"tons", title:"Volume (t)", color:"#DA202C", top:pad.top, h:Math.round(plotH*.62),
+      max:Math.ceil(Math.max(...points.map(p=>p.tons))*1.18/50000)*50000 || 1,
+      label:v => v>=1000?`${fmtOne.format(v/1000)} mil`:fmtInt.format(v) },
+    { key:"vessels", title:"Navios", color:"#2F2F2F", h:0,
+      max:Math.max(4, Math.ceil(Math.max(...points.map(p=>p.vessels))*1.25/2)*2),
+      label:v => fmtInt.format(v) }
+  ];
+  panels[1].top = panels[0].top + panels[0].h + gapBetween; panels[1].h = plotH - panels[0].h;
+  const cw = width - pad.left - pad.right, slot = cw / points.length, barW = Math.min(26, slot * .56);
+  const xOf = i => pad.left + slot * i + slot / 2;
+  ctx.textBaseline = "middle";
+  panels.forEach(panel => {
+    const base = panel.top + panel.h, ticks = panel.key === "vessels" ? 2 : 4;
+    ctx.fillStyle = "#2F2F2F"; ctx.font = "700 12px DIN, Arial Narrow, Arial, sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(panel.title.toUpperCase(), pad.left, panel.top - 16);
+    ctx.font = "12px Poppins, Helvetica, Arial, sans-serif";
+    for (let i = 0; i <= ticks; i++) {
+      const y = panel.top + panel.h * i / ticks;
+      ctx.strokeStyle = "#EAEAEA"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(width - pad.right, y); ctx.stroke();
+      ctx.fillStyle = "#636363"; ctx.textAlign = "right"; ctx.fillText(fmtInt.format(panel.max * (1 - i / ticks)), pad.left - 10, y);
+    }
+    points.forEach((p, i) => {
+      const value = p[panel.key], bh = panel.h * value / panel.max, x = xOf(i), y = base - bh;
+      ctx.fillStyle = panel.color; roundRect(ctx, x - barW / 2, y, barW, bh, 3); ctx.fill();
+      if (value > 0) { ctx.fillStyle = "#2F2F2F"; ctx.font = "700 11px DIN, Arial Narrow, Arial, sans-serif"; ctx.textAlign = "center"; ctx.fillText(panel.label(value), x, y - 9); }
+      state.chartPoints.push({ x: x - slot / 2 + 2, y: panel.top, w: slot - 4, h: panel.h, point: p });
+    });
+    ctx.strokeStyle = "#B0B0B0"; ctx.beginPath(); ctx.moveTo(pad.left, base + .5); ctx.lineTo(width - pad.right, base + .5); ctx.stroke();
   });
-  let groupStart=0;
-  for(let i=1;i<=points.length;i++){
-    if(i===points.length||points[i].year!==points[groupStart].year){
-      const firstX=pad.left+slot*groupStart,lastX=pad.left+slot*i;
-      ctx.strokeStyle="#D5D5D5";ctx.beginPath();ctx.moveTo(firstX,baseline+42);ctx.lineTo(lastX,baseline+42);ctx.stroke();
-      ctx.fillStyle="#2F2F2F";ctx.font="700 12px DIN, Arial Narrow, Arial, sans-serif";ctx.textAlign="center";ctx.fillText(String(points[groupStart].year),(firstX+lastX)/2,baseline+54);
-      if(i<points.length){ctx.strokeStyle="#D5D5D5";ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(lastX,pad.top);ctx.lineTo(lastX,baseline);ctx.stroke();ctx.setLineDash([])}
-      groupStart=i;
+  const baseline = panels[1].top + panels[1].h;
+  ctx.font = "12px Poppins, Helvetica, Arial, sans-serif"; ctx.fillStyle = "#636363"; ctx.textAlign = "center";
+  points.forEach((p, i) => ctx.fillText(MONTHS[p.month - 1], xOf(i), baseline + 17));
+  let groupStart = 0;
+  for (let i = 1; i <= points.length; i++) {
+    if (i === points.length || points[i].year !== points[groupStart].year) {
+      const firstX = pad.left + slot * groupStart, lastX = pad.left + slot * i;
+      ctx.strokeStyle = "#D5D5D5"; ctx.beginPath(); ctx.moveTo(firstX + 4, baseline + 36); ctx.lineTo(lastX - 4, baseline + 36); ctx.stroke();
+      ctx.fillStyle = "#2F2F2F"; ctx.font = "700 12px DIN, Arial Narrow, Arial, sans-serif"; ctx.fillText(String(points[groupStart].year), (firstX + lastX) / 2, baseline + 50);
+      ctx.font = "12px Poppins, Helvetica, Arial, sans-serif";
+      if (i < points.length) panels.forEach(panel => { ctx.strokeStyle = "#D5D5D5"; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(lastX, panel.top); ctx.lineTo(lastX, panel.top + panel.h); ctx.stroke(); ctx.setLineDash([]); });
+      groupStart = i;
     }
   }
-  ctx.strokeStyle="#2F2F2F";ctx.lineWidth=2.5;ctx.lineJoin="round";ctx.beginPath();
-  points.forEach((p,i)=>{const x=pad.left+slot*i+slot/2,y=baseline-ch*p.vessels/maxVessels;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
-  points.forEach((p,i)=>{const x=pad.left+slot*i+slot/2,y=baseline-ch*p.vessels/maxVessels;ctx.fillStyle="#FFFFFF";ctx.strokeStyle="#2F2F2F";ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();ctx.stroke()});
-  points.forEach((p,i)=>{
-    const x=pad.left+slot*i+slot/2,barTop=baseline-ch*p.tons/maxTons,lineY=baseline-ch*p.vessels/maxVessels;
-    const volume=p.tons>=1000?`${fmtOne.format(p.tons/1000)} mil`:fmtInt.format(p.tons);
-    ctx.font="700 11px DIN, Arial Narrow, Arial, sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
-    if(p.tons>0){
-      const labelY=baseline-13;
-      ctx.fillStyle=barTop<labelY-8?"#FFFFFF":"#DA202C";
-      ctx.fillText(volume,x,labelY);
-    }
-    const count=String(p.vessels),labelY=Math.max(pad.top+9,lineY-13),textWidth=ctx.measureText(count).width;
-    ctx.fillStyle="rgba(255,255,255,.94)";ctx.fillRect(x-textWidth/2-3,labelY-8,textWidth+6,16);
-    ctx.fillStyle="#2F2F2F";ctx.fillText(count,x,labelY);
-  });
 }
 
 function roundRect(ctx,x,y,w,h,r){if(!(w>0&&h>0)){ctx.beginPath();return}r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
@@ -189,31 +188,21 @@ function roundRect(ctx,x,y,w,h,r){if(!(w>0&&h>0)){ctx.beginPath();return}r=Math.
 function renderBreakdowns(records){const operations=group(records,"operation"),berths=group(records,"berth");renderBars("operationBreakdown",operations,4);renderBars("berthBreakdown",berths,5);[["operationInsight",operations,"operação"],["berthInsight",berths,"berço"]].forEach(([id,items,label])=>{const total=items.reduce((sum,item)=>sum+item.value,0),top=items[0];$(id).textContent=top?`Leitura: ${top.label} concentra ${formatCargoPercent(top.value/total)}% do volume por ${label} no filtro atual.`:"Leitura: sem volume no período selecionado."})}
 function group(records,key){const map=new Map();records.forEach(r=>map.set(r[key],(map.get(r[key])||0)+r.tons));return [...map].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value)}
 function renderBars(id,items,limit){const rows=items.slice(0,limit),max=rows[0]?.value||1;$(id).innerHTML=rows.length?rows.map(x=>`<div class="bar-row"><span class="bar-label" title="${escapeHtml(x.label)}">${escapeHtml(x.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${x.value/max*100}%"></div></div><span class="bar-value">${fmtTwo.format(x.value)} t</span></div>`).join(""):`<div class="empty">Sem dados.</div>`}
+/* Ranking de barras horizontais: todas as cargas, com toneladas e percentual no rótulo.
+   A maior carga em vermelho cheio; as demais em vermelho claro, para o destaque ficar evidente. */
 function renderCargoChart(records){
-  const cargo=group(records,"cargo").filter(item=>item.value>0);
-  const total=cargo.reduce((sum,item)=>sum+item.value,0);
+  const {total,items}=TpsMetrics.cargoRanking(records);
   if(!total){$("cargoChart").innerHTML='<div class="empty">Sem volume para os filtros selecionados.</div>';$("cargoInsight").textContent="Leitura: sem volume no período selecionado.";return}
-  const palette=["#DA202C","#2F2F2F","#8A8C91","#EB777E","#636363","#B0B0B0","#F2A4A9","#444444","#D5D5D5","#F8D2D4","#979797"];
-  const point=angle=>[120+103*Math.cos(angle),120+103*Math.sin(angle)];
-  let angle=-Math.PI/2;
-  const slices=cargo.map((item,index)=>{
-    const share=item.value/total,next=angle+share*Math.PI*2;
-    const color=palette[index%palette.length];
-    let shape;
-    if(share>0.999999)shape=`<circle cx="120" cy="120" r="103" fill="${color}"/>`;
-    else{const [x1,y1]=point(angle),[x2,y2]=point(next);shape=`<path d="M 120 120 L ${x1.toFixed(3)} ${y1.toFixed(3)} A 103 103 0 ${share>.5?1:0} 1 ${x2.toFixed(3)} ${y2.toFixed(3)} Z" fill="${color}"/>`}
-    angle=next;
-    return `<g><title>${escapeHtml(item.label)}: ${fmtTwo.format(item.value)} t (${formatCargoPercent(share)}%)</title>${shape}</g>`;
-  }).join("");
-  const legend=cargo.map((item,index)=>`<div class="cargo-legend-row"><i style="background:${palette[index%palette.length]}"></i><span class="cargo-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span><span class="cargo-tonnage">${fmtTwo.format(item.value)} t</span><strong>${formatCargoPercent(item.value/total)}%</strong></div>`).join("");
-  $("cargoChart").innerHTML=`<div class="cargo-pie-wrap"><svg class="cargo-pie" viewBox="0 0 240 240" role="img" aria-label="Participação percentual das cargas no volume total">${slices}</svg><div class="cargo-total"><strong>${fmtTwo.format(total)} t</strong><span>volume total</span></div></div><div class="cargo-legend" aria-label="Participação por carga">${legend}</div>`;
-  $("cargoInsight").textContent=`Leitura: ${cargo[0].label} lidera a composição, com ${formatCargoPercent(cargo[0].value/total)}% do volume filtrado.`;
+  const max=items[0].tons;
+  const rows=items.map((item,index)=>`<li class="cargo-rank-row${index===0?" is-top":""}"><span class="cargo-rank-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span><span class="cargo-rank-track" aria-hidden="true"><i style="width:${Math.max(.6,item.tons/max*100)}%"></i></span><span class="cargo-rank-value"><b>${formatCargoPercent(item.share)}%</b> ${fmtTwo.format(item.tons)} t</span></li>`).join("");
+  $("cargoChart").innerHTML=`<p class="cargo-rank-total"><strong>${fmtTwo.format(total)} t</strong> em ${items.length} ${items.length===1?"carga":"cargas"}</p><ol class="cargo-rank" aria-label="Participação por carga, da maior para a menor">${rows}</ol>`;
+  $("cargoInsight").textContent=`Leitura: ${items[0].label} lidera a composição, com ${formatCargoPercent(items[0].share)}% do volume filtrado.`;
 }
 function formatCargoPercent(share){const percent=share*100;return new Intl.NumberFormat("pt-BR",{minimumFractionDigits:percent<.01?3:2,maximumFractionDigits:percent<.01?3:2}).format(percent)}
 function escapeHtml(value){return String(value).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 
-function handleChartMove(event){const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;const hit=state.chartPoints.find(p=>x>=p.x-5&&x<=p.x+p.w+5&&y>=p.y&&y<=p.y+p.h);const tip=$("chartTooltip");if(!hit){tip.style.opacity=0;event.currentTarget.style.cursor="default";return}event.currentTarget.style.cursor="pointer";tip.innerHTML=`<strong>${MONTHS_FULL[hit.point.month-1]} ${hit.point.year}</strong><br>${fmtTwo.format(hit.point.tons)} t · ${hit.point.vessels} navios`;tip.style.left=`${hit.x+hit.w/2}px`;tip.style.top=`${Math.max(55,hit.y)}px`;tip.style.opacity=1}
-function handleChartClick(event){const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;const hit=state.chartPoints.find(p=>x>=p.x-7&&x<=p.x+p.w+7&&y>=p.y&&y<=p.y+p.h+10);if(hit)openDrawer(hit.point)}
+function handleChartMove(event){const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;const hit=state.chartPoints.find(p=>x>=p.x&&x<=p.x+p.w&&y>=p.y-24&&y<=p.y+p.h);const tip=$("chartTooltip");if(!hit){tip.style.opacity=0;event.currentTarget.style.cursor="default";return}event.currentTarget.style.cursor="pointer";tip.innerHTML=`<strong>${MONTHS_FULL[hit.point.month-1]} ${hit.point.year}</strong><br>${fmtTwo.format(hit.point.tons)} t · ${hit.point.vessels} ${hit.point.vessels===1?"navio":"navios"}`;tip.style.left=`${hit.x+hit.w/2}px`;tip.style.top=`${Math.max(40,hit.y)}px`;tip.style.opacity=1}
+function handleChartClick(event){const rect=event.currentTarget.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;const hit=state.chartPoints.find(p=>x>=p.x&&x<=p.x+p.w&&y>=p.y-24&&y<=p.y+p.h+10);if(hit)openDrawer(hit.point)}
 
 function showDrawer(title,summary,content){
   state.activeDrawer=null;
@@ -346,6 +335,8 @@ function activateNavigation(){
   if(visible==="mares")renderTides();
   if(visible==="producao")window.productionPanel?.load();
   if(visible==="descarga"||visible==="pesagem")window.dischargePanel?.load();
+  renderDataSeal();
+  syncUrl();
 }
 function setupNavigation(){
   const sidebar=$("sidebar"), menuButton=$("mobileMenuButton");
@@ -581,19 +572,120 @@ function registerWebMCP(){
   }catch(error){console.warn("WebMCP indisponível",error)}
 }
 
-function showDataSource(payload){
-  const label=$("updatedAt"),counts=`${fmtInt.format(state.records.length)} concluídas · ${fmtInt.format(state.activeRecords.length)} em andamento`;
-  const read=parseDate(payload.generatedAt);
-  if(payload.origin==="fallback"){
-    label.textContent=`${counts} · planilha indisponível, exibindo a última base salva`;
-    label.dataset.kind="warning";
-    label.title=`Não foi possível ler a planilha no Google agora (${payload.fallbackReason||"motivo não informado"}). Recarregue em alguns minutos.`;
-    return;
-  }
-  label.textContent=read?`${counts} · planilha lida às ${read.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}`:counts;
-  label.title="Dados lidos diretamente da planilha no Google Planilhas. Recarregue a página para buscar a versão mais recente.";
+/* ---------- Visão na URL (aba, ano, mês e intervalo) ---------- */
+const urlState={applying:false,pending:null};
+function currentView(){
+  if(state.menu==="producao")return "producao";
+  if(state.menu==="lineup")return state.lineupView==="mares"?"mares":"lineup";
+  return state.indicator;
+}
+function currentUrlView(){
+  const view=currentView();
+  if(view==="descarga"){const range=window.dischargePanel?.getRange()||{};return {view,start:range.start,end:range.end}}
+  if(view==="pesagem"){const w=window.dischargePanel?.getWeighing()||{};return {view,years:w.year?[w.year]:[],months:w.month?[w.month]:[]}}
+  return {view,years:[...state.years],months:[...state.months]};
+}
+/* Grava a visão atual na URL. Cada mudança feita pela pessoa vira uma entrada do histórico (voltar/avançar). */
+function syncUrl(){
+  if(urlState.applying||!state.records.length)return;
+  const view=currentView();
+  if((view==="descarga"||view==="pesagem")&&window.dischargePanel?.isLoading?.())return;
+  const query=TpsUrlState.serialize(currentUrlView());
+  if(query===location.search)return;
+  history.pushState(null,"",`${location.pathname}${query}${location.hash}`);
+}
+window.syncUrl=syncUrl;
+/* Aplica a visão da URL: na abertura da página e ao usar voltar/avançar. */
+function applyUrl(search){
+  const target=TpsUrlState.parse(search);
+  urlState.applying=true;
+  try{
+    if(target.view==="producao")state.menu="producao";
+    else if(target.view==="lineup"||target.view==="mares"){state.menu="lineup";state.lineupView=target.view==="mares"?"mares":"planejamento"}
+    else{state.menu="indicadores";state.indicator=target.view}
+    if(target.view==="operacional"||target.view==="ocupacao"){
+      const known=new Set(state.records.map(r=>r.year));
+      state.years.clear();target.years.filter(y=>known.has(y)).forEach(y=>state.years.add(y));
+      state.months.clear();target.months.forEach(m=>state.months.add(m));
+      document.querySelectorAll("#yearFilters input").forEach(input=>input.checked=state.years.has(Number(input.value)));
+      document.querySelectorAll("#monthFilters input").forEach(input=>input.checked=state.months.has(Number(input.value)));
+      updateFilterSummaries();
+    }
+    urlState.pending=target;
+    activateNavigation();
+    if(target.view==="ocupacao")render();
+    window.onDischargeReady();
+  }finally{urlState.applying=false}
+}
+/* Filtros de Descarga e Pesagem só podem ser aplicados depois que a planilha de indicadores carrega. */
+window.onDischargeReady=()=>{
+  const target=urlState.pending;
+  if(!window.dischargePanel||window.dischargePanel.isLoading())return;
+  if(!target||!["descarga","pesagem"].includes(target.view)){if(!urlState.applying)syncUrl();return}
+  urlState.pending=null;
+  const wasApplying=urlState.applying;urlState.applying=true;
+  try{
+    if(target.view==="descarga")window.dischargePanel.setRange(target.start,target.end);
+    if(target.view==="pesagem")window.dischargePanel.setWeighing(target.years[0],target.months[0]);
+  }finally{urlState.applying=wasApplying}
+};
+window.addEventListener("popstate",()=>applyUrl(location.search));
+
+/* Botão "Atualizar dados": pede ao servidor uma nova leitura das duas planilhas.
+   Depois de atualizar, recarrega a página na mesma visão (a URL guarda aba e filtros). */
+function setupRefresh(){
+  const button=$("refreshData"),label=button.querySelector("span"),toast=$("exportStatus");
+  let timer;
+  const announce=(text,ms=0)=>{clearTimeout(timer);toast.textContent=text;toast.hidden=false;if(ms)timer=setTimeout(()=>{toast.hidden=true},ms)};
+  button.addEventListener("click",async()=>{
+    if(button.disabled)return;
+    button.disabled=true;button.classList.add("is-busy");label.textContent="Lendo planilhas…";
+    announce("Lendo as planilhas de navios e de indicadores no Google. Isso leva cerca de 20 segundos.");
+    try{
+      const response=await fetch("/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"}});
+      const result=await response.json().catch(()=>({}));
+      if(result.status==="refreshed"){announce("Dados atualizados. Recarregando o painel…");setTimeout(()=>location.reload(),600);return}
+      if(result.status==="recent"){const minutes=Math.max(1,Math.ceil((result.retryInMs||0)/60000));announce(`Os dados foram lidos há menos de 5 minutos. Tente de novo em ${minutes} ${minutes===1?"minuto":"minutos"}.`,7000)}
+      else if(result.status==="running")announce("Outra atualização já está em andamento. Aguarde alguns segundos e recarregue a página.",7000);
+      else if(result.status==="partial"){const failed=Object.entries(result.results||{}).filter(([,r])=>!r.ok).map(([kind])=>kind==="operations"?"navios":"indicadores");announce(`Não foi possível ler a planilha de ${failed.join(" e ")}. A outra foi atualizada; recarregando…`,7000);setTimeout(()=>location.reload(),2500);return}
+      else announce(result.error||"Não foi possível atualizar agora. Tente novamente em alguns minutos.",7000);
+    }catch{announce("Sem conexão com o servidor. Tente novamente.",7000)}
+    button.disabled=false;button.classList.remove("is-busy");label.textContent="Atualizar dados";
+  });
 }
 
-async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();setupNavigation();await setupTides();setupCardDetails();setupActiveOperationDetails();render();setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
+function showDataSource(payload){
+  state.dataMeta={origin:payload.origin,lastRecordAt:payload.lastRecordAt,generatedAt:payload.generatedAt,fallbackReason:payload.fallbackReason};
+  renderDataSeal();
+}
+
+/* Selo do cabeçalho: mostra até quando vão os dados da base da tela aberta.
+   Descarga e Pesagem usam a planilha de indicadores; o resto, a de navios. Produção tem planilhas próprias. */
+function renderDataSeal(){
+  const seal=$("updatedAt");if(!seal)return;
+  const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
+  if(state.menu==="producao"){seal.hidden=true;return}
+  seal.hidden=false;
+  const meta=dischargeView?window.dischargePanel?.getMeta():state.dataMeta;
+  const base=dischargeView?"planilha de indicadores":"planilha de navios";
+  if(!meta){seal.dataset.level="loading";seal.textContent=dischargeView?"Lendo a planilha de indicadores…":"Lendo a planilha de navios…";seal.title="";return}
+  const status=TpsMetrics.freshness(meta,new Date());
+  seal.dataset.level=status.level;
+  seal.textContent=status.text;
+  seal.title=status.level==="critical"
+    ?`Não foi possível ler a ${base} no Google agora (${meta.fallbackReason||"motivo não informado"}). Recarregue em alguns minutos.`
+    :status.level==="warning"
+      ?`O último registro da ${base} tem ${status.ageDays} dias. Confira se a planilha está sendo atualizada.`
+      :`Último registro da ${base} e horário em que o painel leu a planilha.`;
+}
+window.renderDataSeal=renderDataSeal;
+/* Texto "Dados até…" da base usada por uma tela, para o cabeçalho da exportação. */
+window.getExportDataNote=sectionId=>{
+  if(sectionId==="producao")return "";
+  const meta=["descarga","pesagem"].includes(sectionId)?window.dischargePanel?.getMeta():state.dataMeta;
+  return meta?TpsMetrics.freshness(meta,new Date()).text:"";
+};
+
+async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
 document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)render()});
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});

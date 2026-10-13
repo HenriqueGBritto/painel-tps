@@ -28,15 +28,15 @@
     <header class="topbar">
       <button type="button" class="mobile-menu-button" id="mobileMenuButton" aria-label="Abrir menu lateral" aria-controls="sidebar" aria-expanded="false" title="Abrir menu">☰</button>
       <div class="brand-block">
-        <img class="brand-logo" src="/logo-triunfo-cor.svg" alt="Triunfo Logística">
+        <img class="brand-logo" src="/logo-triunfo-horizontal-cor.svg" alt="Triunfo Logística" width="134" height="40">
         <div>
           <p class="eyebrow">TRIUNFO LOGÍSTICA</p>
           <h1>Painel de Operações</h1>
         </div>
       </div>
       <div class="header-actions">
-        <span class="updated" id="updatedAt">Base operacional</span>
-        <details class="export-menu" id="exportMenu"><summary aria-label="Exportar visão atual" title="Exportar visão atual"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg><span>Exportar</span></summary><div class="export-menu-options"><button type="button" id="exportPdf">PDF em paisagem</button><button type="button" id="exportImage">Imagem em paisagem</button></div></details>
+        <span class="updated data-seal" id="updatedAt" role="status" aria-live="polite" data-level="loading">Lendo a planilha de navios…</span>
+        <button type="button" class="refresh-button" id="refreshData" title="Ler as duas planilhas no Google agora" aria-describedby="updatedAt"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.5M4 4v4h4M4 13a8 8 0 0 0 14.9 3.5M20 20v-4h-4"/></svg><span>Atualizar dados</span></button><details class="export-menu" id="exportMenu"><summary aria-label="Exportar visão atual" title="Exportar visão atual"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg><span>Exportar</span></summary><div class="export-menu-options"><button type="button" id="exportPdf">PDF em paisagem</button><button type="button" id="exportImage">Imagem em paisagem</button></div></details>
       </div>
     </header>
 
@@ -78,24 +78,28 @@
             <div class="kpi-icon" aria-hidden="true">▰</div>
             <p>Navios atendidos</p>
             <strong id="kpiVessels">—</strong>
+            <small class="kpi-delta" id="kpiVesselsDelta" hidden></small>
             <span id="kpiVesselsNote">operações concluídas</span>
           </article>
           <article class="kpi-card kpi-action" data-category="operacional" data-detail="volume" role="button" tabindex="0" aria-label="Ver volume por navio">
             <div class="kpi-icon amber" aria-hidden="true">↗</div>
             <p>Volume total</p>
             <strong id="kpiTons">—</strong>
+            <small class="kpi-delta" id="kpiTonsDelta" hidden></small>
             <span>toneladas movimentadas</span>
           </article>
           <article class="kpi-card" data-category="operacional">
             <div class="kpi-icon blue" aria-hidden="true">≈</div>
             <p>Prancha média/dia</p>
             <strong id="kpiProductivity">—</strong>
+            <small class="kpi-delta" id="kpiProductivityDelta" hidden></small>
             <span>toneladas por dia operacional</span>
           </article>
           <article class="kpi-card kpi-action" data-category="ocupacao" data-detail="occupancy" role="button" tabindex="0" aria-label="Ver ocupação de berço por navio">
             <div class="kpi-icon teal" aria-hidden="true">◫</div>
             <p>Ocupação média de berço</p>
             <strong id="kpiOccupancy">—</strong>
+            <small class="kpi-delta" id="kpiOccupancyDelta" hidden></small>
             <span id="kpiOccupancyNote">tempo ocupado no período</span>
           </article>
         </section>
@@ -111,14 +115,14 @@
               <h2>Evolução mensal</h2>
             </div>
             <div class="legend" aria-label="Legenda do gráfico">
-              <span><i class="legend-bar"></i>Volume (t)</span>
-              <span><i class="legend-line"></i>Navios</span>
+              <span><i class="legend-bar legend-volume"></i>Volume (t)</span>
+              <span><i class="legend-bar legend-vessels"></i>Navios</span>
             </div>
           </div>
           <p class="chart-hint">Mês pela data de início da operação. Clique em uma coluna para ver os navios.</p>
           <div class="chart-scroll" aria-label="Deslize horizontalmente para ver todos os meses">
             <div class="chart-wrap" id="chartStage">
-              <canvas id="monthlyChart" role="img" aria-label="Gráfico mensal de volume em toneladas e quantidade de navios"></canvas>
+              <canvas id="monthlyChart" role="img" aria-label="Dois gráficos mensais alinhados: volume em toneladas e quantidade de navios"></canvas>
               <div class="chart-tooltip" id="chartTooltip" role="status"></div>
             </div>
           </div>
@@ -131,7 +135,7 @@
             <div><p class="eyebrow">COMPOSIÇÃO DO VOLUME</p><h2 id="cargoChartTitle">Participação por carga</h2></div>
           </div>
           <p class="chart-hint">Percentual de cada carga no volume total das operações concluídas.</p>
-          <div class="cargo-chart-layout" id="cargoChart"></div>
+          <div class="cargo-rank-wrap" id="cargoChart"></div>
           <p class="chart-insight" id="cargoInsight"></p>
         </section>
 
@@ -158,7 +162,7 @@
         <div class="base-filters" aria-label="Filtros de descarga"><label>Ano<select id="dischargeYear"></select></label><label>Mês<select id="dischargeMonth"></select></label><label>De<input id="dischargeStart" type="date"></label><label>Até<input id="dischargeEnd" type="date"></label><button type="button" id="dischargeLastWeek" class="base-reset">Últimos 7 dias</button></div>
         <p class="base-status" id="dischargeStatus" role="status" aria-live="polite"></p>
         <div class="base-kpis" aria-label="Resumo da descarga"><article><span>VOLUME DESCARREGADO</span><strong id="dischargeTons">—</strong><small>toneladas no período</small></article><article><span>VAGÕES DESCARREGADOS</span><strong id="dischargeWagons">—</strong><small>conforme a coluna VGS DESCARREGADOS</small></article><article><span>MÉDIA DIÁRIA</span><strong id="dischargeAverage">—</strong><small>dias com descarga registrada</small></article><article><span>TEMPO DE OCORRÊNCIAS</span><strong id="dischargeStopTime">—</strong><small>paradas com duração informada</small></article></div>
-        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EVOLUÇÃO DIÁRIA</p><h3>Toneladas descarregadas</h3></div><span id="dischargeChartCaption"></span></div><div class="base-chart-scroll"><div class="base-day-chart" id="dischargeDailyChart"></div></div><p class="base-chart-detail" id="dischargeChartDetail" role="status">Passe o mouse ou toque em uma coluna para ver o valor exato.</p><p class="chart-insight" id="dischargeDailyInsight"></p><details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Período</th><th>Volume (t)</th></tr></thead><tbody id="dischargeDailyRows"></tbody></table></div></details><p class="base-footnote" id="dischargeMethodNote">A descarga é reconhecida pela data da coluna “DATA DA DESCARGA” e pelo status “FINALIZADO”. Registros em descarga sem data de conclusão não entram no volume realizado.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EVOLUÇÃO DIÁRIA</p><h3>Toneladas descarregadas</h3></div><span id="dischargeChartCaption"></span></div><div class="base-chart-scroll"><div class="base-day-chart" id="dischargeDailyChart"></div></div><p class="base-target-legend" id="dischargeTargetLegend" hidden></p><p class="base-chart-detail" id="dischargeChartDetail" role="status">Passe o mouse ou toque em uma coluna para ver o valor exato.</p><p class="chart-insight" id="dischargeDailyInsight"></p><details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Período</th><th>Volume (t)</th></tr></thead><tbody id="dischargeDailyRows"></tbody></table></div></details><p class="base-footnote" id="dischargeMethodNote">A descarga é reconhecida pela data da coluna “DATA DA DESCARGA” e pelo status “FINALIZADO”. Registros em descarga sem data de conclusão não entram no volume realizado.</p></section>
         <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PLANO DE DESCARGA</p><h3>Desafio, plano e realizado</h3></div><span id="dischargePlanPeriod"></span></div><div class="base-plan-cards" id="dischargePlanCards"></div><div class="base-plan-history" id="dischargePlanHistory"></div><p class="base-footnote">Os três valores são metas e realizado do mês completo na planilha; não são rateados pelo filtro de dias. Meses sem plano informado não aparecem.</p></section>
         <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">OCORRÊNCIAS DA DESCARGA</p><h3>Tempo por ocorrência</h3></div><span id="dischargeOccurrenceCaption"></span></div><div class="base-occurrence-list" id="dischargeOccurrenceList"></div><p class="base-footnote">Duração da coluna “TEMPO”. Linhas de recebimento com 00:00 não são somadas como paralisação; o número de registros continua visível.</p></section>
       </section>
@@ -205,6 +209,8 @@
 
   <div class="export-status" id="exportStatus" role="status" aria-live="polite" hidden></div>
   <script src="xlsx.full.min.js"></script>
+  <script src="metrics.js"></script>
+  <script src="url-state.js"></script>
   <script src="production.js"></script>
   <script src="discharge.js"></script>
   <script src="app.js"></script>

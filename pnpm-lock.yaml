@@ -8,13 +8,16 @@ importers:
 
   .:
     dependencies:
+      '@netlify/blobs':
+        specifier: 11.1.1
+        version: 11.1.1(supports-color@11.0.0)
       firebase-admin:
         specifier: ^13.5.0
-        version: 13.10.0(supports-color@11.0.0)
+        version: 13.10.0
     devDependencies:
       netlify-cli:
         specifier: ^27.11.0
-        version: 27.11.0(@types/node@26.6.4)(picomatch@4.0.7)(supports-color@11.0.0)
+        version: 27.11.0(@types/node@26.6.4)(picomatch@4.0.7)
 
 packages:
 
@@ -380,105 +383,89 @@ packages:
     resolution: {integrity: sha512-excjX8DfsIcJ10x1Kzr4RcWe1edC9PquDRRPx3YVCvQv+U5p7Yin2s32ftzikXojb1PIFc/9Mt28/y+iRklkrw==}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-arm@1.2.4':
     resolution: {integrity: sha512-bFI7xcKFELdiNCVov8e44Ia4u2byA+l3XtsAj+Q8tfCwO6BQ8iDojYdvoPMqsKDkuoOo+X6HZA0s0q11ANMQ8A==}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-ppc64@1.2.4':
     resolution: {integrity: sha512-FMuvGijLDYG6lW+b/UvyilUWu5Ayu+3r2d1S8notiGCIyYU/76eig1UfMmkZ7vwgOrzKzlQbFSuQfgm7GYUPpA==}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-riscv64@1.2.4':
     resolution: {integrity: sha512-oVDbcR4zUC0ce82teubSm+x6ETixtKZBh/qbREIOcI3cULzDyb18Sr/Wcyx7NRQeQzOiHTNbZFF1UwPS2scyGA==}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-s390x@1.2.4':
     resolution: {integrity: sha512-qmp9VrzgPgMoGZyPvrQHqk02uyjA0/QrTO26Tqk6l4ZV0MPWIW6LTkqOIov+J1yEu7MbFQaDpwdwJKhbJvuRxQ==}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linux-x64@1.2.4':
     resolution: {integrity: sha512-tJxiiLsmHc9Ax1bz3oaOYBURTXGIRDODBqhveVHonrHJ9/+k89qbLl0bcJns+e4t4rvaNBxaEZsFtSfAdquPrw==}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-libvips-linuxmusl-arm64@1.2.4':
     resolution: {integrity: sha512-FVQHuwx1IIuNow9QAbYUzJ+En8KcVm9Lk5+uGUQJHaZmMECZmOlix9HnH7n1TRkXMS0pGxIJokIVB9SuqZGGXw==}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-libvips-linuxmusl-x64@1.2.4':
     resolution: {integrity: sha512-+LpyBk7L44ZIXwz/VYfglaX/okxezESc6UxDSoyo2Ks6Jxc4Y7sGjpgU9s4PMgqgjj1gZCylTieNamqA1MF7Dg==}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-linux-arm64@0.34.5':
     resolution: {integrity: sha512-bKQzaJRY/bkPOXyKx5EVup7qkaojECG6NLYswgktOZjaXecSAeCWiZwwiFf3/Y+O1HrauiE3FVsGxFg8c24rZg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-arm@0.34.5':
     resolution: {integrity: sha512-9dLqsvwtg1uuXBGZKsxem9595+ujv0sJ6Vi8wcTANSFpwV/GONat5eCkzQo/1O6zRIkh0m/8+5BjrRr7jDUSZw==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-ppc64@0.34.5':
     resolution: {integrity: sha512-7zznwNaqW6YtsfrGGDA6BRkISKAAE1Jo0QdpNYXNMHu2+0dTrPflTLNkpc8l7MUP5M16ZJcUvysVWWrMefZquA==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-riscv64@0.34.5':
     resolution: {integrity: sha512-51gJuLPTKa7piYPaVs8GmByo7/U7/7TZOq+cnXJIHZKavIRHAP77e3N2HEl3dgiqdD/w0yUfiJnII77PuDDFdw==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [riscv64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-s390x@0.34.5':
     resolution: {integrity: sha512-nQtCk0PdKfho3eC5MrbQoigJ2gd1CgddUMkabUj+rBevs8tZ2cULOx46E7oyX+04WGfABgIwmMC0VqieTiR4jg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linux-x64@0.34.5':
     resolution: {integrity: sha512-MEzd8HPKxVxVenwAa+JRPwEC7QFjoPWuS5NZnBt6B3pu7EG2Ge0id1oLHZpPJdn3OQK+BQDiw9zStiHBTJQQQQ==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@img/sharp-linuxmusl-arm64@0.34.5':
     resolution: {integrity: sha512-fprJR6GtRsMt6Kyfq44IsChVZeGN97gTD331weR1ex1c1rypDEABN6Tm2xa1wE6lYb5DdEnk03NZPqA7Id21yg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-linuxmusl-x64@0.34.5':
     resolution: {integrity: sha512-Jg8wNT1MUzIvhBFxViqrEhWDGzqymo3sV7z7ZsaWbZNDLXRJZoRGrjulp60YYtV4wfY8VIKcWidjojlLcWrd8Q==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@img/sharp-wasm32@0.34.5':
     resolution: {integrity: sha512-OdWTEiVkY2PHwqkbBI8frFxQQFekHaSSkUIJkwzclWZe64O1X4UlUjqqqLaPbUpMOQk6FBu/HtlGXNblIs0huw==}
@@ -677,6 +664,10 @@ packages:
   '@netlify/binary-info@1.0.0':
     resolution: {integrity: sha512-4wMPu9iN3/HL97QblBsBay3E1etIciR84izI3U+4iALY+JHCrI+a2jO0qbAZ/nxKoegypYEaiiqWXylm+/zfrw==}
 
+  '@netlify/blobs@11.1.1':
+    resolution: {integrity: sha512-99H0BJlieiWLkTYQ4ACbw5aGlkbpgyJ3TYF1Hb76wU43eO57LnnP/m3cnMZWNWeAwXhiTEjvUTH7ghJTBoSjFQ==}
+    engines: {node: '>=22.12.0'}
+
   '@netlify/blobs@11.1.3':
     resolution: {integrity: sha512-epr7eGb13LugY+0WUDl91dYmypOfbrJ6MYf07M3Zoey5WBYRD2rqDrOhDskfAlEaJ2MoWGaPWrVxltIxfI5LoQ==}
     engines: {node: '>=22.12.0'}
@@ -712,6 +703,10 @@ packages:
 
   '@netlify/database-dev@1.0.1':
     resolution: {integrity: sha512-Zu8cM4AeXNuQI/cNAI6vrammtdDnWIGO6PYKDAECDMzsb3IcoTsVOZAePup7cGdjaGcBBVdi1qx/PoI5hNZcxg==}
+    engines: {node: '>=22.12.0'}
+
+  '@netlify/dev-utils@6.0.1':
+    resolution: {integrity: sha512-q5g70dO3q/M/XTBQz7uIECJxVlJoS8UBlzpjf22DV6q61UzXa8EONTPXPmvisrFcUi1I3AUKplPcHGQYZZj+Vw==}
     engines: {node: '>=22.12.0'}
 
   '@netlify/dev-utils@6.0.3':
@@ -4591,12 +4586,12 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@google-cloud/firestore@7.11.6(supports-color@11.0.0)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
       functional-red-black-tree: 1.0.1
-      google-gax: 4.6.1(supports-color@11.0.0)
+      google-gax: 4.6.1
       protobufjs: 7.6.6
     transitivePeerDependencies:
       - encoding
@@ -4615,7 +4610,7 @@ snapshots:
   '@google-cloud/promisify@4.0.0':
     optional: true
 
-  '@google-cloud/storage@7.22.0(supports-color@11.0.0)':
+  '@google-cloud/storage@7.22.0':
     dependencies:
       '@google-cloud/paginator': 5.0.2
       '@google-cloud/projectify': 4.0.0
@@ -4624,13 +4619,13 @@ snapshots:
       async-retry: 1.3.3
       duplexify: 4.1.3
       fast-xml-parser: 5.11.2
-      gaxios: 6.7.1(supports-color@11.0.0)
-      google-auth-library: 9.15.1(supports-color@11.0.0)
+      gaxios: 6.7.1
+      google-auth-library: 9.15.1
       html-entities: 2.6.0
       mime: 3.0.0
       p-limit: 3.1.0
-      retry-request: 7.0.2(supports-color@11.0.0)
-      teeny-request: 9.0.0(supports-color@11.0.0)
+      retry-request: 7.0.2
+      teeny-request: 9.0.0
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -4920,7 +4915,15 @@ snapshots:
 
   '@netlify/binary-info@1.0.0': {}
 
-  '@netlify/blobs@11.1.3(supports-color@11.0.0)':
+  '@netlify/blobs@11.1.1(supports-color@11.0.0)':
+    dependencies:
+      '@netlify/dev-utils': 6.0.1
+      '@netlify/otel': 7.0.4(supports-color@11.0.0)
+      '@netlify/runtime-utils': 3.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@netlify/blobs@11.1.3':
     dependencies:
       '@netlify/dev-utils': 6.0.3
       '@netlify/otel': 7.0.4(supports-color@11.0.0)
@@ -4944,7 +4947,7 @@ snapshots:
   '@netlify/build@37.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.4)(picomatch@4.0.7)':
     dependencies:
       '@bugsnag/js': 8.10.0
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.1(supports-color@11.0.0)
       '@netlify/cache-utils': 7.1.2
       '@netlify/config': 25.2.6
       '@netlify/edge-bundler': 16.1.1
@@ -5038,6 +5041,20 @@ snapshots:
       '@electric-sql/pglite': 0.3.16
       pg-gateway: 0.3.0-beta.4
 
+  '@netlify/dev-utils@6.0.1':
+    dependencies:
+      '@whatwg-node/server': 0.11.0
+      ansis: 4.4.0
+      atomically: 2.1.1
+      chokidar: 5.0.0
+      decache: 4.6.2
+      dettle: 1.0.5
+      dot-prop: 9.0.0
+      empathic: 2.1.0
+      env-paths: 3.0.0
+      parse-gitignore: 2.0.0
+      semver: 7.8.5
+
   '@netlify/dev-utils@6.0.3':
     dependencies:
       '@whatwg-node/server': 0.11.0
@@ -5052,19 +5069,19 @@ snapshots:
       parse-gitignore: 2.0.0
       semver: 7.8.5
 
-  '@netlify/dev@5.1.6(supports-color@11.0.0)':
+  '@netlify/dev@5.1.6':
     dependencies:
       '@netlify/ai': 1.0.1
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.3
       '@netlify/config': 25.2.6
       '@netlify/database-dev': 1.0.1
       '@netlify/dev-utils': 6.0.3
       '@netlify/edge-functions-dev': 2.0.3
-      '@netlify/functions-dev': 2.0.10(supports-color@11.0.0)
+      '@netlify/functions-dev': 2.0.10
       '@netlify/headers': 3.0.3
-      '@netlify/images': 2.0.3(@netlify/blobs@11.1.3(supports-color@11.0.0))
+      '@netlify/images': 2.0.3(@netlify/blobs@11.1.3)
       '@netlify/redirects': 4.1.0
-      '@netlify/runtime': 5.0.7(supports-color@11.0.0)
+      '@netlify/runtime': 5.0.7
       '@netlify/server-dev': 0.1.3
       '@netlify/static': 4.0.0
       ulid: 3.0.2
@@ -5132,9 +5149,9 @@ snapshots:
     dependencies:
       '@netlify/types': 3.2.0
 
-  '@netlify/functions-dev@2.0.10(supports-color@11.0.0)':
+  '@netlify/functions-dev@2.0.10':
     dependencies:
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.3
       '@netlify/dev-utils': 6.0.3
       '@netlify/functions': 6.0.2
       '@netlify/zip-it-and-ship-it': 16.2.3(supports-color@11.0.0)
@@ -5186,9 +5203,9 @@ snapshots:
     dependencies:
       '@netlify/headers-parser': 10.1.1
 
-  '@netlify/images@2.0.3(@netlify/blobs@11.1.3(supports-color@11.0.0))':
+  '@netlify/images@2.0.3(@netlify/blobs@11.1.3)':
     dependencies:
-      ipx: 3.1.1(@netlify/blobs@11.1.3(supports-color@11.0.0))
+      ipx: 3.1.1(@netlify/blobs@11.1.3)
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -5302,9 +5319,9 @@ snapshots:
 
   '@netlify/runtime-utils@3.0.0': {}
 
-  '@netlify/runtime@5.0.7(supports-color@11.0.0)':
+  '@netlify/runtime@5.0.7':
     dependencies:
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.3
       '@netlify/cache': 4.0.2
       '@netlify/runtime-utils': 3.0.0
       '@netlify/types': 3.2.0
@@ -5464,7 +5481,7 @@ snapshots:
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
 
-  '@pnpm/tabtab@0.5.4(supports-color@11.0.0)':
+  '@pnpm/tabtab@0.5.4':
     dependencies:
       debug: 4.4.3(supports-color@11.0.0)
       enquirer: 2.4.1
@@ -5713,7 +5730,7 @@ snapshots:
 
   acorn@8.19.0: {}
 
-  agent-base@6.0.2(supports-color@11.0.0):
+  agent-base@6.0.2:
     dependencies:
       debug: 4.4.3(supports-color@11.0.0)
     transitivePeerDependencies:
@@ -5906,7 +5923,7 @@ snapshots:
     dependencies:
       file-uri-to-path: 1.0.0
 
-  body-parser@2.3.0(supports-color@11.0.0):
+  body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.1.0
@@ -6577,10 +6594,10 @@ snapshots:
     dependencies:
       on-headers: 1.1.0
 
-  express@5.2.1(supports-color@11.0.0):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0(supports-color@11.0.0)
+      body-parser: 2.3.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -6590,7 +6607,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@11.0.0)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -6601,9 +6618,9 @@ snapshots:
       proxy-addr: 2.0.8
       qs: 6.16.0
       range-parser: 1.3.0
-      router: 2.2.0(supports-color@11.0.0)
-      send: 1.2.1(supports-color@11.0.0)
-      serve-static: 2.2.1(supports-color@11.0.0)
+      router: 2.2.0
+      send: 1.2.1
+      serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.1.0
       vary: 1.1.2
@@ -6730,7 +6747,7 @@ snapshots:
 
   filter-obj@6.1.0: {}
 
-  finalhandler@2.1.1(supports-color@11.0.0):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@11.0.0)
       encodeurl: 2.0.0
@@ -6760,19 +6777,19 @@ snapshots:
       locate-path: 8.0.0
       unicorn-magic: 0.3.0
 
-  firebase-admin@13.10.0(supports-color@11.0.0):
+  firebase-admin@13.10.0:
     dependencies:
       '@fastify/busboy': 3.2.2
       '@firebase/database-compat': 2.1.7
       '@firebase/database-types': 1.0.22
       farmhash-modern: 1.1.0
       fast-deep-equal: 3.1.3
-      google-auth-library: 10.9.1(supports-color@11.0.0)
+      google-auth-library: 10.9.1
       jsonwebtoken: 9.0.3
-      jwks-rsa: 3.2.2(supports-color@11.0.0)
+      jwks-rsa: 3.2.2
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(supports-color@11.0.0)
-      '@google-cloud/storage': 7.22.0(supports-color@11.0.0)
+      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/storage': 7.22.0
     transitivePeerDependencies:
       - '@firebase/app'
       - '@firebase/app-compat'
@@ -6785,7 +6802,7 @@ snapshots:
     dependencies:
       from2: 2.3.0
 
-  follow-redirects@1.16.1(debug@4.4.3(supports-color@11.0.0)):
+  follow-redirects@1.16.1(debug@4.4.3):
     optionalDependencies:
       debug: 4.4.3(supports-color@11.0.0)
 
@@ -6837,7 +6854,7 @@ snapshots:
 
   fuzzy@0.1.3: {}
 
-  gaxios@6.7.1(supports-color@11.0.0):
+  gaxios@6.7.1:
     dependencies:
       extend: 3.0.2
       https-proxy-agent: 7.0.6(supports-color@11.0.0)
@@ -6849,7 +6866,7 @@ snapshots:
       - supports-color
     optional: true
 
-  gaxios@7.3.1(supports-color@11.0.0):
+  gaxios@7.3.1:
     dependencies:
       extend: 3.0.2
       https-proxy-agent: 7.0.6(supports-color@11.0.0)
@@ -6857,9 +6874,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  gcp-metadata@6.1.1(supports-color@11.0.0):
+  gcp-metadata@6.1.1:
     dependencies:
-      gaxios: 6.7.1(supports-color@11.0.0)
+      gaxios: 6.7.1
       google-logging-utils: 0.0.2
       json-bigint: 1.0.0
     transitivePeerDependencies:
@@ -6867,9 +6884,9 @@ snapshots:
       - supports-color
     optional: true
 
-  gcp-metadata@8.1.2(supports-color@11.0.0):
+  gcp-metadata@8.1.2:
     dependencies:
-      gaxios: 7.3.1(supports-color@11.0.0)
+      gaxios: 7.3.1
       google-logging-utils: 1.1.3
       json-bigint: 1.0.0
     transitivePeerDependencies:
@@ -6954,43 +6971,43 @@ snapshots:
     dependencies:
       minimist: 1.2.8
 
-  google-auth-library@10.9.1(supports-color@11.0.0):
+  google-auth-library@10.9.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 7.3.1(supports-color@11.0.0)
-      gcp-metadata: 8.1.2(supports-color@11.0.0)
+      gaxios: 7.3.1
+      gcp-metadata: 8.1.2
       google-logging-utils: 1.1.3
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
 
-  google-auth-library@9.15.1(supports-color@11.0.0):
+  google-auth-library@9.15.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
-      gaxios: 6.7.1(supports-color@11.0.0)
-      gcp-metadata: 6.1.1(supports-color@11.0.0)
-      gtoken: 7.1.0(supports-color@11.0.0)
+      gaxios: 6.7.1
+      gcp-metadata: 6.1.1
+      gtoken: 7.1.0
       jws: 4.0.1
     transitivePeerDependencies:
       - encoding
       - supports-color
     optional: true
 
-  google-gax@4.6.1(supports-color@11.0.0):
+  google-gax@4.6.1:
     dependencies:
       '@grpc/grpc-js': 1.14.5
       '@grpc/proto-loader': 0.7.15
       '@types/long': 4.0.2
       abort-controller: 3.0.0
       duplexify: 4.1.3
-      google-auth-library: 9.15.1(supports-color@11.0.0)
+      google-auth-library: 9.15.1
       node-fetch: 2.7.0
       object-hash: 3.0.0
       proto3-json-serializer: 2.0.2
       protobufjs: 7.6.6
-      retry-request: 7.0.2(supports-color@11.0.0)
+      retry-request: 7.0.2
       uuid: 9.0.1
     transitivePeerDependencies:
       - encoding
@@ -7008,9 +7025,9 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  gtoken@7.1.0(supports-color@11.0.0):
+  gtoken@7.1.0:
     dependencies:
-      gaxios: 6.7.1(supports-color@11.0.0)
+      gaxios: 6.7.1
       jws: 4.0.1
     transitivePeerDependencies:
       - encoding
@@ -7090,39 +7107,39 @@ snapshots:
 
   http-parser-js@0.5.10: {}
 
-  http-proxy-agent@5.0.0(supports-color@11.0.0):
+  http-proxy-agent@5.0.0:
     dependencies:
       '@tootallnate/once': 2.0.1
-      agent-base: 6.0.2(supports-color@11.0.0)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@11.0.0)
     transitivePeerDependencies:
       - supports-color
     optional: true
 
-  http-proxy-middleware@3.0.7(supports-color@11.0.0):
+  http-proxy-middleware@3.0.7:
     dependencies:
       '@types/http-proxy': 1.17.17
       debug: 4.4.3(supports-color@11.0.0)
-      http-proxy: 1.18.1(debug@4.4.3(supports-color@11.0.0))
+      http-proxy: 1.18.1(debug@4.4.3)
       is-glob: 4.0.3
       is-plain-object: 5.1.0
       micromatch: 4.0.8
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1(debug@4.4.3(supports-color@11.0.0)):
+  http-proxy@1.18.1(debug@4.4.3):
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.16.1(debug@4.4.3(supports-color@11.0.0))
+      follow-redirects: 1.16.1(debug@4.4.3)
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
 
   http-shutdown@1.2.2: {}
 
-  https-proxy-agent@5.0.1(supports-color@11.0.0):
+  https-proxy-agent@5.0.1:
     dependencies:
-      agent-base: 6.0.2(supports-color@11.0.0)
+      agent-base: 6.0.2
       debug: 4.4.3(supports-color@11.0.0)
     transitivePeerDependencies:
       - supports-color
@@ -7135,7 +7152,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  https-proxy-agent@8.0.0(supports-color@11.0.0):
+  https-proxy-agent@8.0.0:
     dependencies:
       agent-base: 8.0.0
       debug: 4.4.3(supports-color@11.0.0)
@@ -7184,7 +7201,7 @@ snapshots:
 
   ipaddr.js@2.5.0: {}
 
-  ipx@3.1.1(@netlify/blobs@11.1.3(supports-color@11.0.0)):
+  ipx@3.1.1(@netlify/blobs@11.1.3):
     dependencies:
       '@fastify/accept-negotiator': 2.1.0
       citty: 0.1.6
@@ -7200,7 +7217,7 @@ snapshots:
       sharp: 0.34.5
       svgo: 4.1.0
       ufo: 1.6.4
-      unstorage: 1.17.5(@netlify/blobs@11.1.3(supports-color@11.0.0))
+      unstorage: 1.17.5(@netlify/blobs@11.1.3)
       xss: 1.0.15
     transitivePeerDependencies:
       - '@azure/app-configuration'
@@ -7446,7 +7463,7 @@ snapshots:
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
 
-  jwks-rsa@3.2.2(supports-color@11.0.0):
+  jwks-rsa@3.2.2:
     dependencies:
       '@types/jsonwebtoken': 9.0.10
       debug: 4.4.3(supports-color@11.0.0)
@@ -7707,30 +7724,30 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  netlify-cli@27.11.0(@types/node@26.6.4)(picomatch@4.0.7)(supports-color@11.0.0):
+  netlify-cli@27.11.0(@types/node@26.6.4)(picomatch@4.0.7):
     dependencies:
       '@fastify/static': 10.1.5
       '@inquirer/prompts': 8.7.3(@types/node@26.6.4)
       '@netlify/ai': 1.0.1
       '@netlify/api': 15.1.2
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.3
       '@netlify/build': 37.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.4)(picomatch@4.0.7)
       '@netlify/build-info': 11.3.0
       '@netlify/config': 25.2.6
-      '@netlify/dev': 5.1.6(supports-color@11.0.0)
+      '@netlify/dev': 5.1.6
       '@netlify/dev-utils': 6.0.3
       '@netlify/edge-bundler': 16.1.1
       '@netlify/edge-functions': 4.0.2
       '@netlify/edge-functions-bootstrap': 3.2.0
       '@netlify/headers-parser': 10.1.1
-      '@netlify/images': 2.0.3(@netlify/blobs@11.1.3(supports-color@11.0.0))
+      '@netlify/images': 2.0.3(@netlify/blobs@11.1.3)
       '@netlify/local-functions-proxy': 2.0.3
       '@netlify/redirect-matcher': 0.4.2
       '@netlify/redirect-parser': 16.1.1
       '@netlify/server-dev': 0.1.3
       '@netlify/zip-it-and-ship-it': 16.2.3(supports-color@11.0.0)
       '@opentelemetry/api': 1.9.1
-      '@pnpm/tabtab': 0.5.4(supports-color@11.0.0)
+      '@pnpm/tabtab': 0.5.4
       ansi-escapes: 7.3.0
       ansi-to-html: 0.7.2
       ascii-table: 0.0.9
@@ -7752,7 +7769,7 @@ snapshots:
       envinfo: 7.21.0
       etag: 1.8.1
       execa: 5.1.1
-      express: 5.2.1(supports-color@11.0.0)
+      express: 5.2.1
       express-logging: 1.1.1
       fastest-levenshtein: 1.0.16
       fastify: 5.12.5
@@ -7762,9 +7779,9 @@ snapshots:
       get-port: 5.1.1
       git-repo-info: 2.1.1
       gitconfiglocal: 2.1.0
-      http-proxy: 1.18.1(debug@4.4.3(supports-color@11.0.0))
-      http-proxy-middleware: 3.0.7(supports-color@11.0.0)
-      https-proxy-agent: 8.0.0(supports-color@11.0.0)
+      http-proxy: 1.18.1(debug@4.4.3)
+      http-proxy-middleware: 3.0.7
+      https-proxy-agent: 8.0.0
       is-docker: 4.0.0
       is-stream: 4.0.1
       is-wsl: 3.1.1
@@ -8427,11 +8444,11 @@ snapshots:
 
   ret@0.5.0: {}
 
-  retry-request@7.0.2(supports-color@11.0.0):
+  retry-request@7.0.2:
     dependencies:
       '@types/request': 2.48.13
       extend: 3.0.2
-      teeny-request: 9.0.0(supports-color@11.0.0)
+      teeny-request: 9.0.0
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -8443,7 +8460,7 @@ snapshots:
 
   rfdc@1.4.1: {}
 
-  router@2.2.0(supports-color@11.0.0):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@11.0.0)
       depd: 2.0.0
@@ -8500,7 +8517,7 @@ snapshots:
 
   semver@7.8.5: {}
 
-  send@1.2.1(supports-color@11.0.0):
+  send@1.2.1:
     dependencies:
       debug: 4.4.3(supports-color@11.0.0)
       encodeurl: 2.0.0
@@ -8516,12 +8533,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  serve-static@2.2.1(supports-color@11.0.0):
+  serve-static@2.2.1:
     dependencies:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@11.0.0)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -8830,10 +8847,10 @@ snapshots:
       minizlib: 3.1.0
       yallist: 5.0.0
 
-  teeny-request@9.0.0(supports-color@11.0.0):
+  teeny-request@9.0.0:
     dependencies:
-      http-proxy-agent: 5.0.0(supports-color@11.0.0)
-      https-proxy-agent: 5.0.1(supports-color@11.0.0)
+      http-proxy-agent: 5.0.0
+      https-proxy-agent: 5.0.1
       node-fetch: 2.7.0
       stream-events: 1.0.5
       uuid: 9.0.1
@@ -9014,7 +9031,7 @@ snapshots:
 
   unpipe@1.0.0: {}
 
-  unstorage@1.17.5(@netlify/blobs@11.1.3(supports-color@11.0.0)):
+  unstorage@1.17.5(@netlify/blobs@11.1.3):
     dependencies:
       anymatch: 3.1.3
       chokidar: 5.0.0
@@ -9025,7 +9042,7 @@ snapshots:
       ofetch: 1.5.1
       ufo: 1.6.4
     optionalDependencies:
-      '@netlify/blobs': 11.1.3(supports-color@11.0.0)
+      '@netlify/blobs': 11.1.3
 
   untildify@4.0.0: {}
 
