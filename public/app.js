@@ -655,7 +655,7 @@ function setupRefresh(){
 }
 
 function showDataSource(payload){
-  state.dataMeta={origin:payload.origin,lastRecordAt:payload.lastRecordAt,generatedAt:payload.generatedAt,fallbackReason:payload.fallbackReason,changeLog:payload.changeLog};
+  state.dataMeta={origin:payload.origin,lastRecordAt:payload.lastRecordAt,generatedAt:payload.generatedAt,fallbackReason:payload.fallbackReason,changeLog:payload.changeLog,files:payload.files};
   renderDataSeal();
 }
 
@@ -665,14 +665,16 @@ const brDateTime=value=>{const date=new Date(value);return Number.isNaN(date.get
 function changesBaseHtml(title,meta,current){
   const tag=current?"<small>tela atual</small>":"";
   if(!meta)return `<section class="changes-base"><h3>${title}${tag}</h3><p class="changes-read">Lendo a planilha…</p></section>`;
-  if(meta.origin==="fallback")return `<section class="changes-base"><h3>${title}${tag}</h3><p class="changes-note">A planilha não pôde ser lida agora (${escapeHtml(meta.fallbackReason||"motivo não informado")}). O painel mostra a última base salva.</p></section>`;
+  const files=(meta.files||[]).map(file=>`<li>${file.url?`<a href="${escapeHtml(file.url)}" target="_blank" rel="noopener">${escapeHtml(file.name)}</a>`:escapeHtml(file.name)}</li>`).join("");
+  const head=`<h3>${title}${tag}</h3>${files?`<ul class="changes-files" aria-label="Arquivos lidos">${files}</ul>`:""}`;
+  if(meta.origin==="fallback")return `<section class="changes-base">${head}<p class="changes-note">A planilha não pôde ser lida agora (${escapeHtml(meta.fallbackReason||"motivo não informado")}). O painel mostra a última base salva.</p></section>`;
   const log=Array.isArray(meta.changeLog)?meta.changeLog:[];
   const read=`<p class="changes-read">Última leitura: ${brDateTime(meta.generatedAt)}</p>`;
-  if(!log.length)return `<section class="changes-base"><h3>${title}${tag}</h3>${read}<p class="changes-note">Ainda não há alterações registradas. O registro compara cada leitura com a anterior e começa a aparecer aqui a partir da próxima leitura que encontrar diferença.</p></section>`;
+  if(!log.length)return `<section class="changes-base">${head}${read}<p class="changes-note">Ainda não há alterações registradas. O registro compara cada leitura com a anterior e começa a aparecer aqui a partir da próxima leitura que encontrar diferença.</p></section>`;
   const latestIsNow=log[0].at===meta.generatedAt;
   const note=latestIsNow?"":`<p class="changes-note">A última leitura não encontrou diferença em relação à anterior. Abaixo, as alterações mais recentes encontradas.</p>`;
   const entries=log.map((entry,index)=>`<details class="changes-entry"${index===0?" open":""}><summary>Leitura de ${brDateTime(entry.at)}<span>${entry.total} ${entry.total===1?"alteração":"alterações"}</span></summary>${entry.sections.map(section=>`<div class="changes-section"><h4>${escapeHtml(section.title)} (${section.count})</h4><ul>${section.items.map(item=>`<li>${escapeHtml(item)}</li>`).join("")}</ul>${section.count>section.items.length?`<p class="changes-more">e mais ${section.count-section.items.length}.</p>`:""}</div>`).join("")}</details>`).join("");
-  return `<section class="changes-base"><h3>${title}${tag}</h3>${read}${note}${entries}</section>`;
+  return `<section class="changes-base">${head}${read}${note}${entries}</section>`;
 }
 function renderChanges(){
   const panel=$("changesPanel");if(!panel||panel.hidden)return;

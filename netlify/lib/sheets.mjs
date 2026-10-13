@@ -13,15 +13,17 @@ export const SHEETS = {
     env: "TPS_SHEET_OPERATIONS",
     defaultId: "1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm", // dados_navios_dinamico_triunfo.xlsm
     label: "dados_navios_dinamico_triunfo",
+    fileName: "dados_navios_dinamico_triunfo.xlsm",
     tabs: ["2024", "2025", "2026", "BASE_GUSA_2026"],
     readOptions: { cellDates: false },
     // A aba LINEUP fica na planilha de produção "outras" (Google Planilhas nativo), com a mesma estrutura de antes.
-    lineup: { env: "TPS_SHEET_LINEUP", defaultId: "1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU", tab: "LINEUP", order: ["sheets", "drive"] }
+    lineup: { env: "TPS_SHEET_LINEUP", defaultId: "1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU", fileName: "Planilha de produção \"outras\" (aba LINEUP)", tab: "LINEUP", order: ["sheets", "drive"] }
   },
   discharge: {
     env: "TPS_SHEET_DISCHARGE",
     defaultId: "12ionZt6pJ7yeX59EUX-rppOCugcvp9F7", // Base - Indicadores Operacionais TPS.xlsx
     label: "Base - Indicadores Operacionais TPS",
+    fileName: "Base - Indicadores Operacionais TPS.xlsx",
     tabs: ["Base Descarga", "Base Pesagens"],
     // Colunas lidas pelo parseDischargeWorkbook (0 = A). Se o leitor passar a usar outra coluna, inclua aqui.
     columns: {
@@ -54,6 +56,24 @@ export function lineupId(env = process.env) {
 export function sheetUrl(kind, env = process.env) {
   const id = sourceId(kind, env);
   return id ? `https://drive.google.com/file/d/${id}/view` : null;
+}
+
+/**
+ * Arquivos lidos para cada base, com nome e link, para a página mostrar de onde vêm os dados.
+ * Se a variável do Netlify apontar para outro arquivo, o nome padrão deixa de valer.
+ */
+export function sourceFiles(kind, env = process.env) {
+  const describe = (config, id, url) => ({
+    name: id === sheetId(config.defaultId) ? config.fileName : `Arquivo definido em ${config.env}`,
+    url
+  });
+  const id = sourceId(kind, env);
+  const files = [describe(SHEETS[kind], id, sheetUrl(kind, env))];
+  if (kind === "operations") {
+    const extra = lineupId(env);
+    files.push(describe(SHEETS.operations.lineup, extra, extra ? `https://docs.google.com/spreadsheets/d/${extra}/edit` : null));
+  }
+  return files;
 }
 
 const isZip = bytes => bytes.byteLength > 100 && bytes[0] === 0x50 && bytes[1] === 0x4b;

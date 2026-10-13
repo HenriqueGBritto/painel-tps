@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { firestore } from "../lib/firebase.mjs";
 import { loadDataset } from "../lib/dataset.mjs";
-import { downloadWorkbook } from "../lib/sheets.mjs";
+import { downloadWorkbook, sourceFiles } from "../lib/sheets.mjs";
 import { loadForServing, requestRefresh } from "../lib/snapshots.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
@@ -91,7 +91,7 @@ export function dischargeLastRecord(data) {
   return (data.dischargeDays || []).reduce((max, row) => typeof row.date === "string" && row.date > (max || "") ? row.date : max, null);
 }
 
-const withLastRecord = (kind, data) => ({ ...data, lastRecordAt: kind === "operations" ? operationsLastRecord(data) : dischargeLastRecord(data) });
+const withLastRecord = (kind, data) => ({ ...data, files: sourceFiles(kind), lastRecordAt: kind === "operations" ? operationsLastRecord(data) : dischargeLastRecord(data) });
 
 /* Se o Google estiver fora do ar ou o link mudar de permissão, o painel continua
    abrindo com a última base salva (Firestore ou cópia inicial) e mostra um aviso. */

@@ -218,7 +218,7 @@
     $("weighingMonth").addEventListener("change", userChange(renderWeighing));
   }
   window.dischargePanel = { setup, getUpdatedAt: () => state.ready ? state.data?.generatedAt : null,
-    getMeta: () => state.data ? { origin: state.data.origin, lastRecordAt: state.data.lastRecordAt, generatedAt: state.data.generatedAt, fallbackReason: state.data.fallbackReason, changeLog: state.data.changeLog } : null,
+    getMeta: () => state.data ? { origin: state.data.origin, lastRecordAt: state.data.lastRecordAt, generatedAt: state.data.generatedAt, fallbackReason: state.data.fallbackReason, changeLog: state.data.changeLog, files: state.data.files } : null,
     isLoading: () => !state.ready,
     getRange: () => ({ start: $("dischargeStart").value || null, end: $("dischargeEnd").value || null }),
     /* Abre um intervalo vindo da URL; sem intervalo, volta ao padrão (7 dias até a última descarga). */

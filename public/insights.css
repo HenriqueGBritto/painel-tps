@@ -41,6 +41,11 @@ button.data-seal:focus-visible{outline:2px solid var(--trl-vermelho);outline-off
 .changes-base:first-child{border-top:0;margin-top:0}
 .changes-base h3{margin:0;font-family:var(--trl-font-titulo);font-size:.9rem}
 .changes-base h3 small{margin-left:6px;font-family:var(--trl-font-corpo);font-size:.72rem;font-weight:600;color:var(--trl-vermelho);letter-spacing:.04em;text-transform:uppercase}
+.changes-files{margin:4px 0 0;padding:0;list-style:none;font-size:.78rem}
+.changes-files li{margin:1px 0;overflow-wrap:anywhere}
+.changes-files li::before{content:"Arquivo: ";color:var(--trl-cinza-600)}
+.changes-files a{color:var(--trl-texto);font-weight:600;text-decoration:underline;text-decoration-color:var(--trl-cinza-300);text-underline-offset:2px}
+.changes-files a:hover,.changes-files a:focus-visible{color:var(--trl-vermelho);text-decoration-color:currentColor}
 .changes-read{margin:2px 0 8px;color:var(--trl-cinza-600);font-size:.76rem}
 .changes-note{margin:6px 0;color:var(--trl-cinza-800)}
 .changes-entry{margin-top:8px;border:1px solid var(--trl-cinza-100);border-radius:var(--trl-radius)}

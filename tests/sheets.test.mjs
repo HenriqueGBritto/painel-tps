@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { XLSX } from "../netlify/lib/parsers.mjs";
-import { sheetId, sourceId, lineupId, downloadWorkbook, parseSheet, loadSheet, clearSheetCache } from "../netlify/lib/sheets.mjs";
+import { sheetId, sourceId, lineupId, sourceFiles, downloadWorkbook, parseSheet, loadSheet, clearSheetCache } from "../netlify/lib/sheets.mjs";
 import handler from "../netlify/functions/api.mjs";
 
 const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
@@ -143,4 +143,13 @@ test("sem acesso à planilha, a API devolve a última base salva com aviso", asy
   assert.ok(body.records.length > 0);
   assert.equal((await handler(new Request("https://painel.test/api/import", { method: "POST" }))).status, 404, "importação manual removida");
   Object.assign(process.env, saved);
+});
+
+test("cada base informa o nome e o link dos arquivos lidos", () => {
+  assert.deepEqual(sourceFiles("discharge", {}).map(file => file.name), ["Base - Indicadores Operacionais TPS.xlsx"]);
+  const operations = sourceFiles("operations", {});
+  assert.deepEqual(operations.map(file => file.name), ["dados_navios_dinamico_triunfo.xlsm", "Planilha de produção \"outras\" (aba LINEUP)"]);
+  assert.match(operations[1].url, /^https:\/\/docs\.google\.com\/spreadsheets\/d\/1KDStq/);
+  const custom = sourceFiles("discharge", { TPS_SHEET_DISCHARGE: "https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view" });
+  assert.deepEqual(custom, [{ name: "Arquivo definido em TPS_SHEET_DISCHARGE", url: "https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view" }]);
 });
