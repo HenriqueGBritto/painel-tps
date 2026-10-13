@@ -27,7 +27,10 @@
     if (section.id === 'geral') {
       return `${document.getElementById('yearSummary').textContent} · ${document.getElementById('monthSummary').textContent}`;
     }
-    if (section.id === 'descarga') return `${document.getElementById('dischargeStart').value} a ${document.getElementById('dischargeEnd').value}`;
+    if (section.id === 'descarga') {
+      const br = value => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : '—';
+      return `${br(document.getElementById('dischargeStart').value)} a ${br(document.getElementById('dischargeEnd').value)}`;
+    }
     if (section.id === 'pesagem') return `${document.getElementById('weighingYear').selectedOptions[0]?.textContent || ''} · ${document.getElementById('weighingMonth').selectedOptions[0]?.textContent || ''}`;
     if (section.id === 'lineup') return document.getElementById('lineupSummary').textContent;
     if (section.id === 'producao') {
@@ -136,7 +139,22 @@
     return summary;
   }
 
-  function createStage(section) {
+  /* Logo horizontal colorido convertido em PNG: o html2canvas não desenha SVG de forma confiável. */
+  let logoPng;
+  async function logoDataUrl() {
+    if (logoPng) return logoPng;
+    const image = new Image();
+    image.src = 'logo-triunfo-horizontal-cor.svg';
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth * 3; canvas.height = image.naturalHeight * 3;
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    logoPng = canvas.toDataURL('image/png');
+    return logoPng;
+  }
+  const generatedAt = () => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+  async function createStage(section) {
     const stage = document.createElement('div');
     stage.className = 'export-stage';
     if (section.id === 'producao') stage.classList.add('export-stage-production');
@@ -144,19 +162,14 @@
     header.className = 'export-stage-header';
     const title = section.id === 'geral' ? document.querySelector('#generalTitle h2')?.textContent : names[section.id];
     const context = selectedContext(section);
-    header.innerHTML = section.id === 'producao' ? `<div class="export-production-brand"><strong>TRIUNFO</strong><span>LOGÍSTICA</span></div><div class="export-production-header-date"><small>RELATÓRIO DE OPERAÇÃO</small><span></span></div>` : `<div><small>TRIUNFO LOGÍSTICA · PAINEL DE OPERAÇÕES</small><h1></h1><p></p></div><span></span>`;
-    if (section.id === 'producao') {
-      header.querySelector('.export-production-header-date span').textContent = `Gerado em ${new Date().toLocaleString('pt-BR')}`;
-      stage.appendChild(header);
-      stage.appendChild(productionSummary(section));
-      document.body.appendChild(stage);
-      return stage;
-    }
-    header.querySelector('h1').textContent = title || names[section.id];
-    header.querySelector('p').textContent = context;
-    header.querySelector('span').textContent = `Gerado em ${new Date().toLocaleString('pt-BR')}`;
+    const logo = await logoDataUrl();
+    header.innerHTML = `<img class="export-logo" alt="Triunfo Logística"><div class="export-title"><small>PAINEL DE OPERAÇÕES TPS</small><h1></h1><p></p></div><div class="export-meta"><span class="export-generated"></span><span class="export-data"></span></div>`;
+    header.querySelector('.export-logo').src = logo;
+    header.querySelector('h1').textContent = section.id === 'producao' ? 'Relatório de operação · Produção' : (title || names[section.id]);
+    header.querySelector('p').textContent = context ? `Filtros: ${context}` : '';
+    header.querySelector('.export-generated').textContent = `Gerado em ${generatedAt()}`;
+    header.querySelector('.export-data').textContent = window.getExportDataNote?.(section.id) || '';
     stage.appendChild(header);
-
     if (section.id === 'producao') {
       stage.appendChild(productionSummary(section));
       document.body.appendChild(stage);
@@ -181,27 +194,51 @@
     return stage;
   }
 
+  /* Página A4 paisagem (281 × 194 mm úteis): o conteúdo ocupa a parte de cima e
+     o rodapé da marca fica numa faixa própria em todas as páginas. */
+  const pageHeight = width => Math.floor(width * 194 / 281);
+  const footerHeight = width => Math.round(pageHeight(width) * 0.045);
   function slices(canvas) {
-    const height = Math.floor(canvas.width * 194 / 281);
+    const height = pageHeight(canvas.width) - footerHeight(canvas.width);
     return Array.from({ length: Math.ceil(canvas.height / height) }, (_, index) => ({ y: index * height, height }));
   }
+  function drawFooter(ctx, width, top, height, index, total) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, top, width, height);
+    ctx.fillStyle = '#DA202C';
+    ctx.fillRect(Math.round(width * 0.03), top + Math.round(height * 0.18), width - Math.round(width * 0.06), Math.max(2, Math.round(height * 0.05)));
+    const size = Math.round(height * 0.34);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#2F2F2F';
+    ctx.font = `600 ${size}px Poppins, Helvetica, Arial, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('Triunfo Logística · Painel de Operações TPS', Math.round(width * 0.03), top + height * 0.62);
+    if (total > 1) {
+      ctx.fillStyle = '#636363';
+      ctx.font = `400 ${size}px Poppins, Helvetica, Arial, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(`Página ${index + 1} de ${total}`, width - Math.round(width * 0.03), top + height * 0.62);
+    }
+  }
 
-  function drawPage(source, slice) {
+  function drawPage(source, slice, index = 0, total = 1) {
     const page = document.createElement('canvas');
     page.width = source.width;
-    page.height = slice.height;
+    page.height = slice.height + footerHeight(source.width);
     const ctx = page.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, page.width, page.height);
-    const available = Math.min(slice.height, source.height - slice.y);
-    ctx.drawImage(source, 0, slice.y, source.width, available, 0, 0, source.width, available);
+    const available = Math.max(0, Math.min(slice.height, source.height - slice.y));
+    if (available) ctx.drawImage(source, 0, slice.y, source.width, available, 0, 0, source.width, available);
+    drawFooter(ctx, page.width, slice.height, page.height - slice.height, index, total);
     return page;
   }
 
+  /* Produção: tudo numa página só (a imagem é reduzida se precisar), com o rodapé abaixo. */
   function singleLandscapePage(source) {
     const page = document.createElement('canvas');
     page.width = source.width;
-    page.height = Math.floor(source.width * 194 / 281);
+    page.height = pageHeight(source.width) - footerHeight(source.width);
     const ctx = page.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, page.width, page.height);
@@ -258,30 +295,26 @@
     const pages = slices(canvas);
     const columns = Math.min(pages.length, Math.ceil(Math.sqrt(pages.length * 1.5)));
     const rows = Math.ceil(pages.length / columns);
+    const pageH = pages[0].height + footerHeight(canvas.width);
     const image = document.createElement('canvas');
     image.width = columns * canvas.width;
-    image.height = rows * pages[0].height;
+    image.height = rows * pageH;
     const ctx = image.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, image.width, image.height);
-    pages.forEach((page, index) => {
-      const available = Math.min(page.height, canvas.height - page.y);
-      ctx.drawImage(canvas, 0, page.y, canvas.width, available,
-        (index % columns) * canvas.width, Math.floor(index / columns) * page.height,
-        canvas.width, available);
+    pages.forEach((slice, index) => {
+      ctx.drawImage(drawPage(canvas, slice, index, pages.length), (index % columns) * canvas.width, Math.floor(index / columns) * pageH);
     });
     download(await toBlob(image), filename);
   }
 
   function savePdf(canvas, filename) {
     const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
-    slices(canvas).forEach((slice, index) => {
+    const pages = slices(canvas);
+    pages.forEach((slice, index) => {
       if (index) pdf.addPage('a4', 'landscape');
-      const page = drawPage(canvas, slice);
+      const page = drawPage(canvas, slice, index, pages.length);
       pdf.addImage(page.toDataURL('image/jpeg', 0.88), 'JPEG', 8, 8, 281, 194, undefined, 'FAST');
-      pdf.setFontSize(8);
-      pdf.setTextColor(120);
-      pdf.text(`${index + 1} / ${Math.ceil(canvas.height / slice.height)}`, 289, 206, { align: 'right' });
     });
     pdf.save(filename);
   }
@@ -300,7 +333,7 @@
       if (format === 'pdf') await loadLibrary('vendor/jspdf.umd.min.js', 'jspdf');
       await document.fonts.ready;
       window.scrollTo(0, 0);
-      stage = createStage(section);
+      stage = await createStage(section);
       if (section.id === 'producao') await rasterizeExportCranes(stage);
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const captured = await window.html2canvas(stage, {
