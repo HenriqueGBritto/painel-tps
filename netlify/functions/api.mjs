@@ -4,13 +4,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { firestore } from "../lib/firebase.mjs";
 import { loadDataset } from "../lib/dataset.mjs";
-import { downloadWorkbook, loadSheet } from "../lib/sheets.mjs";
+import { downloadWorkbook } from "../lib/sheets.mjs";
+import { loadForServing, requestRefresh } from "../lib/snapshots.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const json = (value, status = 200, extra = {}) => new Response(JSON.stringify(value), { status, headers: { ...headers, ...extra, "Content-Type": "application/json; charset=utf-8" } });
-// O CDN do Netlify guarda a resposta por 2 min e entrega a anterior enquanto busca a nova no Google.
-const sheetCache = { "Netlify-CDN-Cache-Control": "public, durable, s-maxage=120, stale-while-revalidate=600" };
-const fallbackCache = { "Netlify-CDN-Cache-Control": "public, s-maxage=30" };
+// As bases vêm da cópia guardada no Netlify Blobs (leitura rápida); sem cache no CDN,
+// para o botão "Atualizar dados" aparecer para todos logo em seguida.
 const productionWorkbooks = {
   outras: "1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU",
   potassio: "12itSxDBxOiB9c-IsgN9lA0Xcyls0DgsLQ6cFeGugJ30"
@@ -28,7 +28,7 @@ function operationMonth(value) {
   return { year: Number(parts.find(part => part.type === "year")?.value), month: Number(parts.find(part => part.type === "month")?.value) };
 }
 
-function normalizeOperations(data) {
+export function normalizeOperations(data) {
   const activeIds = new Set((data.activeRecords || []).map(row => row.id));
   const stillBerthed = (data.records || []).filter(row => !row.berthEnd && row.berthStart);
   data.activeRecords ||= [];
@@ -73,6 +73,26 @@ async function productionWorkbook(url) {
   }
 }
 
+/* Data do último registro de cada base: mostra se a planilha está sendo alimentada.
+   Navios: atracação ou início de operação mais recente (datas futuras, provável digitação, são ignoradas).
+   Descarga: último dia com descarga FINALIZADO. */
+export function operationsLastRecord(data, now = Date.now()) {
+  let latest = null;
+  for (const row of [...(data.records || []), ...(data.activeRecords || [])]) {
+    for (const value of [row.berthStart, row.operationStart]) {
+      const time = Date.parse(value || "");
+      if (Number.isFinite(time) && time <= now + 86400000 && (latest === null || time > latest)) latest = time;
+    }
+  }
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
+export function dischargeLastRecord(data) {
+  return (data.dischargeDays || []).reduce((max, row) => typeof row.date === "string" && row.date > (max || "") ? row.date : max, null);
+}
+
+const withLastRecord = (kind, data) => ({ ...data, lastRecordAt: kind === "operations" ? operationsLastRecord(data) : dischargeLastRecord(data) });
+
 /* Se o Google estiver fora do ar ou o link mudar de permissão, o painel continua
    abrindo com a última base salva (Firestore ou cópia inicial) e mostra um aviso. */
 async function fallbackDataset(kind, error) {
@@ -88,15 +108,29 @@ export default async function handler(request) {
   if (request.method === "GET" && path === "/api/production-workbook") return productionWorkbook(url);
   if (request.method === "GET" && (path === "/api/data" || path === "/api/discharge")) {
     const kind = path === "/api/data" ? "operations" : "discharge";
-    const finish = data => kind === "operations" ? normalizeOperations(data) : data;
+    const finish = data => withLastRecord(kind, kind === "operations" ? normalizeOperations(data) : data);
     try {
-      return json(finish(structuredClone(await loadSheet(kind))), 200, sheetCache);
+      return json(finish(await loadForServing(kind)));
     } catch (error) {
       console.error(`Falha ao ler a planilha (${kind}) no Google:`, error);
-      return json(finish(await fallbackDataset(kind, error)), 200, fallbackCache);
+      return json(finish(await fallbackDataset(kind, error)));
+    }
+  }
+  if (request.method === "POST" && path === "/api/refresh") {
+    // O site é público: aceita só pedidos vindos da própria página.
+    const origin = request.headers.get("origin");
+    const allowedHosts = [url.host, request.headers.get("host"), request.headers.get("x-forwarded-host")].filter(Boolean);
+    if (origin && !allowedHosts.includes(new URL(origin).host)) return json({ error: "Origem não permitida." }, 403);
+    try {
+      const result = await requestRefresh();
+      const status = result.status === "refreshed" || result.status === "recent" ? 200 : result.status === "running" ? 409 : 502;
+      return json(result, status);
+    } catch (error) {
+      console.error("Falha ao atualizar as bases:", error);
+      return json({ status: "error", error: "Não foi possível atualizar as bases agora." }, 502);
     }
   }
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook"] };
+export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh"] };
