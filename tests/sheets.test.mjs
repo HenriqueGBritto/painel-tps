@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { XLSX } from "../netlify/lib/parsers.mjs";
-import { sheetId, sourceId, downloadWorkbook, parseSheet, loadSheet, clearSheetCache } from "../netlify/lib/sheets.mjs";
+import { sheetId, sourceId, lineupId, downloadWorkbook, parseSheet, loadSheet, clearSheetCache } from "../netlify/lib/sheets.mjs";
 import handler from "../netlify/functions/api.mjs";
 
 const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
@@ -64,6 +64,35 @@ test("servidor lê a planilha de navios exatamente como a importação manual", 
   assert.equal(server.records.length, 3);
   assert.equal(server.activeRecords.length, 1);
   assert.equal(server.records.find(r => r.vessel === "NAVIO 2026").operationStart, "2026-10-01T02:00:00.000Z", "23h de Brasília");
+});
+
+test("LINEUP vem da planilha de produção, com a coluna LOA e o mesmo resultado", async () => {
+  const d = (y, m, day, h = 0) => new Date(y, m - 1, day, h);
+  const navios = operationsWorkbook();
+  const reference = parseSheet("operations", toBytes(navios));
+  delete navios.Sheets.LINEUP; navios.SheetNames = navios.SheetNames.filter(name => name !== "LINEUP");
+  const producao = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(producao, XLSX.utils.aoa_to_sheet([["X"]]), "MV QUALQUER");
+  XLSX.utils.book_append_sheet(producao, XLSX.utils.aoa_to_sheet([
+    ["NAVIO", "LOA (m)", "GEPORT", "OPERAÇÃO", "TIPO DE CARGA", "PESO PREVISTO ATRACADO(t)", "PESO PREVISTO AO LARGO(t)", "CLIENTE", "LOCAL ATRACAÇÃO / BERÇO", "AGENTE", "PROGRESSO", "ATRACAÇÃO PREVISTA", "DESATRACAÇÃO PREVISTA"],
+    ["FUTURO", 180, 54417, "DESCARGA", "GUSA", 30000, 5000, "CLIENTE", "B1", "AG", 0, d(2026, 11, 1, 6), d(2026, 11, 4, 18)]
+  ], { cellDates: true }), "LINEUP");
+  const data = parseSheet("operations", toBytes(navios), new Date(), { lineupBytes: toBytes(producao) });
+  assert.deepEqual(data.records, reference.records);
+  assert.deepEqual(data.lineupRecords, [{ id: "lineup-1", vessel: "FUTURO", geport: "54417", operation: "DESCARGA", cargo: "GUSA",
+    plannedBerthTons: 30000, plannedOffshoreTons: 5000, client: "CLIENTE", berth: "B1", agent: "AG", progress: 0,
+    plannedBerthStart: reference.lineupRecords[0].plannedBerthStart, plannedBerthEnd: reference.lineupRecords[0].plannedBerthEnd }]);
+  assert.throws(() => parseSheet("operations", toBytes(navios), new Date(), { lineupBytes: toBytes(navios) }), /LINEUP ausente na planilha de produção/);
+  assert.throws(() => parseSheet("operations", toBytes(navios)), /Abas obrigatórias ausentes: LINEUP/);
+
+  clearSheetCache();
+  const urls = [];
+  const fetcher = async url => { urls.push(url); return fakeResponse(toBytes(url.includes(lineupId()) ? producao : navios)); };
+  const loaded = await loadSheet("operations", { fetcher, force: true });
+  assert.equal(loaded.lineupRecords[0].vessel, "FUTURO");
+  assert.ok(urls.some(url => url.includes(`spreadsheets/d/${lineupId()}/export`)), "planilha nativa: exportação primeiro");
+  assert.equal(lineupId({ TPS_SHEET_LINEUP: `https://docs.google.com/spreadsheets/d/${ID}/edit` }), ID);
+  clearSheetCache();
 });
 
 test("servidor lê a base de descarga exatamente como a importação manual", () => {
