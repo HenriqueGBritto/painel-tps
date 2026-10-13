@@ -655,8 +655,40 @@ function setupRefresh(){
 }
 
 function showDataSource(payload){
-  state.dataMeta={origin:payload.origin,lastRecordAt:payload.lastRecordAt,generatedAt:payload.generatedAt,fallbackReason:payload.fallbackReason};
+  state.dataMeta={origin:payload.origin,lastRecordAt:payload.lastRecordAt,generatedAt:payload.generatedAt,fallbackReason:payload.fallbackReason,changeLog:payload.changeLog};
   renderDataSeal();
+}
+
+/* Painel aberto pelo selo: o que mudou em cada planilha nas últimas leituras.
+   O histórico vem pronto do servidor (netlify/lib/changes.mjs), um registro por leitura com alteração. */
+const brDateTime=value=>{const date=new Date(value);return Number.isNaN(date.getTime())?"":new Intl.DateTimeFormat("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"}).format(date).replace(","," às")};
+function changesBaseHtml(title,meta,current){
+  const tag=current?"<small>tela atual</small>":"";
+  if(!meta)return `<section class="changes-base"><h3>${title}${tag}</h3><p class="changes-read">Lendo a planilha…</p></section>`;
+  if(meta.origin==="fallback")return `<section class="changes-base"><h3>${title}${tag}</h3><p class="changes-note">A planilha não pôde ser lida agora (${escapeHtml(meta.fallbackReason||"motivo não informado")}). O painel mostra a última base salva.</p></section>`;
+  const log=Array.isArray(meta.changeLog)?meta.changeLog:[];
+  const read=`<p class="changes-read">Última leitura: ${brDateTime(meta.generatedAt)}</p>`;
+  if(!log.length)return `<section class="changes-base"><h3>${title}${tag}</h3>${read}<p class="changes-note">Ainda não há alterações registradas. O registro compara cada leitura com a anterior e começa a aparecer aqui a partir da próxima leitura que encontrar diferença.</p></section>`;
+  const latestIsNow=log[0].at===meta.generatedAt;
+  const note=latestIsNow?"":`<p class="changes-note">A última leitura não encontrou diferença em relação à anterior. Abaixo, as alterações mais recentes encontradas.</p>`;
+  const entries=log.map((entry,index)=>`<details class="changes-entry"${index===0?" open":""}><summary>Leitura de ${brDateTime(entry.at)}<span>${entry.total} ${entry.total===1?"alteração":"alterações"}</span></summary>${entry.sections.map(section=>`<div class="changes-section"><h4>${escapeHtml(section.title)} (${section.count})</h4><ul>${section.items.map(item=>`<li>${escapeHtml(item)}</li>`).join("")}</ul>${section.count>section.items.length?`<p class="changes-more">e mais ${section.count-section.items.length}.</p>`:""}</div>`).join("")}</details>`).join("");
+  return `<section class="changes-base"><h3>${title}${tag}</h3>${read}${note}${entries}</section>`;
+}
+function renderChanges(){
+  const panel=$("changesPanel");if(!panel||panel.hidden)return;
+  const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
+  const bases=[["Planilha de navios",state.dataMeta,!dischargeView],["Planilha de indicadores",window.dischargePanel?.getMeta(),dischargeView]];
+  if(dischargeView)bases.reverse();
+  $("changesBody").innerHTML=bases.map(([title,meta,current])=>changesBaseHtml(title,meta,current)).join("");
+}
+function setupChanges(){
+  const seal=$("updatedAt"),panel=$("changesPanel"),wrap=$("dataSealWrap");
+  // A planilha de indicadores só carrega ao abrir Descarga/Pesagem; o painel pede a leitura para mostrar as duas.
+  const toggle=open=>{panel.hidden=!open;seal.setAttribute("aria-expanded",String(open));if(open){renderChanges();window.dischargePanel?.load()}};
+  seal.addEventListener("click",()=>toggle(panel.hidden));
+  $("changesClose").addEventListener("click",()=>{toggle(false);seal.focus()});
+  document.addEventListener("click",event=>{if(!panel.hidden&&!wrap.contains(event.target))toggle(false)});
+  document.addEventListener("keydown",event=>{if(event.key==="Escape"&&!panel.hidden){toggle(false);seal.focus()}});
 }
 
 /* Selo do cabeçalho: mostra até quando vão os dados da base da tela aberta.
@@ -664,8 +696,10 @@ function showDataSource(payload){
 function renderDataSeal(){
   const seal=$("updatedAt");if(!seal)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
-  if(state.menu==="producao"){seal.hidden=true;return}
-  seal.hidden=false;
+  const wrap=$("dataSealWrap");
+  if(state.menu==="producao"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
+  wrap.hidden=false;
+  renderChanges();
   const meta=dischargeView?window.dischargePanel?.getMeta():state.dataMeta;
   const base=dischargeView?"planilha de indicadores":"planilha de navios";
   if(!meta){seal.dataset.level="loading";seal.textContent=dischargeView?"Lendo a planilha de indicadores…":"Lendo a planilha de navios…";seal.title="";return}
@@ -676,7 +710,7 @@ function renderDataSeal(){
     ?`Não foi possível ler a ${base} no Google agora (${meta.fallbackReason||"motivo não informado"}). Recarregue em alguns minutos.`
     :status.level==="warning"
       ?`O último registro da ${base} tem ${status.ageDays} dias. Confira se a planilha está sendo atualizada.`
-      :`Último registro da ${base} e horário em que o painel leu a planilha.`;
+      :`Último registro da ${base} e horário em que o painel leu a planilha. Clique para ver o que mudou.`;
 }
 window.renderDataSeal=renderDataSeal;
 /* Texto "Dados até…" da base usada por uma tela, para o cabeçalho da exportação. */
@@ -686,6 +720,6 @@ window.getExportDataNote=sectionId=>{
   return meta?TpsMetrics.freshness(meta,new Date()).text:"";
 };
 
-async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
+async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupChanges();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
 document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)render()});
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});

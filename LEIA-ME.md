@@ -16,6 +16,7 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 - O site guarda a última leitura das duas planilhas no Netlify Blobs e entrega essa cópia a quem abre o painel, sem esperar o download do Drive.
 - A cópia é renovada automaticamente a cada 6 horas pela função agendada `refresh-scheduled` (00h, 06h, 12h e 18h UTC, ou seja, 21h, 03h, 09h e 15h em Brasília). Funções agendadas só rodam no site publicado; numa prévia, use **Run now** em Functions no Netlify.
 - O botão **Atualizar dados**, no cabeçalho, relê as planilhas na hora (cerca de 20 s) e recarrega o painel. Se a última leitura tiver menos de 5 minutos, ele só avisa e não lê de novo.
+- Clicar no selo **"Dados até…"** abre o painel **O que mudou nas planilhas**. Cada leitura nova é comparada com a anterior: navios incluídos, encerrados ou corrigidos, volume parcial, lineup, ferro gusa, dias de descarga, plano mensal, ocorrências e pesagens. O histórico guarda as 15 últimas leituras em que houve alteração e começa a ser montado a partir da primeira leitura depois da publicação.
 - Se a cópia passar de 12 horas (por exemplo, se a rotina agendada falhar), o primeiro acesso relê a planilha sozinho.
 - Os nomes das abas e a posição das colunas precisam continuar iguais. Se uma aba obrigatória sumir, o painel mostra a última base salva com um aviso.
 - Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP` e/ou `TPS_SHEET_DISCHARGE` com o link do novo arquivo.

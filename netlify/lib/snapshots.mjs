@@ -5,6 +5,7 @@
    Fora do Netlify (testes e servidor local) usa um armazenamento em memória. */
 import { getStore } from "@netlify/blobs";
 import { loadSheet } from "./sheets.mjs";
+import { withChangeLog } from "./changes.mjs";
 
 /* Sempre uma leitura nova do Drive (sem o cache curto em memória de sheets.mjs). */
 const freshSheet = kind => loadSheet(kind, { force: true });
@@ -44,12 +45,18 @@ export async function readSnapshot(kind) {
   return store().get(`snapshot-${kind}`);
 }
 
+/** Guarda a leitura nova com o histórico do que mudou desde a cópia anterior (changes.mjs). */
+async function saveSnapshot(kind, data, previous) {
+  const snapshot = withChangeLog(kind, previous, data);
+  await store().setJSON(`snapshot-${kind}`, snapshot);
+  return snapshot;
+}
+
 /** Lê as planilhas pedidas no Google e guarda o resultado. Uma falha não apaga a cópia anterior. */
 export async function refreshKinds(kinds = KINDS, { loader = freshSheet, now = Date.now } = {}) {
   const results = await Promise.allSettled(kinds.map(async kind => {
-    const data = await loader(kind);
-    await store().setJSON(`snapshot-${kind}`, data);
-    return data;
+    const [data, previous] = await Promise.all([loader(kind), readSnapshot(kind)]);
+    return saveSnapshot(kind, data, previous);
   }));
   return Object.fromEntries(kinds.map((kind, index) => [kind, results[index].status === "fulfilled"
     ? { ok: true, generatedAt: results[index].value.generatedAt }
@@ -88,9 +95,7 @@ export async function loadForServing(kind, { loader = freshSheet, now = Date.now
   const snapshot = await readSnapshot(kind);
   if (snapshot && ageOf(snapshot, now()) < MAX_AGE_MS) return snapshot;
   try {
-    const data = await loader(kind);
-    await store().setJSON(`snapshot-${kind}`, data);
-    return data;
+    return await saveSnapshot(kind, await loader(kind), snapshot);
   } catch (error) {
     if (snapshot) return snapshot;
     throw error;

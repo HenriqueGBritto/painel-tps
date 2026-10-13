@@ -23,12 +23,43 @@
 .data-seal[data-level="critical"]::before{background:var(--trl-status-critico)}
 .data-seal[hidden]{display:none}
 @media(max-width:1050px){.header-actions .updated.data-seal{display:inline-flex}.header-actions .updated.data-seal[hidden]{display:none}}
+/* Selo clicável: abre o painel "O que mudou nas planilhas" */
+.data-seal-wrap{position:relative;min-width:0}
+.data-seal-wrap[hidden]{display:none}
+button.data-seal{font-family:inherit;cursor:pointer;text-align:left}
+button.data-seal::after{content:"";flex:none;width:6px;height:6px;margin:-3px 1px 0 2px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);opacity:.7;transition:transform .15s}
+button.data-seal[aria-expanded="true"]::after{transform:rotate(225deg);margin-top:3px}
+button.data-seal:hover,button.data-seal[aria-expanded="true"]{border-color:var(--trl-cinza-400)}
+button.data-seal:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:2px}
+.changes-panel{position:absolute;z-index:40;top:calc(100% + 8px);right:0;width:min(460px,calc(100vw - 32px));max-height:min(70vh,620px);overflow:auto;padding:16px 18px 18px;border:1px solid var(--trl-cinza-200);border-radius:var(--trl-radius-lg);background:var(--trl-branco);box-shadow:var(--trl-shadow),0 12px 32px rgba(0,0,0,.14);color:var(--trl-texto);font-size:.82rem;line-height:1.45}
+.changes-panel[hidden]{display:none}
+.changes-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
+.changes-head h2{margin:0;font-family:var(--trl-font-titulo);font-size:1rem}
+.changes-close{flex:none;width:28px;height:28px;margin:-4px -6px 0 0;border:0;border-radius:5px;background:none;color:var(--trl-cinza-600);font-size:1.3rem;line-height:1;cursor:pointer}
+.changes-close:hover,.changes-close:focus-visible{background:var(--trl-cinza-100);color:var(--trl-texto);outline:none}
+.changes-base{padding-top:12px;margin-top:12px;border-top:1px solid var(--trl-cinza-100)}
+.changes-base:first-child{border-top:0;margin-top:0}
+.changes-base h3{margin:0;font-family:var(--trl-font-titulo);font-size:.9rem}
+.changes-base h3 small{margin-left:6px;font-family:var(--trl-font-corpo);font-size:.72rem;font-weight:600;color:var(--trl-vermelho);letter-spacing:.04em;text-transform:uppercase}
+.changes-read{margin:2px 0 8px;color:var(--trl-cinza-600);font-size:.76rem}
+.changes-note{margin:6px 0;color:var(--trl-cinza-800)}
+.changes-entry{margin-top:8px;border:1px solid var(--trl-cinza-100);border-radius:var(--trl-radius)}
+.changes-entry>summary{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;cursor:pointer;font-weight:600;list-style:none}
+.changes-entry>summary::-webkit-details-marker{display:none}
+.changes-entry>summary span{color:var(--trl-cinza-600);font-weight:500;white-space:nowrap}
+.changes-entry>summary:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:-2px}
+.changes-entry[open]>summary{border-bottom:1px solid var(--trl-cinza-100)}
+.changes-section{padding:8px 10px 2px}
+.changes-section h4{margin:0 0 4px;font-size:.76rem;font-weight:700;color:var(--trl-cinza-800);text-transform:uppercase;letter-spacing:.04em}
+.changes-section ul{margin:0 0 6px;padding-left:18px}
+.changes-section li{margin:2px 0;overflow-wrap:anywhere}
+.changes-more{margin:0 0 6px;color:var(--trl-cinza-600);font-size:.76rem}
 /* Variação dos KPIs contra o período anterior: positivo em grafite, negativo em vermelho */
 .kpi-card .kpi-delta{display:block;margin-top:6px;font-size:.76rem;font-weight:700;color:var(--trl-cinza-600);font-variant-numeric:tabular-nums}
 .kpi-card .kpi-delta[data-direction="up"]{color:var(--trl-chart-positive)}
 .kpi-card .kpi-delta[data-direction="down"]{color:var(--trl-chart-negative)}
 .kpi-card .kpi-delta[hidden]{display:none}
-@media(max-width:720px){.topbar .header-actions{display:contents}.topbar .export-menu{grid-column:3;grid-row:1;justify-self:end}.topbar .data-seal{grid-column:1/-1;grid-row:2;justify-self:start}}
+@media(max-width:720px){.topbar .header-actions{display:contents}.topbar .export-menu{grid-column:3;grid-row:1;justify-self:end}.topbar .data-seal-wrap{grid-column:1/-1;grid-row:2;justify-self:start;position:static}.topbar .changes-panel{top:auto;left:16px;right:16px;width:auto;margin-top:8px}}
 /* Participação por carga: ranking de barras horizontais */
 .cargo-rank-total{margin:4px 0 14px;color:var(--trl-cinza-600);font-size:.84rem}
 .cargo-rank-total strong{font-family:var(--trl-font-titulo);font-size:1.05rem;color:var(--trl-texto);margin-right:4px}

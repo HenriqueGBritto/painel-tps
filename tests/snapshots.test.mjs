@@ -72,6 +72,14 @@ test("botão: leitura em andamento bloqueia uma segunda", async () => {
   assert.equal(saved.get("refresh-lock").at, new Date(0).toISOString(), "trava liberada no fim");
 });
 
+test("leitura nova guarda o que mudou desde a cópia anterior", async () => {
+  saved.set("snapshot-discharge", { generatedAt: "2026-10-13T06:00:00Z", dischargeDays: [{ date: "2026-10-12", tons: 100, wagons: 1 }] });
+  const loader = async kind => ({ generatedAt: "2026-10-13T12:00:00Z", dischargeDays: kind === "discharge" ? [{ date: "2026-10-12", tons: 100, wagons: 1 }, { date: "2026-10-13", tons: 50, wagons: 1 }] : [] });
+  await refreshKinds(["discharge"], { loader });
+  const [entry] = (await readSnapshot("discharge")).changeLog;
+  assert.deepEqual([entry.at, entry.since, entry.sections[0].title], ["2026-10-13T12:00:00Z", "2026-10-13T06:00:00Z", "Descarga por dia"]);
+});
+
 test("falha numa planilha não apaga a cópia anterior dela", async () => {
   saved.set("snapshot-discharge", { generatedAt: "2026-10-12T00:00:00Z", dischargeDays: [1] });
   const loader = async kind => { if (kind === "discharge") throw new Error("timeout"); return { generatedAt: "novo" }; };
