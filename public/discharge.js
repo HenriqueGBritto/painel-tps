@@ -78,6 +78,7 @@
     $("dischargeStatus").textContent = `Exibindo ${fullDate(start)} a ${fullDate(end)}${context} · ${days.length} ${days.length === 1 ? "dia" : "dias"} com descarga`;
     $("dischargeMethodNote").textContent = `Descarga reconhecida pela data da coluna “DATA DA DESCARGA” e status “FINALIZADO”. ${state.data.inProgress?.records || 0} registros “EM DESCARGA” sem data de conclusão não entram no volume realizado.`;
     renderDaily(days, start, end);
+    renderWeekSummary(start, end);
     renderPlan(start, end);
     renderOccurrences(events);
   }
@@ -202,6 +203,58 @@
     svg.innerHTML = `<polyline points="${coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}"></polyline>` +
       coords.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${showValues ? 4 : 3}"></circle>${showValues && point.wagons ? `<text x="${point.x.toFixed(1)}" y="${(point.y - 9).toFixed(1)}">${integer.format(point.wagons)}</text>` : ""}`).join("");
   }
+  /* Desempenho da semana: só no filtro "Últimos 7 dias". Compara cada dia com a meta diária
+     (plano do mês ÷ dias do mês) e, para os dias abaixo dela, aponta as ocorrências com mais tempo. */
+  const WEEKDAYS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const weekday = iso => WEEKDAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()];
+  const percent = value => `${integer.format(value * 100)}%`;
+  const roundTons = value => `${integer.format(value)} t`;
+  /** Nome da ocorrência como na planilha, só sem os espaços sobrando dentro dos parênteses. */
+  const tidyReason = reason => String(reason).replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+  function mainOccurrences(date, limit = 2) {
+    const groups = new Map();
+    state.data.occurrences.filter(item => item.date === date && item.minutes > 0).forEach(item => {
+      groups.set(item.reason, (groups.get(item.reason) || 0) + item.minutes);
+    });
+    return [...groups].sort((a, b) => b[1] - a[1]).slice(0, limit);
+  }
+  function renderWeekSummary(start, end) {
+    const box = $("dischargeWeekSummary");
+    if (!isLastDischargeWindow(start, end)) { box.hidden = true; box.innerHTML = ""; return; }
+    const targets = TpsMetrics.dailyTargets(state.data.plans || [], start, end).days;
+    const byDate = new Map(state.data.dischargeDays.map(item => [item.date, item]));
+    const days = targets.map(({ date, rate }) => ({ date, rate, tons: byDate.get(date)?.tons || 0, wagons: byDate.get(date)?.wagons || 0 }));
+    const total = days.reduce((sum, day) => sum + day.tons, 0);
+    const withTarget = days.filter(day => day.rate);
+    const head = `<p class="eyebrow">DESEMPENHO DA SEMANA</p><h4 id="dischargeWeekTitle">${fullDate(start).slice(0, 5)} a ${fullDate(end)}</h4>`;
+    if (!withTarget.length) {
+      box.innerHTML = `${head}<p>Foram descarregadas <strong>${tons(total)}</strong> na semana. Não há plano do mês na planilha para comparar com a meta diária.</p>`;
+      box.hidden = false;
+      return;
+    }
+    const expected = withTarget.reduce((sum, day) => sum + day.rate, 0);
+    const reachedTotal = withTarget.reduce((sum, day) => sum + day.tons, 0);
+    const average = total / days.length;
+    const averageTarget = expected / withTarget.length;
+    const below = withTarget.filter(day => day.tons < day.rate);
+    const hit = withTarget.length - below.length;
+    const gap = expected - reachedTotal;
+    const verdict = gap > 0
+      ? `A semana fechou <strong>${tons(gap)} abaixo</strong> do esperado para ${withTarget.length} dias (${roundTons(expected)}), com ${percent(reachedTotal / expected)} da meta.`
+      : `A semana fechou <strong>${tons(-gap)} acima</strong> do esperado para ${withTarget.length} dias (${roundTons(expected)}), com ${percent(reachedTotal / expected)} da meta.`;
+    const summary = `<p>Foram descarregadas <strong>${tons(total)}</strong> em 7 dias, média de <strong>${tons(average)}</strong> por dia, contra a meta diária de ${roundTons(averageTarget)}. ${verdict}</p>
+      <p>${hit === withTarget.length ? "<strong>Todos os dias atingiram a meta.</strong>" : `<strong>${hit} de ${withTarget.length} dias</strong> atingiram a meta; ${below.length} ${below.length === 1 ? "ficou abaixo" : "ficaram abaixo"}:`}</p>`;
+    const items = below.map(day => {
+      const missing = day.rate - day.tons;
+      const reasons = mainOccurrences(day.date);
+      const why = day.tons === 0 ? "sem descarga concluída" : `${tons(day.tons)} (${percent(day.tons / day.rate)} da meta), faltaram ${tons(missing)}`;
+      const causes = reasons.length ? ` Principais ocorrências: ${reasons.map(([reason, minutes]) => `${escape(tidyReason(reason))} (${duration(minutes)})`).join(", ")}.` : " Sem ocorrências com tempo registrado nesse dia.";
+      return `<li><strong>${fullDate(day.date).slice(0, 5)} (${weekday(day.date)})</strong>: ${why}.${causes}</li>`;
+    }).join("");
+    box.innerHTML = `${head}${summary}${items ? `<ul>${items}</ul><p class="base-week-hint">Clique no dia no gráfico para ver todas as ocorrências.</p>` : ""}`;
+    box.hidden = false;
+  }
+
   /* Ocorrências do dia (ou do mês, na visão agrupada) da coluna clicada no gráfico. */
   function renderDayOccurrences() {
     const box = $("dischargeDayOccurrences");
