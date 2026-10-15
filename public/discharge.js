@@ -272,9 +272,12 @@
     const max = Math.max(1, ...rows.map(item => item.minutes));
     $("dischargeOccurrenceList").innerHTML = rows.map(item => `<div class="base-occurrence"><div><strong>${escape(item.reason)}</strong><small>${escape(item.code)} · ${integer.format(item.count)} ${item.count === 1 ? "registro" : "registros"}</small></div><div class="base-occurrence-track"><i style="width:${item.minutes ? Math.max(2, item.minutes / max * 100) : 0}%"></i></div><b>${duration(item.minutes)}</b></div>`).join("");
   }
+  /* Busca pelo nome do navio: trecho do nome, sem diferenciar maiúsculas nem acentos. */
+  const searchable = value => String(value || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
   function weighingSelection() {
     const year = Number($("weighingYear").value), month = Number($("weighingMonth").value);
-    return state.data.weighings.filter(item => (!year || item.year === year) && (!month || item.month === month));
+    const query = searchable($("weighingVessel").value);
+    return state.data.weighings.filter(item => (!year || item.year === year) && (!month || item.month === month) && (!query || searchable(item.vessel).includes(query)));
   }
   function renderWeighing() {
     if (!state.data) return;
@@ -292,14 +295,15 @@
     $("weighingDraftPct").textContent = pct(draft, invoice);
     $("weighingDraftUnloadedDelta").textContent = delta(draft, unloaded);
     $("weighingDraftUnloadedPct").textContent = unloaded ? `${draft - unloaded > 0 ? "+" : ""}${number.format((draft - unloaded) / unloaded * 100)}% sobre o descarregado` : "Peso descarregado indisponível";
-    $("weighingStatus").textContent = `${rows.length} ${rows.length === 1 ? "navio" : "navios"} · dados consolidados por mês`;
+    const query = $("weighingVessel").value.trim();
+    $("weighingStatus").textContent = `${rows.length} ${rows.length === 1 ? "navio" : "navios"}${query ? ` com “${query}” no nome` : ""} · dados consolidados por mês`;
     $("weighingCount").textContent = `${rows.length} registros`;
     const percentage = (value, base) => value !== null && base > 0 ? (value - base) / base * 100 : null;
     $("weighingTable").querySelector("tbody").innerHTML = rows.slice().sort((a, b) => b.year - a.year || b.month - a.month || a.vessel.localeCompare(b.vessel)).map(row => {
       const unloadedPct = percentage(row.unloadedTons, row.invoiceTons), draftPct = percentage(row.draftTons, row.invoiceTons), draftUnloadedPct = percentage(row.draftTons, row.unloadedTons);
       const pctCell = value => `<td class="${value !== null && Math.abs(value) > 0.5 ? "base-alert" : ""}">${value === null ? "—" : `${value > 0 ? "+" : ""}${number.format(value)}%`}</td>`;
       return `<tr><th><strong>${escape(row.vessel)}</strong><small>${months[row.month - 1]} ${row.year}</small></th><td>${row.invoiceTons === null ? "—" : number.format(row.invoiceTons)}</td><td>${row.unloadedTons === null ? "—" : number.format(row.unloadedTons)}</td><td>${row.draftTons === null ? "—" : number.format(row.draftTons)}</td>${pctCell(unloadedPct)}${pctCell(draftPct)}${pctCell(draftUnloadedPct)}</tr>`;
-    }).join("") || '<tr><td colspan="7" class="base-empty">Nenhum navio nos filtros selecionados.</td></tr>';
+    }).join("") || `<tr><td colspan="7" class="base-empty">${query ? `Nenhum navio com “${escape(query)}” no nome nos filtros selecionados. Para buscar em todo o histórico, escolha “Todos os anos”.` : "Nenhum navio nos filtros selecionados."}</td></tr>`;
   }
   function initialize(data) {
     state.data = data;
@@ -309,6 +313,7 @@
     fillSelect("weighingYear", [...new Set(data.weighings.map(row => row.year))].sort((a, b) => b - a), "Todos os anos");
     $("weighingMonth").innerHTML = $("dischargeMonth").innerHTML;
     $("weighingYear").value = String(Math.max(...data.weighings.map(row => row.year)));
+    $("weighingVesselList").innerHTML = [...new Set(data.weighings.map(row => row.vessel).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")).map(name => `<option value="${escape(name)}"></option>`).join("");
     lastWeek();
     renderWeighing();
   }
@@ -349,6 +354,8 @@
     $("dischargeLastWeek").addEventListener("click", userChange(lastWeek));
     $("weighingYear").addEventListener("change", userChange(renderWeighing));
     $("weighingMonth").addEventListener("change", userChange(renderWeighing));
+    $("weighingVessel").addEventListener("input", renderWeighing);
+    $("weighingVessel").addEventListener("keydown", event => { if (event.key === "Escape" && event.target.value) { event.target.value = ""; renderWeighing(); } });
   }
   window.dischargePanel = { setup, getUpdatedAt: () => state.ready ? state.data?.generatedAt : null,
     getMeta: () => state.data ? { origin: state.data.origin, lastRecordAt: state.data.lastRecordAt, generatedAt: state.data.generatedAt, fallbackReason: state.data.fallbackReason, changeLog: state.data.changeLog, files: state.data.files } : null,

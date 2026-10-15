@@ -110,3 +110,4 @@ a.base-upload[hidden]{display:none}
 .base-day-close{flex:none;width:30px;height:30px;border:0;border-radius:5px;background:none;color:var(--trl-cinza-600);font-size:1.4rem;line-height:1;cursor:pointer}
 .base-day-close:hover,.base-day-close:focus-visible{background:var(--trl-cinza-100);color:var(--trl-texto);outline:none}
 .export-stage .base-day-occurrences{display:none}
+.base-filters label.base-search{flex:1 1 240px;max-width:420px}
