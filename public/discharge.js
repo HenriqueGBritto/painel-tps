@@ -5,7 +5,7 @@
   const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
   const $ = id => document.getElementById(id);
   const savedMode = (() => { try { return localStorage.getItem("tps-descarga-grafico"); } catch { return null; } })();
-  const state = { data: null, ready: false, chartPoints: [], chartMode: ["tons", "wagons", "both"].includes(savedMode) ? savedMode : "tons" };
+  const state = { data: null, ready: false, chartPoints: [], selectedKey: null, chartMode: ["tons", "wagons", "both"].includes(savedMode) ? savedMode : "tons" };
   const fullDate = value => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
   const isLastDischargeWindow = (start, end) => {
     const range = TpsMetrics.lastDischargeWindow(state.data.dischargeDays);
@@ -120,13 +120,13 @@
       for (let i = 0; cursor <= last && i < 120; i++) {
         const [year, month] = cursor.split("-").map(Number);
         const inMonth = days.filter(item => item.date.startsWith(cursor));
-        points.push({ label: `${months[month - 1].slice(0, 3)}/${String(year).slice(2)}`, value: inMonth.reduce((sum, item) => sum + item.tons, 0), wagons: inMonth.reduce((sum, item) => sum + item.wagons, 0) });
+        points.push({ key: cursor, label: `${months[month - 1].slice(0, 3)}/${String(year).slice(2)}`, fullLabel: `${months[month - 1]} de ${year}`, value: inMonth.reduce((sum, item) => sum + item.tons, 0), wagons: inMonth.reduce((sum, item) => sum + item.wagons, 0) });
         cursor = month === 12 ? `${year + 1}-01` : monthKey(year, month + 1);
       }
     } else {
       for (let i = 0; i < dayCount; i++) {
         const date = addDays(start, i);
-        points.push({ label: dayCount > 14 ? date.slice(8, 10) : dateLabel(date), fullLabel: dateLabel(date), value: map.get(date)?.tons || 0, wagons: map.get(date)?.wagons || 0, showLabel: dayCount <= 14 || i % (dayCount > 28 ? 5 : 3) === 0 || i === dayCount - 1 });
+        points.push({ key: date, label: dayCount > 14 ? date.slice(8, 10) : dateLabel(date), fullLabel: dateLabel(date), value: map.get(date)?.tons || 0, wagons: map.get(date)?.wagons || 0, showLabel: dayCount <= 14 || i % (dayCount > 28 ? 5 : 3) === 0 || i === dayCount - 1 });
       }
     }
     // Meta diária de peso (plano do mês ÷ dias do mês), só na visão por dia.
@@ -148,7 +148,7 @@
     chart.classList.toggle("is-compact", !monthly && points.length > 14);
     chart.classList.toggle("is-monthly", monthly);
     chart.closest(".base-chart-scroll").classList.toggle("long-range", monthly);
-    $("dischargeChartDetail").textContent = "Passe o mouse ou toque em uma coluna para ver o valor exato.";
+    $("dischargeChartDetail").textContent = `Passe o mouse para ver o valor exato. Clique em uma coluna para ver as ocorrências ${monthly ? "do mês" : "do dia"}.`;
 
     const legend = $("dischargeTargetLegend");
     const targetLegend = showTarget ? `<span><i class="base-legend-target" aria-hidden="true"></i>Meta diária: ${[...new Map(targets.segments.map(seg => [`${seg.year}-${seg.month}`, seg])).values()].map(seg => `<strong>${integer.format(seg.rate)} t/dia</strong> em ${months[seg.month - 1].slice(0, 3).toLowerCase()}/${seg.year}`).join(" · ")} (plano do mês ÷ dias do mês)</span>` : "";
@@ -156,7 +156,7 @@
     legend.innerHTML = targetLegend + wagonLegend;
     legend.hidden = !legend.innerHTML;
 
-    if (!points.some(point => point.value > 0 || point.wagons > 0)) { chart.innerHTML = '<p class="base-empty">Sem descarga concluída neste período.</p>'; return; }
+    if (!points.some(point => point.value > 0 || point.wagons > 0)) { chart.innerHTML = '<p class="base-empty">Sem descarga concluída neste período.</p>'; renderDayOccurrences(); return; }
     const barOf = point => mode === "wagons" ? point.wagons : point.value;
     // Com linha de meta, 8% de folga no topo para a linha não encostar nos rótulos.
     const max = Math.max(1, ...points.map(barOf), ...(showTarget ? rates.filter(rate => rate !== null) : [])) * (showTarget ? 1.08 : 1);
@@ -173,9 +173,11 @@
     chart.innerHTML = points.map((point, index) => {
       const detail = escape(pointDetail(point, mode));
       const target = showTarget && rates[index] ? `<b class="base-day-target" style="bottom:${rates[index] / max * 100}%"></b>` : "";
-      return `<div class="base-day" data-index="${index}" role="img" aria-label="${detail}" title="${detail}"><div class="base-day-value">${barLabel(point)}</div><div class="base-day-track"><i style="height:${barOf(point) ? Math.max(3, barOf(point) / max * 100) : 0}%"></i>${target}</div><span>${point.showLabel === false ? "" : escape(point.label)}</span></div>`;
+      const selected = point.key === state.selectedKey;
+      return `<div class="base-day${selected ? " is-selected" : ""}" data-index="${index}" role="button" tabindex="0" aria-pressed="${selected}" aria-label="${detail}. Ver ocorrências" title="${detail}"><div class="base-day-value">${barLabel(point)}</div><div class="base-day-track"><i style="height:${barOf(point) ? Math.max(3, barOf(point) / max * 100) : 0}%"></i>${target}</div><span>${point.showLabel === false ? "" : escape(point.label)}</span></div>`;
     }).join("") + (mode === "both" ? '<svg class="base-wagon-line" aria-hidden="true"></svg>' : "");
     drawWagonLine();
+    renderDayOccurrences();
   }
 
   /* Linha de vagões sobre as colunas de peso (modo "Peso e vagões"). Desenhada pelas posições reais das colunas,
@@ -199,6 +201,46 @@
     const showValues = points.length <= 14;
     svg.innerHTML = `<polyline points="${coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}"></polyline>` +
       coords.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${showValues ? 4 : 3}"></circle>${showValues && point.wagons ? `<text x="${point.x.toFixed(1)}" y="${(point.y - 9).toFixed(1)}">${integer.format(point.wagons)}</text>` : ""}`).join("");
+  }
+  /* Ocorrências do dia (ou do mês, na visão agrupada) da coluna clicada no gráfico. */
+  function renderDayOccurrences() {
+    const box = $("dischargeDayOccurrences");
+    const point = state.chartPoints.find(item => item.key === state.selectedKey);
+    if (!point) { box.hidden = true; box.innerHTML = ""; return; }
+    const isMonth = point.key.length === 7;
+    const events = state.data.occurrences.filter(item => isMonth ? item.date.startsWith(point.key) : item.date === point.key);
+    const groups = new Map();
+    events.forEach(item => {
+      const key = `${item.code}\u0000${item.reason}\u0000${item.responsible}`;
+      const row = groups.get(key) || { reason: item.reason, code: item.code, responsible: item.responsible, count: 0, minutes: 0 };
+      row.count += item.count;
+      row.minutes += item.minutes;
+      groups.set(key, row);
+    });
+    const rows = [...groups.values()].sort((a, b) => b.minutes - a.minutes || b.count - a.count);
+    const records = rows.reduce((sum, item) => sum + item.count, 0);
+    const minutes = rows.reduce((sum, item) => sum + item.minutes, 0);
+    const max = Math.max(1, ...rows.map(item => item.minutes));
+    const discharged = `${tons(point.value)} · ${wagonsText(point.wagons)} descarregados`;
+    box.innerHTML = `<div class="base-day-occurrences-head">
+        <div><p class="eyebrow">OCORRÊNCIAS ${isMonth ? "DO MÊS" : "DO DIA"}</p><h4>${escape(isMonth ? point.fullLabel : fullDate(point.key))}</h4><small>${discharged}${rows.length ? ` · ${integer.format(records)} ${records === 1 ? "registro" : "registros"} · ${duration(minutes)} de ocorrências` : ""}</small></div>
+        <button type="button" class="base-day-close" data-close-day aria-label="Fechar ocorrências">×</button>
+      </div>
+      ${rows.length ? `<div class="base-occurrence-list">${rows.map(item => `<div class="base-occurrence"><div><strong>${escape(item.reason)}</strong><small>${escape(item.code)}${item.code ? " · " : ""}${escape(item.responsible)} · ${integer.format(item.count)} ${item.count === 1 ? "registro" : "registros"}</small></div><div class="base-occurrence-track"><i style="width:${item.minutes / max * 100}%"></i></div><b>${duration(item.minutes)}</b></div>`).join("")}</div>`
+        : `<p class="base-empty">Nenhuma ocorrência registrada ${isMonth ? "neste mês" : "neste dia"}.</p>`}`;
+    box.hidden = false;
+  }
+  function selectPoint(index) {
+    const point = state.chartPoints[index];
+    if (!point) return;
+    state.selectedKey = state.selectedKey === point.key ? null : point.key; // clicar de novo fecha
+    document.querySelectorAll("#dischargeDailyChart .base-day").forEach(item => {
+      const selected = state.chartPoints[Number(item.dataset.index)]?.key === state.selectedKey;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    renderDayOccurrences();
+    if (state.selectedKey) $("dischargeDayOccurrences").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
   function setChartMode(mode) {
     if (!CHART_TITLES[mode]) return;
@@ -296,7 +338,9 @@
     // A linha de vagões depende da largura das colunas: redesenha quando o gráfico muda de tamanho.
     if(window.ResizeObserver)new ResizeObserver(()=>drawWagonLine()).observe(chart);
     chart.addEventListener("pointerover",showDay);
-    chart.addEventListener("click",showDay);
+    chart.addEventListener("click",event=>{showDay(event);const item=event.target.closest(".base-day");if(item&&chart.contains(item))selectPoint(Number(item.dataset.index))});
+    chart.addEventListener("keydown",event=>{const item=event.target.closest(".base-day");if(!item||!["Enter"," "].includes(event.key))return;event.preventDefault();showDay(event);selectPoint(Number(item.dataset.index))});
+    $("dischargeDayOccurrences").addEventListener("click",event=>{if(!event.target.closest("[data-close-day]"))return;state.selectedKey=null;document.querySelectorAll("#dischargeDailyChart .base-day.is-selected").forEach(item=>{item.classList.remove("is-selected");item.setAttribute("aria-pressed","false")});renderDayOccurrences()});
     const userChange = handler => event => { handler(event); window.syncUrl?.(); };
     $("dischargeYear").addEventListener("change", userChange(setPeriodFromSelect));
     $("dischargeMonth").addEventListener("change", userChange(setPeriodFromSelect));

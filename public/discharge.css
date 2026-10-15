@@ -95,3 +95,18 @@ a.base-upload[hidden]{display:none}
 .base-target-legend i.base-legend-wagons{display:inline-block;width:22px;height:0;border-top:2.5px solid var(--trl-chart-2);position:relative}
 .base-target-legend i.base-legend-wagons::after{content:"";position:absolute;left:7px;top:-5.5px;width:6px;height:6px;border:2px solid var(--trl-chart-2);border-radius:50%;background:var(--trl-branco)}
 .export-stage .base-chart-mode{display:none}
+/* Clique na coluna: ocorrências do dia */
+.base-day-chart .base-day{cursor:pointer;border-radius:4px}
+.base-day:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:2px}
+.base-day.is-selected{background:var(--trl-vermelho-15)}
+.base-day.is-selected>span{color:var(--trl-vermelho);font-weight:800}
+.base-day-chart:not(.is-both):not(.is-wagons) .base-day.is-selected .base-day-track i{background:var(--trl-vermelho)}
+.base-day-occurrences{margin:12px 0 4px;padding:14px 16px;border:1px solid var(--trl-cinza-200);border-left:4px solid var(--trl-vermelho);border-radius:5px;background:var(--trl-branco)}
+.base-day-occurrences[hidden]{display:none}
+.base-day-occurrences-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
+.base-day-occurrences-head h4{margin:2px 0;font-size:1.05rem}
+.base-day-occurrences-head small{color:var(--trl-cinza-600);font-size:.8rem}
+.base-day-occurrences .base-occurrence-list{max-height:360px}
+.base-day-close{flex:none;width:30px;height:30px;border:0;border-radius:5px;background:none;color:var(--trl-cinza-600);font-size:1.4rem;line-height:1;cursor:pointer}
+.base-day-close:hover,.base-day-close:focus-visible{background:var(--trl-cinza-100);color:var(--trl-texto);outline:none}
+.export-stage .base-day-occurrences{display:none}
