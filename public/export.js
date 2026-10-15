@@ -1,7 +1,7 @@
 (() => {
   const menu = document.getElementById('exportMenu');
   const status = document.getElementById('exportStatus');
-  const names = { geral: 'Indicadores', descarga: 'Descarga', pesagem: 'Pesagem', lineup: 'Lineup', mares: 'Tábua de maré', producao: 'Produção', atividades: 'Atividades do turno', acompanhamento: 'Acompanhamento de atividades', configuracao: 'Configuração das atividades' };
+  const names = { geral: 'Indicadores', descarga: 'Descarga', pesagem: 'Pesagem', lineup: 'Lineup', mares: 'Tábua de maré', producao: 'Produção', atividades: 'Atividades do turno', acompanhamento: 'Acompanhamento de atividades', configuracao: 'Configuração das atividades', equipe: 'Equipe' };
   let busy = false;
   let statusTimer;
 

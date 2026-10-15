@@ -3,6 +3,7 @@
    Os IDs podem ser trocados no Netlify sem novo código, pelas variáveis
    TPS_SHEET_OPERATIONS, TPS_SHEET_LINEUP e TPS_SHEET_DISCHARGE. */
 import { XLSX, parseOperationsWorkbook, parseDischargeWorkbook } from "./parsers.mjs";
+import { parseTeamWorkbook, TEAM_TABS } from "./team-parsers.mjs";
 import { readColumns } from "./fast-xlsx.mjs";
 
 const MAX_BYTES = 40 * 1024 * 1024;
@@ -31,6 +32,17 @@ export const SHEETS = {
       "Base Pesagens": [0, 1, 4, 5, 6, 7, 9, 10, 11]
     },
     readOptions: { dense: true, cellDates: true }
+  },
+  // Equipe TPS (aba Equipe): .xlsx no Drive aberto pelo Google Planilhas. Lida 1 vez por dia ou pelo botão.
+  team: {
+    env: "TPS_SHEET_TEAM",
+    defaultId: "1qeQgIOmbg9jW1l0id6Sgt39y657PTzbM",
+    label: "Equipe TPS",
+    fileName: "Planilha da equipe TPS",
+    tabs: Object.values(TEAM_TABS),
+    readOptions: { cellDates: false },
+    order: ["sheets", "drive"],
+    editUrl: true
   }
 };
 
@@ -55,7 +67,8 @@ export function lineupId(env = process.env) {
 
 export function sheetUrl(kind, env = process.env) {
   const id = sourceId(kind, env);
-  return id ? `https://drive.google.com/file/d/${id}/view` : null;
+  if (!id) return null;
+  return SHEETS[kind].editUrl ? `https://docs.google.com/spreadsheets/d/${id}/edit` : `https://drive.google.com/file/d/${id}/view`;
 }
 
 /**
@@ -129,7 +142,7 @@ export function parseSheet(kind, bytes, fetchedAt = new Date(), { lineupBytes = 
     ? readColumns(bytes, config.columns, { cellDates: false })
     : XLSX.read(bytes, { type: "array", sheets: lineupBytes || !config.lineup ? config.tabs : [...config.tabs, config.lineup.tab], cellText: false, cellHTML: false, cellFormula: false, ...config.readOptions });
   const source = `${config.label} (Google Planilhas)`;
-  const data = kind === "operations"
+  const data = kind === "team" ? parseTeamWorkbook(workbook, source) : kind === "operations"
     ? parseOperationsWorkbook(attachLineup(workbook, lineupBytes), source)
     : parseDischargeWorkbook(workbook, source, fetchedAt.getTime());
   if (kind === "discharge" && !data.dischargeDays.length) throw new Error("Nenhuma descarga concluída foi encontrada na planilha.");
@@ -150,7 +163,7 @@ export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force =
   const cached = cache.get(kind);
   if (!force && cached && cached.id === key && now() - cached.at < CACHE_MS) return cached.data;
   const [bytes, lineupBytes] = await Promise.all([
-    downloadWorkbook(id, fetcher),
+    downloadWorkbook(id, fetcher, SHEETS[kind].order),
     extraId ? downloadWorkbook(extraId, fetcher, SHEETS.operations.lineup.order) : null
   ]);
   const parseStarted = Date.now();

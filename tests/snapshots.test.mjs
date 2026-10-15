@@ -88,3 +88,37 @@ test("falha numa planilha não apaga a cópia anterior dela", async () => {
   assert.equal(results.operations.ok, true);
   assert.deepEqual((await readSnapshot("discharge")).dischargeDays, [1]);
 });
+
+test("equipe: botão da aba Equipe relê só a planilha da equipe; navios e indicadores ficam como estão", async () => {
+  const now = Date.parse("2026-10-15T12:00:00Z");
+  saved.set("snapshot-operations", { generatedAt: "2026-10-15T11:58:00Z" });
+  const calls = [];
+  const result = await requestRefresh({ kinds: ["team"], loader: loaderAt("2026-10-15T12:00:00Z", calls), now: () => now });
+  assert.equal(result.status, "refreshed");
+  assert.deepEqual(calls, ["team"]);
+});
+
+test("equipe: a cópia vale por um dia (a rotina relê 1 vez por dia)", async () => {
+  saved.set("snapshot-team", { generatedAt: "2026-10-15T06:00:00Z", people: [1] });
+  const calls = [];
+  await loadForServing("team", { loader: loaderAt("x", calls), now: () => Date.parse("2026-10-16T05:00:00Z") });
+  assert.equal(calls.length, 0, "23 horas depois ainda vale");
+  await loadForServing("team", { loader: loaderAt("2026-10-16T13:00:00Z", calls), now: () => Date.parse("2026-10-16T13:00:00Z") });
+  assert.deepEqual(calls, ["team"], "31 horas depois relê");
+});
+
+test("rotina agendada: equipe só na rodada das 06h UTC", async () => {
+  const { kindsForHour } = await import("../netlify/functions/refresh-scheduled.mjs");
+  assert.deepEqual(kindsForHour(6), ["operations", "discharge", "team"]);
+  assert.deepEqual(kindsForHour(12), ["operations", "discharge"]);
+});
+
+test("API /api/equipe: entrega a cópia guardada da planilha da equipe com o link do arquivo", async () => {
+  const { default: handler } = await import("../netlify/functions/api.mjs");
+  saved.set("snapshot-team", { generatedAt: new Date().toISOString(), origin: "google-sheets", people: [{ id: "1", name: "Ana" }], absences: [], trainings: [], report: [] });
+  const response = await handler(new Request("https://painel.test/api/equipe"));
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.people, [{ id: "1", name: "Ana" }]);
+  assert.equal(body.files[0].name, "Planilha da equipe TPS");
+});

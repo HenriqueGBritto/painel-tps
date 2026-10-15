@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { firestore } from "../lib/firebase.mjs";
 import { loadDataset } from "../lib/dataset.mjs";
 import { downloadWorkbook, sourceFiles } from "../lib/sheets.mjs";
-import { loadForServing, requestRefresh } from "../lib/snapshots.mjs";
+import { loadForServing, requestRefresh, FREQUENT_KINDS } from "../lib/snapshots.mjs";
+import { authorize, ACTIONS } from "../lib/access.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const json = (value, status = 200, extra = {}) => new Response(JSON.stringify(value), { status, headers: { ...headers, ...extra, "Content-Type": "application/json; charset=utf-8" } });
@@ -102,6 +103,19 @@ async function fallbackDataset(kind, error) {
   return { ...data, origin: "fallback", fallbackReason: error.message };
 }
 
+/* Aba Equipe: dados da planilha da equipe (somente leitura), pelo ponto único de permissão.
+   Sem cópia de reserva: se o Google falhar e não houver cópia guardada, a página mostra o erro. */
+async function teamData(request) {
+  const access = await authorize(request, ACTIONS.readTeam);
+  if (!access.allowed) return json({ error: access.error || "Acesso negado." }, access.status || 403);
+  try {
+    return json({ ...(await loadForServing("team")), files: sourceFiles("team") });
+  } catch (error) {
+    console.error("Falha ao ler a planilha da equipe no Google:", error);
+    return json({ error: `Não foi possível ler a planilha da equipe: ${error.message}` }, 502);
+  }
+}
+
 export default async function handler(request) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -122,7 +136,13 @@ export default async function handler(request) {
     const allowedHosts = [url.host, request.headers.get("host"), request.headers.get("x-forwarded-host")].filter(Boolean);
     if (origin && !allowedHosts.includes(new URL(origin).host)) return json({ error: "Origem não permitida." }, 403);
     try {
-      const result = await requestRefresh();
+      // ?base=equipe relê só a planilha da equipe (botão na aba Equipe); sem parâmetro, navios e indicadores.
+      const team = url.searchParams.get("base") === "equipe";
+      if (team) {
+        const access = await authorize(request, ACTIONS.refreshTeam);
+        if (!access.allowed) return json({ error: access.error || "Acesso negado." }, access.status || 403);
+      }
+      const result = await requestRefresh({ kinds: team ? ["team"] : FREQUENT_KINDS });
       const status = result.status === "refreshed" || result.status === "recent" ? 200 : result.status === "running" ? 409 : 502;
       return json(result, status);
     } catch (error) {
@@ -130,7 +150,8 @@ export default async function handler(request) {
       return json({ status: "error", error: "Não foi possível atualizar as bases agora." }, 502);
     }
   }
+  if (request.method === "GET" && path === "/api/equipe") return teamData(request);
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh"] };
+export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh", "/api/equipe"] };

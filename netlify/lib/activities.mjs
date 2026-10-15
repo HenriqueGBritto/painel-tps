@@ -22,8 +22,8 @@ const STATUSES = ["pending", "done", "not_done"];
 /** Maior intervalo do acompanhamento, em dias. */
 export const MAX_HISTORY_DAYS = 31;
 
-/* Escala inicial: Diurno Hélio/Roger e Noturno Andrés/Matheus, 2 dias cada.
-   Em 14/10/2026 Hélio e Andrés fazem o 2º dia, então o bloco deles começou em 13/10. */
+/* Escala inicial, alinhada às equipes do 2x2 (aba Equipe): Diurno Hélio (B) / Roger (A) e Noturno Andrés (C) / Matheus (D).
+   13–14/10/2026 = B + D (Hélio e Matheus) e 15–16/10/2026 = A + C (Roger e Andrés). */
 export const DEFAULT_ASSISTANTS = [
   { id: "roger", name: "Roger", active: true, order: 1 },
   { id: "helio", name: "Hélio", active: true, order: 2 },
@@ -34,7 +34,7 @@ export const DEFAULT_CONFIG = {
   hours: { ...S.DEFAULT_HOURS },
   rotations: {
     D: { members: ["helio", "roger"], blockDays: 2, referenceDate: "2026-10-13" },
-    N: { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-13" }
+    N: { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-15" }
   }
 };
 
@@ -89,8 +89,19 @@ const iso = date => date.toISOString();
 /* ---------- Configuração e escala ---------- */
 
 /** Configuração da escala; no primeiro uso grava os assistentes, a escala e as atividades fixas iniciais. */
+/* A primeira versão gravou o Noturno invertido (Andrés em 13–14/10, quando a noite era da equipe D, de Matheus).
+   Se a escala salva ainda for exatamente essa e ninguém a alterou pela tela, ela é corrigida uma vez. */
+const WRONG_NIGHT = { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-13" };
+const isWrongNight = rotation => JSON.stringify({ members: rotation?.members, blockDays: rotation?.blockDays, referenceDate: rotation?.referenceDate }) === JSON.stringify(WRONG_NIGHT);
+
 export async function getConfig(store) {
   const config = await store.get(COLLECTIONS.config, "main");
+  if (config && !config.updatedBy && isWrongNight(config.rotations?.N)) {
+    const fixed = { ...config, rotations: { ...config.rotations, N: structuredClone(DEFAULT_CONFIG.rotations.N) }, fixedNightRotationAt: new Date().toISOString() };
+    await store.set(COLLECTIONS.config, "main", fixed);
+    await refreshScheduled(store, S.shiftIdAt(new Date(), fixed.hours), new Date());
+    return fixed;
+  }
   if (config) return config;
   await Promise.all(DEFAULT_ASSISTANTS.map(({ id, ...data }) => store.create(COLLECTIONS.assistants, id, data)));
   await Promise.all(DEFAULT_TEMPLATES.map(({ id, ...data }) => store.create(COLLECTIONS.templates, id, data)));

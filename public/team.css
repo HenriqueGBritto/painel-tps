@@ -1,0 +1,135 @@
+/* Aba Equipe (somente leitura). Reaproveita .base-heading, .base-filters, .base-sheet, .base-table e .base-kpis
+   (discharge.css) e .act-button/.act-nav/.act-chip (activities.css). */
+.team-panel{max-width:1220px;margin:0 auto;font-family:var(--trl-font-corpo)}
+.team-panel .base-table{min-width:0}
+.team-panel .base-table th,.team-panel .base-table td{white-space:normal;text-align:left}
+.team-muted{color:var(--trl-cinza-600);font-size:.84rem}
+.team-warn{color:var(--trl-vermelho);font-weight:700;font-size:.84rem}
+.team-note{margin:6px 0 14px;padding:9px 12px;border-left:3px solid var(--trl-cinza-400);background:var(--trl-cinza-100);font-size:.86rem;color:var(--trl-cinza-800)}
+.team-zero{color:var(--trl-cinza-300)}
+.team-count{margin:10px 0 6px;color:var(--trl-cinza-600);font-size:.84rem;font-weight:700}
+.team-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.team-toolbar{align-items:end}
+.team-toolbar label{flex:1 1 150px;min-width:0}
+.team-toolbar select,.team-toolbar input[type="search"],.team-toolbar input[type="date"]{width:100%;min-width:0;max-width:100%}
+.team-two>*,.team-shifts>*{min-width:0}
+.team-toolbar .act-button{min-height:42px}
+.team-now-text{font-size:.85rem;font-weight:700;color:var(--trl-cinza-800);margin-left:auto}
+.team-check{display:inline-flex!important;flex-direction:row;align-items:center;gap:7px;min-width:0!important}
+.team-check input{min-height:0!important;width:18px;height:18px}
+
+/* Equipes: a letra sempre aparece (a cor não é o único código). */
+.team-tag{display:inline-grid;place-items:center;min-width:24px;height:22px;padding:0 6px;border-radius:5px;background:var(--trl-cinza-100);color:var(--trl-texto);font-family:var(--trl-font-titulo);font-size:.76rem;font-weight:700;line-height:1;vertical-align:middle}
+.team-tag.team-A{background:var(--trl-vermelho);color:var(--trl-branco)}
+.team-tag.team-B{background:var(--trl-texto);color:var(--trl-branco)}
+.team-tag.team-C{background:var(--trl-vermelho-40);color:var(--trl-texto)}
+.team-tag.team-D{background:var(--trl-cinza-400);color:var(--trl-texto)}
+
+/* Marcas de status */
+.team-mark{display:inline-block;padding:1px 7px;border-radius:999px;font-size:.7rem;font-weight:700;white-space:nowrap;background:var(--trl-cinza-100);color:var(--trl-cinza-800)}
+.team-mark.is-inss{background:var(--trl-vermelho-15);color:var(--trl-vermelho)}
+.team-mark.is-transfer{background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.team-mark.is-custom{background:var(--trl-cinza-200);color:var(--trl-texto)}
+.team-mark.is-away{background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.team-person-link{border:0;background:none;padding:0;color:var(--trl-texto);font:inherit;font-weight:700;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--trl-cinza-300);text-underline-offset:3px}
+.team-person-link:hover,.team-person-link:focus-visible{color:var(--trl-vermelho);text-decoration-color:currentColor;outline:none}
+.team-external{color:var(--trl-cinza-800)}
+.team-external small{color:var(--trl-cinza-600);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em}
+.team-list{list-style:none;margin:0;padding:0}
+.team-list>li{padding:7px 0;border-bottom:1px solid var(--trl-cinza-100);font-size:.88rem}
+.team-list>li:last-child{border-bottom:0}
+.team-list small{color:var(--trl-cinza-600);margin-left:4px}
+.team-arrow{display:block;color:var(--trl-cinza-800);font-size:.84rem;margin-top:2px}
+
+/* Resumo */
+.team-kpis{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.team-matrix td,.team-matrix th:not(:first-child){text-align:center!important;font-variant-numeric:tabular-nums}
+.team-matrix .team-category th{background:var(--trl-cinza-100);color:var(--trl-vermelho);font-size:.74rem;letter-spacing:.08em}
+.team-matrix .team-subtotal th,.team-matrix .team-subtotal td{font-weight:700;background:var(--trl-cinza-100)}
+.team-matrix .team-total th,.team-matrix .team-total td{font-weight:800;border-top:2px solid var(--trl-texto)}
+
+/* De serviço */
+.team-shifts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.team-shift h3{margin:0 0 10px;font-size:1.05rem}
+.team-shift h3 small{display:block;font-family:var(--trl-font-corpo);font-size:.76rem;font-weight:500;color:var(--trl-cinza-600)}
+.team-group{border:1px solid var(--trl-cinza-200);border-radius:5px;background:var(--trl-branco);padding:12px 14px;margin:0 0 12px}
+.team-group.is-now{border-color:var(--trl-vermelho);box-shadow:inset 4px 0 0 var(--trl-vermelho)}
+.team-group header{border-bottom:1px solid var(--trl-cinza-100);padding-bottom:8px;margin-bottom:8px}
+.team-group header>div{display:flex;align-items:center;gap:8px}
+.team-group h4{margin:0;font-size:.98rem}
+.team-group header small{color:var(--trl-cinza-600);font-size:.78rem}
+.team-now{padding:1px 8px;border-radius:999px;background:var(--trl-vermelho);color:var(--trl-branco);font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.team-role{margin:8px 0}
+.team-role h5{margin:0 0 3px;font-size:.76rem;font-weight:800;color:var(--trl-cinza-800);text-transform:uppercase;letter-spacing:.04em}
+.team-role h5 small{color:var(--trl-cinza-600);font-weight:600}
+.team-role ul{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+.team-role li{font-size:.86rem}
+.team-role li small{color:var(--trl-cinza-600)}
+.team-absent{padding:8px 10px;border-radius:4px;background:var(--trl-cinza-100)}
+.team-management{margin-top:6px}
+
+/* Calendário */
+.team-month-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 10px}
+.team-month-nav h3{margin:0;min-width:180px;text-align:center;font-size:1.15rem}
+.team-legend{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:.8rem;color:var(--trl-cinza-600);margin-bottom:8px}
+.team-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.team-weekday{text-align:center;font-size:.72rem;font-weight:800;color:var(--trl-cinza-600);text-transform:uppercase;letter-spacing:.06em;padding:4px 0}
+.team-day{display:grid;gap:3px;align-content:start;min-height:92px;padding:6px 7px;border:1px solid var(--trl-cinza-200);border-radius:5px;background:var(--trl-branco);font:inherit;text-align:left;cursor:pointer;color:var(--trl-texto)}
+.team-day:hover{border-color:var(--trl-cinza-400)}
+.team-day:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:2px}
+.team-day.is-today{box-shadow:inset 0 0 0 2px var(--trl-texto)}
+.team-day.is-selected{border-color:var(--trl-vermelho);background:var(--trl-vermelho-15)}
+.team-day-number{font-family:var(--trl-font-titulo);font-weight:700;font-size:.95rem}
+.team-day-shift{font-size:.72rem;color:var(--trl-cinza-800);display:flex;align-items:center;gap:4px}
+.team-day small{font-size:.66rem;color:var(--trl-cinza-600)}
+.team-day-out{justify-self:start;padding:0 6px;border-radius:999px;background:var(--trl-status-atencao-15);color:var(--trl-status-atencao);font-size:.66rem;font-weight:800}
+.team-day-detail{margin-top:16px;padding:14px 16px;border:1px solid var(--trl-cinza-200);border-left:4px solid var(--trl-vermelho);border-radius:5px;background:var(--trl-branco)}
+
+/* Pessoas */
+.team-people tr.is-inss th,.team-people tr.is-inss td{background:var(--trl-vermelho-15)}
+.team-people tr.is-transfer th,.team-people tr.is-transfer td{background:var(--trl-status-atencao-15)}
+.team-people tr.is-selected th,.team-people tr.is-selected td{box-shadow:inset 0 2px 0 var(--trl-vermelho),inset 0 -2px 0 var(--trl-vermelho)}
+.team-card{border:1px solid var(--trl-cinza-200);border-top:3px solid var(--trl-vermelho);border-radius:5px;background:var(--trl-branco);padding:16px 18px;margin:0 0 14px}
+.team-card header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:1px solid var(--trl-cinza-100);padding-bottom:10px;margin-bottom:12px}
+.team-card h3{margin:2px 0;font-size:1.25rem}
+.team-card header p:last-child{margin:0;color:var(--trl-cinza-800);font-size:.88rem}
+.team-card-grid{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,1.4fr);gap:20px}
+.team-card dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:.88rem;align-content:start}
+.team-card dt{color:var(--trl-cinza-600);font-weight:700}
+.team-card dd{margin:0}
+.team-card h4{margin:0 0 6px;font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;color:var(--trl-cinza-800)}
+.team-card h4:not(:first-child){margin-top:14px}
+
+/* Férias e coberturas */
+.team-alerts{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.team-alerts li{padding:8px 11px;border-radius:4px;border-left:4px solid var(--trl-cinza-400);background:var(--trl-cinza-100);font-size:.86rem}
+.team-alerts li.is-warn{border-left-color:var(--trl-vermelho);background:var(--trl-vermelho-15)}
+.team-alerts li small{display:block;color:var(--trl-cinza-600)}
+.team-timeline{border:1px solid var(--trl-cinza-200);border-radius:5px;background:var(--trl-branco);overflow-x:auto}
+.team-timeline-row{display:grid;grid-template-columns:minmax(170px,1.1fr) minmax(420px,3fr) minmax(160px,1fr);gap:10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--trl-cinza-100);min-width:780px}
+.team-timeline-row:last-child{border-bottom:0}
+.team-timeline-head{position:sticky;top:0;background:var(--trl-cinza-100);font-size:.72rem;font-weight:800;color:var(--trl-cinza-600)}
+.team-timeline-who{font-size:.86rem;display:grid}
+.team-timeline-who small{color:var(--trl-cinza-600);font-size:.74rem}
+.team-timeline-days{display:grid;grid-template-columns:repeat(var(--days),minmax(0,1fr));align-items:center;min-height:24px;background:repeating-linear-gradient(to right,transparent 0,transparent calc(100% / var(--days) - 1px),var(--trl-cinza-100) calc(100% / var(--days) - 1px),var(--trl-cinza-100) calc(100% / var(--days)))}
+.team-timeline-head .team-timeline-days{background:none}
+.team-timeline-head .team-timeline-days span{text-align:center;font-size:.64rem}
+.team-timeline-head .team-timeline-days span.is-today{color:var(--trl-vermelho)}
+.team-bar{grid-row:1;height:20px;border-radius:4px;background:var(--trl-texto);color:var(--trl-branco);font-size:.66rem;font-weight:700;line-height:20px;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.team-bar-afastamento,.team-bar-afastado-inss-{background:var(--trl-vermelho)}
+.team-bar-mobilidade,.team-bar-cargo-vago{background:var(--trl-cinza-400);color:var(--trl-texto)}
+.team-timeline-cover{font-size:.84rem;display:grid}
+.team-timeline-cover small{color:var(--trl-cinza-600);font-size:.72rem}
+
+/* Treinamentos e importação */
+.team-status{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--trl-cinza-100);color:var(--trl-cinza-800);white-space:nowrap}
+.team-status.is-realizado{background:var(--trl-status-ok-15);color:var(--trl-status-ok)}
+.team-status.is-agendado,.team-status.is-pendente,.team-status.is-aguardando-agenda{background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.team-status.is-faltou,.team-status.is-nao-quis,.team-status.is-desistiu,.team-status.is-cancelado{background:var(--trl-vermelho-15);color:var(--trl-vermelho)}
+.team-training .act-chips{margin:6px 0 10px}
+.team-training-table td small{color:var(--trl-cinza-600)}
+.team-report tr.is-erro td{background:var(--trl-vermelho-15)}
+.team-report td small{color:var(--trl-cinza-600)}
+
+@media(max-width:900px){.team-two,.team-shifts,.team-card-grid{grid-template-columns:minmax(0,1fr)}.team-kpis{grid-template-columns:1fr 1fr!important}}
+@media(max-width:600px){.team-calendar{gap:3px}.team-day{min-height:76px;padding:4px}.team-day small{display:none}.team-now-text{margin-left:0}}

@@ -53,24 +53,24 @@ test("turno: horário da atividade no Noturno depois da meia-noite cai no dia se
 
 test("escala 2x2: rodízio do Diurno e do Noturno a partir da referência, para frente e para trás", () => {
   const who = (date, kind) => { const slot = S.scheduledFor(S.makeId(date, kind), DEFAULT_CONFIG); return `${slot.assistantId}:${slot.dayOfBlock}`; };
-  // Referência combinada: em 14/10/2026 Hélio (Diurno) e Andrés (Noturno) fazem o 2º dia.
+  // Alinhado às equipes do 2x2: 13–14/10/2026 = B + D (Hélio e Matheus), 15–16/10 = A + C (Roger e Andrés).
   assert.equal(who("2026-10-14", "D"), "helio:2");
-  assert.equal(who("2026-10-14", "N"), "andres:2");
+  assert.equal(who("2026-10-14", "N"), "matheus:2", "noite de 14/10 = equipe D (Matheus)");
   assert.deepEqual(["2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19"].map(date => who(date, "D")), ["roger:1", "roger:2", "helio:1", "helio:2", "roger:1"]);
-  assert.deepEqual(["2026-10-15", "2026-10-16", "2026-10-17"].map(date => who(date, "N")), ["matheus:1", "matheus:2", "andres:1"]);
+  assert.deepEqual(["2026-10-15", "2026-10-16", "2026-10-17"].map(date => who(date, "N")), ["andres:1", "andres:2", "matheus:1"], "15–16/10 = equipe C (Andrés)");
   assert.deepEqual(["2026-10-12", "2026-10-11", "2026-10-10"].map(date => who(date, "D")), ["roger:2", "roger:1", "helio:2"], "datas antes da referência");
   assert.equal(who("2027-10-14", "D"), "roger:1", "um ano depois o ciclo continua (365 dias = 91 ciclos + 1)");
 });
 
 test("escala 2x2: quem trabalha às 02:00 é o escalado do Noturno que começou no dia anterior", () => {
   const shiftId = S.shiftIdAt(br("2026-10-15T02:00"));
-  assert.equal(S.scheduledFor(shiftId, DEFAULT_CONFIG).assistantId, "andres");
+  assert.equal(S.scheduledFor(shiftId, DEFAULT_CONFIG).assistantId, "matheus");
 });
 
 test("escala 2x2: ajuste pontual tem prioridade sobre o rodízio", () => {
   const overrides = { "2026-10-15_D": { assistantId: "helio", reason: "Troca com Roger" } };
   assert.deepEqual(S.scheduledFor("2026-10-15_D", DEFAULT_CONFIG, overrides), { assistantId: "helio", source: "ajuste", reason: "Troca com Roger", dayOfBlock: null });
-  assert.equal(S.scheduledFor("2026-10-15_N", DEFAULT_CONFIG, overrides).assistantId, "matheus", "o ajuste vale só para aquele turno");
+  assert.equal(S.scheduledFor("2026-10-15_N", DEFAULT_CONFIG, overrides).assistantId, "andres", "o ajuste vale só para aquele turno");
   assert.equal(S.scheduledFor("2026-10-15_D", { rotations: {} }).source, "sem escala");
 });
 

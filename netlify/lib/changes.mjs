@@ -209,10 +209,50 @@ export function diffDischarge(previous, next) {
  * Leitura nova pronta para guardar: carrega o histórico da cópia anterior e, se algo
  * mudou, acrescenta um registro no topo. Sem cópia anterior não há com o que comparar.
  */
+/* ---------- Planilha da equipe ---------- */
+
+const PERSON_FIELDS = [["status", "status"], ["team", "equipe"], ["role", "função"], ["note", "observação"]];
+const absenceKey = item => [item.person?.id || upper(item.person?.name), item.motive, item.start, item.end].join("|");
+const coverName = item => item.cover?.name || (item.coverStatus === "sem cobertura" ? "sem cobertura" : "não informada");
+
+export function diffTeam(previous, next) {
+  const out = new Sections();
+  const before = indexBy(previous.people, row => row.id);
+  const after = indexBy(next.people, row => row.id);
+  for (const [id, row] of after) {
+    const old = before.get(id);
+    if (!old) out.add("Incluídos no Cadastro", `${row.name} (${id}): ${row.role} · ${row.team} · ${row.status}`);
+    else {
+      const changes = fieldChanges(old, row, PERSON_FIELDS);
+      if (changes) out.add("Mudanças no Cadastro", `${row.name} (${id}): ${changes}`);
+    }
+  }
+  for (const [id, row] of before) if (!after.has(id)) out.add("Saíram do Cadastro", `${row.name} (${id}): ${row.role} · ${row.team}`);
+  const absencesBefore = indexBy(previous.absences, absenceKey);
+  const absencesAfter = indexBy(next.absences, absenceKey);
+  for (const [key, row] of absencesAfter) {
+    const old = absencesBefore.get(key);
+    if (!old) out.add("Férias e ausências incluídas", `${row.person.name}: ${row.motive.toLowerCase()} de ${when(row.start)} a ${when(row.end)} · cobertura: ${coverName(row)}`);
+    else if (coverName(old) !== coverName(row)) out.add("Coberturas alteradas", `${row.person.name} (${when(row.start)} a ${when(row.end)}): ${coverName(old)} → ${coverName(row)}`);
+  }
+  for (const [key, row] of absencesBefore) if (!absencesAfter.has(key)) out.add("Férias e ausências retiradas", `${row.person.name}: ${row.motive.toLowerCase()} de ${when(row.start)} a ${when(row.end)}`);
+  const participants = list => new Map((list || []).flatMap(training => training.participants.map(item => [`${training.title}|${item.person.id || item.person.name}`, { training, item }])));
+  const trainingsBefore = participants(previous.trainings), trainingsAfter = participants(next.trainings);
+  for (const [key, { training, item }] of trainingsAfter) {
+    const old = trainingsBefore.get(key)?.item;
+    if (!old) out.add("Treinamentos", `${item.person.name}: incluído em “${training.title}” (${item.status})`);
+    else {
+      const changes = fieldChanges(old, item, [["status", "situação"], ["certificate", "certificado"]]);
+      if (changes) out.add("Treinamentos", `${item.person.name} em “${training.title}”: ${changes}`);
+    }
+  }
+  return out.result();
+}
+
 export function withChangeLog(kind, previous, next) {
   const log = Array.isArray(previous?.changeLog) ? previous.changeLog : [];
   if (!previous || previous.origin === "fallback") return { ...next, changeLog: log };
-  const sections = kind === "operations" ? diffOperations(previous, next) : diffDischarge(previous, next);
+  const sections = kind === "operations" ? diffOperations(previous, next) : kind === "team" ? diffTeam(previous, next) : diffDischarge(previous, next);
   if (!sections.length) return { ...next, changeLog: log };
   const entry = { at: next.generatedAt, since: previous.generatedAt, total: sections.reduce((sum, s) => sum + s.count, 0), sections };
   return { ...next, changeLog: [entry, ...log].slice(0, MAX_ENTRIES) };

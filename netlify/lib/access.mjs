@@ -1,4 +1,4 @@
-/* Ponto único de permissão das rotas que gravam ou leem dados de pessoas (aba Atividades).
+/* Ponto único de permissão das rotas que gravam ou leem dados de pessoas (abas Atividades e Equipe).
    Hoje tudo é liberado: ainda não há login e o autor é o nome escolhido na tela.
 
    Quando o login chegar (Firebase Authentication, perfis Administrador / Gestão / Assistente):
@@ -12,7 +12,9 @@ export const ACTIONS = {
   readShift: "atividades:ler",
   editShift: "atividades:executar",
   readHistory: "atividades:acompanhar",
-  configure: "atividades:configurar"
+  configure: "atividades:configurar",
+  readTeam: "equipe:ver",
+  refreshTeam: "equipe:atualizar"
 };
 
 export async function authorize(request, action) {

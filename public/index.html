@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="navigation.css">
   <link rel="stylesheet" href="insights.css">
   <link rel="stylesheet" href="activities.css">
+  <link rel="stylesheet" href="team.css">
 </head>
 <body>
   <div class="app-shell">
@@ -24,6 +25,7 @@
         <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
         <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
         <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
+        <button type="button" class="side-link" data-menu="equipe"><span aria-hidden="true">▨</span> Equipe</button>
       </nav>
       <div class="sidebar-foot">TRIUNFO LOGÍSTICA</div>
     </aside>
@@ -63,6 +65,15 @@
         <button type="button" class="subtab active" data-activity="turno" aria-current="page">Turno</button>
         <button type="button" class="subtab" data-activity="acompanhamento">Acompanhamento</button>
         <button type="button" class="subtab" data-activity="configuracao">Configuração</button>
+      </nav>
+      <nav class="subnav" id="teamNav" aria-label="Seções da equipe" hidden>
+        <button type="button" class="subtab active" data-team="resumo" aria-current="page">Resumo</button>
+        <button type="button" class="subtab" data-team="servico">De serviço</button>
+        <button type="button" class="subtab" data-team="calendario">Calendário</button>
+        <button type="button" class="subtab" data-team="pessoas">Pessoas</button>
+        <button type="button" class="subtab" data-team="ferias">Férias e coberturas</button>
+        <button type="button" class="subtab" data-team="treinamentos">Treinamentos</button>
+        <button type="button" class="subtab" data-team="importacao">Importação</button>
       </nav>
       <section id="geral" class="tab-panel active">
         <div class="view-title" id="generalTitle"><p class="eyebrow">INDICADORES</p><h2>Operacional</h2></div>
@@ -207,6 +218,11 @@
         <p id="productionStatus" class="production-status" role="status" aria-live="polite">Aguardando consulta das planilhas.</p>
         <div id="productionContent"></div>
       </section>
+      <section id="equipe" class="tab-panel team-panel">
+        <div class="base-heading"><div><p class="eyebrow">EQUIPE TPS</p><h2 id="teamTitle">Resumo do quadro</h2><p id="teamSubtitle"></p></div><a class="base-upload" id="teamSheetLink" href="#" target="_blank" rel="noopener" hidden>Abrir planilha da equipe <span aria-hidden="true">↗</span></a></div>
+        <p class="base-status act-status-line" id="teamStatus" role="status" aria-live="polite"></p>
+        <div id="teamContent"></div>
+      </section>
       <section id="atividades" class="tab-panel activities-panel">
         <div class="base-heading"><div><p class="eyebrow">PASSAGEM DE SERVIÇO</p><h2>Atividades do turno</h2><p>Lista do turno, pendências herdadas e passagem para quem assume.</p></div><button type="button" class="production-refresh act-alerts" id="activitiesAlerts" aria-pressed="false">Ativar alertas</button></div>
         <p class="base-status act-status-line" id="activitiesStatus" role="status" aria-live="polite"></p>
@@ -242,6 +258,8 @@
   <script src="url-state.js"></script>
   <script src="shifts.js"></script>
   <script src="activities.js"></script>
+  <script src="team-schedule.js"></script>
+  <script src="team.js"></script>
   <script src="production.js"></script>
   <script src="discharge.js"></script>
   <script src="app.js"></script>

@@ -11,15 +11,17 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 | Navios | `dados_navios_dinamico_triunfo.xlsm` (ID `1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm`) | Operacional, Ocupação, Ferro gusa |
 | Lineup | Aba `LINEUP` da planilha de produção "outras" (Google Planilhas, ID `1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU`) | Lineup e peso previsto dos navios atracados |
 | Indicadores | `Base - Indicadores Operacionais TPS.xlsx` (ID `12ionZt6pJ7yeX59EUX-rppOCugcvp9F7`) | Descarga e Pesagem |
+| Equipe | Planilha da equipe TPS (arquivo .xlsx no Drive, ID `1qeQgIOmbg9jW1l0id6Sgt39y657PTzbM`) | Aba Equipe (somente leitura) |
 
 - As planilhas precisam estar compartilhadas como **"Qualquer pessoa com o link – Leitor"**.
 - O site guarda a última leitura das duas planilhas no Netlify Blobs e entrega essa cópia a quem abre o painel, sem esperar o download do Drive.
+- A planilha da equipe é relida só 1 vez por dia (na rodada das 03h de Brasília) ou pelo botão **Atualizar dados** com a aba Equipe aberta; nas outras abas, o botão relê navios e indicadores.
 - A cópia é renovada automaticamente a cada 6 horas pela função agendada `refresh-scheduled` (00h, 06h, 12h e 18h UTC, ou seja, 21h, 03h, 09h e 15h em Brasília). Funções agendadas só rodam no site publicado; numa prévia, use **Run now** em Functions no Netlify.
 - O botão **Atualizar dados**, no cabeçalho, relê as planilhas na hora (cerca de 20 s) e recarrega o painel. Se a última leitura tiver menos de 5 minutos, ele só avisa e não lê de novo.
 - Clicar no selo **"Dados até…"** abre o painel **O que mudou nas planilhas**. Cada leitura nova é comparada com a anterior: navios incluídos, encerrados ou corrigidos, volume parcial, lineup, ferro gusa, dias de descarga, plano mensal, ocorrências e pesagens. O histórico guarda as 15 últimas leituras em que houve alteração e começa a ser montado a partir da primeira leitura depois da publicação.
 - Se a cópia passar de 12 horas (por exemplo, se a rotina agendada falhar), o primeiro acesso relê a planilha sozinho.
 - Os nomes das abas e a posição das colunas precisam continuar iguais. Se uma aba obrigatória sumir, o painel mostra a última base salva com um aviso.
-- Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP` e/ou `TPS_SHEET_DISCHARGE` com o link do novo arquivo.
+- Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP`, `TPS_SHEET_DISCHARGE` e/ou `TPS_SHEET_TEAM` com o link do novo arquivo.
 - Se o Google estiver indisponível, o painel abre com a última base salva no Firestore (ou com a cópia inicial do pacote) e mostra o aviso "planilha indisponível" no topo.
 
 ## Aba Atividades (turnos dos assistentes)
@@ -57,6 +59,34 @@ Rastreio das atividades de cada turno e passagem de serviço. Os dados ficam no 
 Coleções no Firestore: `shiftAssistants`, `shiftConfig`, `shiftOverrides`, `taskTemplates`, `shifts` e `shifts/{turno}/tasks`.
 
 Para conferir se o Firestore está ligado, abra `https://SEU-SITE.netlify.app/api/atividades/status`. A resposta deve trazer `"storage":"firestore"`. Se vier erro 503, falta configurar `FIREBASE_SERVICE_ACCOUNT_JSON`.
+
+## Aba Equipe (quadro de pessoal)
+
+Somente leitura: a planilha da equipe é a fonte da verdade e o painel só lê dela, pela rota `/api/equipe` (com ponto único de permissão em `netlify/lib/access.mjs`, hoje liberado).
+
+- **Abas lidas:**
+  - **Cadastro:** pessoas, com a matrícula como chave. As colunas são encontradas pelo nome do cabeçalho; as auxiliares (seq, chave_grade…) são ignoradas.
+  - **Listas:** funções → categoria e equipes → turno, horário e escala.
+  - **Férias:** blocos mensais em formatos diferentes, inclusive bloco sem título, coluna MOTIVO (férias, afastamento, mobilidade, cargo vago) e cobertura em coluna própria ou no segundo par CHAPA/NOME. A mesma ausência repetida em dois blocos vira um registro só.
+  - **NOVOS TREINAMENTOS:** texto livre, organizado em treinamento e participantes, com situação, certificado e datas. O texto que não dá para estruturar fica guardado como observação.
+- **Abas ignoradas:** Resumo, Escala e DATAS 02X02. O painel recalcula o que elas mostram.
+- **Vínculo de pessoas:** pela matrícula. Sem ela, ou quando a matrícula é de outra pessoa, vale o nome sem acento, caixa e sufixos (" - A", "(OPMC)", "- AVISADO"…), com tolerância a pequenos erros de digitação. Quem não está no Cadastro (ex.: "NÃO É TPS") entra como externo.
+- **Relatório de importação** (subaba Importação): o que não foi interpretado ou vinculado. Inclui matrícula trocada, data digitada como texto, férias longas demais, externos, bloco sem título e menções a 12x36.
+- **Escalas** (`public/team-schedule.js`):
+  - **2x2 desde 01/06/2026:** 15–16/10/2026 = A (dia) + C (noite), 17–18/10/2026 = B + D, e assim por diante. Antes de 01/06/2026, as equipes A–D não são calculadas.
+  - **Intermediária:** um dia adiantada (16/10/2026 = 1º dia).
+  - **Capatazia Dia** 09:00–18:48 e **Capatazia Noite** 21:00–06:48, de segunda a sexta.
+  - **Administrativo:** de segunda a sexta. **Gestão:** sem escala.
+  - **Plantão noturno:** pertence à data em que começou.
+- **Subabas:**
+  - Resumo: mesma lógica da aba Resumo da planilha, mais as transferências.
+  - De serviço.
+  - Calendário.
+  - Pessoas: com a ficha de cada pessoa.
+  - Férias e coberturas: com os alertas de conflito.
+  - Treinamentos.
+  - Importação.
+- **Escala diferenciada:** observações que citam escala, horário, folga, vespertino ou noite aparecem destacadas, sem interpretação do texto.
 
 ## Testar no computador
 

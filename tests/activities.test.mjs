@@ -278,3 +278,14 @@ test("API: anexo enviado como arquivo e lido de volta", async () => {
     useAttachmentsStore(null);
   }
 });
+
+test("escala noturna invertida da primeira versão é corrigida uma vez (Andrés = C em 15–16/10)", async () => {
+  const fresh = memoryStore();
+  await fresh.set("shiftConfig", "main", { hours: { dayStart: "07:00", nightStart: "19:00" }, rotations: { D: A.DEFAULT_CONFIG.rotations.D, N: { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-13" } } });
+  const fixed = await A.getConfig(fresh);
+  assert.deepEqual(fixed.rotations.N, { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-15" });
+  assert.ok(fixed.fixedNightRotationAt);
+  const edited = memoryStore();
+  await edited.set("shiftConfig", "main", { hours: { dayStart: "07:00", nightStart: "19:00" }, rotations: { D: A.DEFAULT_CONFIG.rotations.D, N: { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-13" } }, updatedBy: { name: "Gestão" } });
+  assert.equal((await A.getConfig(edited)).rotations.N.referenceDate, "2026-10-13", "escala alterada pela tela não é mexida");
+});

@@ -1,7 +1,7 @@
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null };
+const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", teamView: "resumo", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null };
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const fmtOne = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtTwo = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -322,13 +322,14 @@ function closeDrawer(){state.activeDrawer=null;$("vesselDrawer").classList.remov
 
 function activateNavigation(){
   const indicatorMenu=state.menu==="indicadores";
-  $("indicatorNav").hidden=!indicatorMenu;$("lineupNav").hidden=state.menu!=="lineup";$("activityNav").hidden=state.menu!=="atividades";
+  $("indicatorNav").hidden=!indicatorMenu;$("lineupNav").hidden=state.menu!=="lineup";$("activityNav").hidden=state.menu!=="atividades";$("teamNav").hidden=state.menu!=="equipe";
   document.querySelectorAll(".side-link").forEach(button=>{const active=button.dataset.menu===state.menu;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-indicator]").forEach(button=>{const active=button.dataset.indicator===state.indicator;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-lineup]").forEach(button=>{const active=button.dataset.lineup===state.lineupView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
+  document.querySelectorAll("[data-team]").forEach(button=>{const active=button.dataset.team===state.teamView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:(state.lineupView==="mares"?"mares":"lineup");
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
@@ -338,6 +339,7 @@ function activateNavigation(){
   if(visible==="producao")window.productionPanel?.load();
   if(visible==="descarga"||visible==="pesagem")window.dischargePanel?.load();
   window.activitiesPanel?.show(state.menu==="atividades"?state.activityView:null);
+  window.teamPanel?.show(state.menu==="equipe"?state.teamView:null);
   renderDataSeal();
   syncUrl();
 }
@@ -360,6 +362,7 @@ function setupNavigation(){
   $("indicatorNav").addEventListener("click",event=>{const button=event.target.closest("[data-indicator]");if(!button)return;state.indicator=button.dataset.indicator;activateNavigation()});
   $("lineupNav").addEventListener("click",event=>{const button=event.target.closest("[data-lineup]");if(!button)return;state.lineupView=button.dataset.lineup;activateNavigation()});
   $("activityNav").addEventListener("click",event=>{const button=event.target.closest("[data-activity]");if(!button)return;state.activityView=button.dataset.activity;activateNavigation()});
+  $("teamNav").addEventListener("click",event=>{const button=event.target.closest("[data-team]");if(!button)return;state.teamView=button.dataset.team;activateNavigation()});
   menuButton.addEventListener("mouseenter",()=>{if(!hoverEnabled.matches)return;clearTimeout(closeTimer);hovered=true;syncMenu()});
   menuButton.addEventListener("mouseleave",()=>{if(!hoverEnabled.matches)return;closeTimer=setTimeout(()=>{if(!sidebar.matches(":hover")){hovered=false;syncMenu()}},350)});
   sidebar.addEventListener("mouseenter",()=>{if(!hoverEnabled.matches)return;clearTimeout(closeTimer);hovered=true;syncMenu()});
@@ -581,6 +584,7 @@ const urlState={applying:false,pending:null};
 function currentView(){
   if(state.menu==="producao")return "producao";
   if(state.menu==="atividades")return state.activityView==="turno"?"atividades":state.activityView;
+  if(state.menu==="equipe")return state.teamView==="resumo"?"equipe":`equipe-${state.teamView}`;
   if(state.menu==="lineup")return state.lineupView==="mares"?"mares":"lineup";
   return state.indicator;
 }
@@ -607,6 +611,7 @@ function applyUrl(search){
   try{
     if(target.view==="producao")state.menu="producao";
     else if(["atividades","acompanhamento","configuracao"].includes(target.view)){state.menu="atividades";state.activityView=target.view==="atividades"?"turno":target.view}
+    else if(target.view==="equipe"||target.view.startsWith("equipe-")){state.menu="equipe";state.teamView=target.view==="equipe"?"resumo":target.view.slice(7)}
     else if(target.view==="lineup"||target.view==="mares"){state.menu="lineup";state.lineupView=target.view==="mares"?"mares":"planejamento"}
     else{state.menu="indicadores";state.indicator=target.view}
     if(target.view==="operacional"||target.view==="ocupacao"){
@@ -646,12 +651,16 @@ function setupRefresh(){
   button.addEventListener("click",async()=>{
     if(button.disabled)return;
     button.disabled=true;button.classList.add("is-busy");label.textContent="Lendo planilhas…";
-    announce("Lendo as planilhas de navios e de indicadores no Google. Isso leva cerca de 20 segundos.");
+    // Na aba Equipe, o botão relê só a planilha da equipe e atualiza a aba sem recarregar a página.
+    const team=state.menu==="equipe";
+    announce(team?"Lendo a planilha da equipe no Google…":"Lendo as planilhas de navios e de indicadores no Google. Isso leva cerca de 20 segundos.");
     try{
-      const response=await fetch("/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"}});
+      const response=await fetch(team?"/api/refresh?base=equipe":"/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"}});
       const result=await response.json().catch(()=>({}));
-      if(result.status==="refreshed"){announce("Dados atualizados. Recarregando o painel…");setTimeout(()=>location.reload(),600);return}
-      if(result.status==="recent"){const minutes=Math.max(1,Math.ceil((result.retryInMs||0)/60000));announce(`Os dados foram lidos há menos de 5 minutos. Tente de novo em ${minutes} ${minutes===1?"minuto":"minutos"}.`,7000)}
+      if(result.status==="refreshed"&&team){await window.teamPanel?.reload();renderDataSeal();announce("Planilha da equipe atualizada.",5000)}
+      else if(result.status==="refreshed"){announce("Dados atualizados. Recarregando o painel…");setTimeout(()=>location.reload(),600);return}
+      else if(result.status==="partial"&&team)announce(Object.values(result.results||{})[0]?.error||"Não foi possível ler a planilha da equipe agora.",7000);
+      else if(result.status==="recent"){const minutes=Math.max(1,Math.ceil((result.retryInMs||0)/60000));announce(`Os dados foram lidos há menos de 5 minutos. Tente de novo em ${minutes} ${minutes===1?"minuto":"minutos"}.`,7000)}
       else if(result.status==="running")announce("Outra atualização já está em andamento. Aguarde alguns segundos e recarregue a página.",7000);
       else if(result.status==="partial"){const failed=Object.entries(result.results||{}).filter(([,r])=>!r.ok).map(([kind])=>kind==="operations"?"navios":"indicadores");announce(`Não foi possível ler a planilha de ${failed.join(" e ")}. A outra foi atualizada; recarregando…`,7000);setTimeout(()=>location.reload(),2500);return}
       else announce(result.error||"Não foi possível atualizar agora. Tente novamente em alguns minutos.",7000);
@@ -685,7 +694,7 @@ function changesBaseHtml(title,meta,current){
 function renderChanges(){
   const panel=$("changesPanel");if(!panel||panel.hidden)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
-  const bases=[["Planilha de navios",state.dataMeta,!dischargeView],["Planilha de indicadores",window.dischargePanel?.getMeta(),dischargeView]];
+  const bases=state.menu==="equipe"?[["Planilha da equipe",window.teamPanel?.getMeta(),true]]:[["Planilha de navios",state.dataMeta,!dischargeView],["Planilha de indicadores",window.dischargePanel?.getMeta(),dischargeView]];
   if(dischargeView)bases.reverse();
   $("changesBody").innerHTML=bases.map(([title,meta,current])=>changesBaseHtml(title,meta,current)).join("");
 }
@@ -708,6 +717,13 @@ function renderDataSeal(){
   if(state.menu==="producao"||state.menu==="atividades"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
   wrap.hidden=false;
   renderChanges();
+  if(state.menu==="equipe"){
+    const meta=window.teamPanel?.getMeta();
+    if(!meta){seal.dataset.level="loading";seal.textContent="Lendo a planilha da equipe…";seal.title="";return}
+    seal.dataset.level="ok";seal.textContent=`Planilha da equipe · lida em ${brDateTime(meta.generatedAt)}`;
+    seal.title="Horário em que o painel leu a planilha da equipe (1 vez por dia ou pelo botão Atualizar dados). Clique para ver o que mudou.";
+    return;
+  }
   const meta=dischargeView?window.dischargePanel?.getMeta():state.dataMeta;
   const base=dischargeView?"planilha de indicadores":"planilha de navios";
   if(!meta){seal.dataset.level="loading";seal.textContent=dischargeView?"Lendo a planilha de indicadores…":"Lendo a planilha de navios…";seal.title="";return}
@@ -733,3 +749,5 @@ document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)re
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});
 /* Clique numa notificação de atividade: abre a lista do turno. */
 window.openActivities=()=>{state.menu="atividades";state.activityView="turno";activateNavigation()};
+/* Ficha de pessoa aberta de outra subaba da Equipe: vai para Pessoas. */
+window.openTeamView=view=>{state.menu="equipe";state.teamView=view;activateNavigation()};
