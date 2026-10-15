@@ -70,3 +70,28 @@
 @media(max-width:720px){.base-day-chart{min-width:0}.base-day-chart.is-compact .base-day>span{font-size:.67rem}.base-day-chart.is-compact .base-day-value{font-size:.56rem}}
 a.base-upload{display:inline-flex;align-items:center;text-decoration:none}
 a.base-upload[hidden]{display:none}
+/* Descarga: meta diária no card, escolha Peso / Vagões / Peso e vagões e linha de vagões */
+.base-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.base-kpis .base-kpi-target{border-top-color:var(--trl-texto)}
+@media(max-width:1250px){.base-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.base-kpis{grid-template-columns:1fr 1fr}}
+.base-chart-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.base-chart-mode{display:inline-flex;border:1px solid var(--trl-cinza-300);border-radius:5px;overflow:hidden}
+.base-chart-mode button{border:0;border-left:1px solid var(--trl-cinza-300);background:var(--trl-branco);color:var(--trl-cinza-800);padding:7px 12px;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.base-chart-mode button:first-child{border-left:0}
+.base-chart-mode button:hover{background:var(--trl-cinza-100)}
+.base-chart-mode button[aria-pressed="true"]{background:var(--trl-texto);color:var(--trl-branco)}
+.base-chart-mode button:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:-2px}
+.base-day-chart{position:relative}
+.base-day-chart.is-wagons .base-day-track i{background:var(--trl-cinza-600)}
+.base-wagon-line{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.base-day-chart.is-both .base-day-track i{background:var(--trl-cinza-300)}
+.base-day-chart.is-both .base-day:hover .base-day-track i{background:var(--trl-cinza-400)}
+.base-wagon-line polyline{fill:none;stroke:var(--trl-chart-2);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.base-wagon-line circle{fill:var(--trl-branco);stroke:var(--trl-chart-2);stroke-width:2}
+.base-wagon-line text{fill:var(--trl-chart-2);font-size:11px;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--trl-branco);stroke-width:3px}
+.base-target-legend{gap:6px 18px}
+.base-target-legend>span{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.base-target-legend i.base-legend-wagons{display:inline-block;width:22px;height:0;border-top:2.5px solid var(--trl-chart-2);position:relative}
+.base-target-legend i.base-legend-wagons::after{content:"";position:absolute;left:7px;top:-5.5px;width:6px;height:6px;border:2px solid var(--trl-chart-2);border-radius:50%;background:var(--trl-branco)}
+.export-stage .base-chart-mode{display:none}

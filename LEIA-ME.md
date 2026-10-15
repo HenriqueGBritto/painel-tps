@@ -22,9 +22,53 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 - Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP` e/ou `TPS_SHEET_DISCHARGE` com o link do novo arquivo.
 - Se o Google estiver indisponível, o painel abre com a última base salva no Firestore (ou com a cópia inicial do pacote) e mostra o aviso "planilha indisponível" no topo.
 
+## Aba Atividades (turnos dos assistentes)
+
+Rastreio das atividades de cada turno e passagem de serviço. Os dados ficam no Firestore e só a API (`/api/atividades/…`) acessa.
+
+- **Turnos:** Diurno 07:00–19:00 e Noturno 19:00–07:00, horário de Brasília. O turno é identificado pela data em que começa: uma atividade às 02:00 do dia 15 pertence ao Noturno do dia 14.
+- **Escala 2x2:** rodízio do Diurno (Hélio e Roger) e do Noturno (Andrés e Matheus), 2 dias cada. A referência inicial é 13/10/2026, primeiro dia de Hélio e de Andrés. Trocas, faltas e coberturas são ajustes pontuais por turno. Tudo isso pode ser alterado em **Atividades → Configuração**, que mostra a prévia dos próximos 14 dias.
+- **Lista do turno:** gerada a partir dos modelos (atividades fixas) no primeiro acesso ao turno, mais as atividades incluídas pelo "+" no fim da lista e as pendências herdadas. Modelo incluído ou alterado vale a partir do turno atual; turnos encerrados não mudam.
+- **Atividades fixas iniciais:** no primeiro uso o painel cadastra a lista da operação.
+  - **Sem horário, nos dois turnos:** atualizar SOF, GEPORT e lineup, dobra de TPA, produção do navio.
+  - **Com prazo, no turno em que o prazo cai:** pagamento de estiva (08:30), operadores do plano B (16:00), requisições de estiva por período (03:30, 09:00, 15:30 e 18:30, com lembrete 30 min antes), DA9 por período (05:15, 11:15, 17:15 e 20:15).
+  - Tudo pode ser editado em Configuração.
+- **Em cada atividade:**
+  - a caixa de seleção marca como concluída (quem e quando ficam registrados);
+  - "Não feita" pede o motivo;
+  - "Observação" guarda um comentário;
+  - "Atribuir" passa para outra pessoa.
+- **Responsável:** por padrão é o escalado do turno. Um modelo pode ter responsável fixo; se essa pessoa não estiver no turno, a atividade mostra o aviso para atribuir a outra.
+- **Ordem da lista:** arraste a atividade pela alça de seis pontinhos à esquerda, com mouse ou dedo (ou use as setas do teclado com a alça selecionada). Só aparece em turnos ainda não encerrados. A ordem vale para o turno, e as atividades fixas passam a nascer nessa ordem nos turnos seguintes.
+- **Anexos nas observações:** em cada atividade, "Observação / anexo" aceita texto e arquivos: fotos, PDF, Word, Excel ou texto, até 5 MB cada e 8 por atividade. Fotos grandes são reduzidas no navegador antes do envio. Se a atividade passar para o turno seguinte, os anexos vão junto. Os arquivos ficam no Netlify Blobs (loja `painel-tps-anexos`); o Firestore guarda só a lista.
+- **Calendário:** no cabeçalho do turno, "Ver o dia" e "Turno" abrem qualquer turno. Além disso, o Acompanhamento mostra vários dias de uma vez.
+- **Baixar a passagem:** turnos encerrados têm os botões PDF e JPG, na tela do turno e no Acompanhamento. O arquivo traz:
+  - cabeçalho com a marca;
+  - quem encerrou e quem recebeu;
+  - observações da passagem;
+  - a lista com a situação, o responsável e a observação de cada atividade (documentos pelo nome);
+  - no fim, as imagens anexadas, com o nome da atividade.
+- **Atividade fixa que se repete:** se ficar pendente (ex.: "Atualizar SOF"), ela não é duplicada no turno seguinte. A de lá ganha a marca "ficou pendente também no turno anterior".
+- **Passagem de serviço:** "Encerrar turno" grava as observações e leva as pendências para o turno seguinte. Se ninguém encerrar, a função agendada `atividades-scheduled` (07:02 e 19:02) leva as pendências mesmo assim, marcadas "sem passagem registrada". Quem assume confirma o recebimento.
+- **Alertas:** o botão "Ativar alertas" pede permissão ao navegador. Atividades com horário avisam no horário e, se o modelo pedir, X minutos antes (ex.: 30 min para pedidos de estiva). Só funcionam com o painel aberto em alguma aba. Com várias abas abertas, só uma avisa.
+- **Identificação:** enquanto não há login, quem usa confirma o próprio nome a cada turno, e o nome fica salvo no navegador. Toda gravação guarda quem fez e quando. As rotas passam por `authorize()` em `netlify/lib/access.mjs`, onde o login vai entrar.
+- **Acesso:** sem login, qualquer pessoa com o endereço do site consegue marcar atividades e alterar a escala e os modelos.
+
+Coleções no Firestore: `shiftAssistants`, `shiftConfig`, `shiftOverrides`, `taskTemplates`, `shifts` e `shifts/{turno}/tasks`.
+
+Para conferir se o Firestore está ligado, abra `https://SEU-SITE.netlify.app/api/atividades/status`. A resposta deve trazer `"storage":"firestore"`. Se vier erro 503, falta configurar `FIREBASE_SERVICE_ACCOUNT_JSON`.
+
+## Testar no computador
+
+Com o Node.js 22 instalado, na pasta do projeto:
+
+1. `npm install` (só na primeira vez)
+2. `npm test` roda os testes.
+3. `npm run dev` abre o painel em `http://localhost:8888`. A aba Atividades guarda os dados em memória, e eles somem ao parar o servidor (Ctrl+C). Os indicadores leem as planilhas reais no Google.
+
 ## Antes de publicar
 
-`FIREBASE_SERVICE_ACCOUNT_JSON` é opcional: só serve como reserva, caso o Google esteja indisponível. A variável `TPS_IMPORT_PIN` não é mais usada e pode ser apagada no Netlify.
+`FIREBASE_SERVICE_ACCOUNT_JSON` é **obrigatório para a aba Atividades**. Para o resto do painel ele só serve como reserva, caso o Google esteja indisponível. A variável `TPS_IMPORT_PIN` não é mais usada e pode ser apagada no Netlify.
 
 ## Publicação
 

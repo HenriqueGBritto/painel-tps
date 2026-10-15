@@ -1,7 +1,7 @@
 /* Visão do painel na URL (?aba=…&ano=…&mes=…&de=…&ate=…), para links compartilháveis.
    Funções puras, testadas em tests/url-state.test.mjs. Expõe window.TpsUrlState. */
 (function (root) {
-  const VIEWS = ["operacional", "ocupacao", "descarga", "pesagem", "lineup", "mares", "producao"];
+  const VIEWS = ["operacional", "ocupacao", "descarga", "pesagem", "lineup", "mares", "producao", "atividades", "acompanhamento", "configuracao"];
   const DEFAULT_VIEW = "operacional";
   const isDate = value => /^20\d\d-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value || "");
   const list = (value, check) => [...new Set(String(value || "").split(",").map(Number).filter(check))].sort((a, b) => a - b);

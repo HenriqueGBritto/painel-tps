@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="discharge.css">
   <link rel="stylesheet" href="navigation.css">
   <link rel="stylesheet" href="insights.css">
+  <link rel="stylesheet" href="activities.css">
 </head>
 <body>
   <div class="app-shell">
@@ -22,6 +23,7 @@
         <button type="button" class="side-link active" data-menu="indicadores" aria-current="page"><span aria-hidden="true">▦</span> Indicadores</button>
         <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
         <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
+        <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
       </nav>
       <div class="sidebar-foot">TRIUNFO LOGÍSTICA</div>
     </aside>
@@ -56,6 +58,11 @@
       <nav class="subnav" id="lineupNav" aria-label="Seções do lineup" hidden>
         <button type="button" class="subtab active" data-lineup="planejamento" aria-current="page">Planejamento</button>
         <button type="button" class="subtab" data-lineup="mares">Tábua de maré</button>
+      </nav>
+      <nav class="subnav" id="activityNav" aria-label="Seções de atividades" hidden>
+        <button type="button" class="subtab active" data-activity="turno" aria-current="page">Turno</button>
+        <button type="button" class="subtab" data-activity="acompanhamento">Acompanhamento</button>
+        <button type="button" class="subtab" data-activity="configuracao">Configuração</button>
       </nav>
       <section id="geral" class="tab-panel active">
         <div class="view-title" id="generalTitle"><p class="eyebrow">INDICADORES</p><h2>Operacional</h2></div>
@@ -167,8 +174,8 @@
         <div class="base-heading"><div><p class="eyebrow">BASE DE INDICADORES OPERACIONAIS</p><h2>Descarga de ferro gusa</h2><p>Volume e ocorrências pela data da descarga.</p></div><a class="base-upload" id="dischargeSheetLink" href="#" target="_blank" rel="noopener" hidden>Abrir planilha <span aria-hidden="true">↗</span></a></div>
         <div class="base-filters" aria-label="Filtros de descarga"><label>Ano<select id="dischargeYear"></select></label><label>Mês<select id="dischargeMonth"></select></label><label>De<input id="dischargeStart" type="date"></label><label>Até<input id="dischargeEnd" type="date"></label><button type="button" id="dischargeLastWeek" class="base-reset">Últimos 7 dias</button></div>
         <p class="base-status" id="dischargeStatus" role="status" aria-live="polite"></p>
-        <div class="base-kpis" aria-label="Resumo da descarga"><article><span>VOLUME DESCARREGADO</span><strong id="dischargeTons">—</strong><small>toneladas no período</small></article><article><span>VAGÕES DESCARREGADOS</span><strong id="dischargeWagons">—</strong><small>conforme a coluna VGS DESCARREGADOS</small></article><article><span>MÉDIA DIÁRIA</span><strong id="dischargeAverage">—</strong><small>dias com descarga registrada</small></article><article><span>TEMPO DE OCORRÊNCIAS</span><strong id="dischargeStopTime">—</strong><small>paradas com duração informada</small></article></div>
-        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EVOLUÇÃO DIÁRIA</p><h3>Toneladas descarregadas</h3></div><span id="dischargeChartCaption"></span></div><div class="base-chart-scroll"><div class="base-day-chart" id="dischargeDailyChart"></div></div><p class="base-target-legend" id="dischargeTargetLegend" hidden></p><p class="base-chart-detail" id="dischargeChartDetail" role="status">Passe o mouse ou toque em uma coluna para ver o valor exato.</p><p class="chart-insight" id="dischargeDailyInsight"></p><details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Período</th><th>Volume (t)</th></tr></thead><tbody id="dischargeDailyRows"></tbody></table></div></details><p class="base-footnote" id="dischargeMethodNote">A descarga é reconhecida pela data da coluna “DATA DA DESCARGA” e pelo status “FINALIZADO”. Registros em descarga sem data de conclusão não entram no volume realizado.</p></section>
+        <div class="base-kpis" aria-label="Resumo da descarga"><article><span>VOLUME DESCARREGADO</span><strong id="dischargeTons">—</strong><small>toneladas no período</small></article><article><span>VAGÕES DESCARREGADOS</span><strong id="dischargeWagons">—</strong><small>conforme a coluna VGS DESCARREGADOS</small></article><article><span>MÉDIA DIÁRIA</span><strong id="dischargeAverage">—</strong><small>dias com descarga registrada</small></article><article><span>TEMPO DE OCORRÊNCIAS</span><strong id="dischargeStopTime">—</strong><small>paradas com duração informada</small></article><article class="base-kpi-target"><span>META DIÁRIA</span><strong id="dischargeTarget">—</strong><small id="dischargeTargetNote">plano do mês ÷ dias do mês</small></article></div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EVOLUÇÃO DIÁRIA</p><h3 id="dischargeChartTitle">Toneladas descarregadas</h3></div><div class="base-chart-tools"><div class="base-chart-mode" id="dischargeChartMode" role="group" aria-label="O que mostrar no gráfico"><button type="button" data-mode="tons" aria-pressed="true">Peso</button><button type="button" data-mode="wagons" aria-pressed="false">Vagões</button><button type="button" data-mode="both" aria-pressed="false">Peso e vagões</button></div><span id="dischargeChartCaption"></span></div></div><div class="base-chart-scroll"><div class="base-day-chart" id="dischargeDailyChart"></div></div><p class="base-target-legend" id="dischargeTargetLegend" hidden></p><p class="base-chart-detail" id="dischargeChartDetail" role="status">Passe o mouse ou toque em uma coluna para ver o valor exato.</p><p class="chart-insight" id="dischargeDailyInsight"></p><details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead><tr><th>Período</th><th>Volume (t)</th><th>Vagões</th><th>Meta diária (t)</th></tr></thead><tbody id="dischargeDailyRows"></tbody></table></div></details><p class="base-footnote" id="dischargeMethodNote">A descarga é reconhecida pela data da coluna “DATA DA DESCARGA” e pelo status “FINALIZADO”. Registros em descarga sem data de conclusão não entram no volume realizado.</p></section>
         <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PLANO DE DESCARGA</p><h3>Desafio, plano e realizado</h3></div><span id="dischargePlanPeriod"></span></div><div class="base-plan-cards" id="dischargePlanCards"></div><div class="base-plan-history" id="dischargePlanHistory"></div><p class="base-footnote">Os três valores são metas e realizado do mês completo na planilha; não são rateados pelo filtro de dias. Meses sem plano informado não aparecem.</p></section>
         <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">OCORRÊNCIAS DA DESCARGA</p><h3>Tempo por ocorrência</h3></div><span id="dischargeOccurrenceCaption"></span></div><div class="base-occurrence-list" id="dischargeOccurrenceList"></div><p class="base-footnote">Duração da coluna “TEMPO”. Linhas de recebimento com 00:00 não são somadas como paralisação; o número de registros continua visível.</p></section>
       </section>
@@ -200,6 +207,22 @@
         <p id="productionStatus" class="production-status" role="status" aria-live="polite">Aguardando consulta das planilhas.</p>
         <div id="productionContent"></div>
       </section>
+      <section id="atividades" class="tab-panel activities-panel">
+        <div class="base-heading"><div><p class="eyebrow">PASSAGEM DE SERVIÇO</p><h2>Atividades do turno</h2><p>Lista do turno, pendências herdadas e passagem para quem assume.</p></div><button type="button" class="production-refresh act-alerts" id="activitiesAlerts" aria-pressed="false">Ativar alertas</button></div>
+        <p class="base-status act-status-line" id="activitiesStatus" role="status" aria-live="polite"></p>
+        <div id="activitiesShift" class="act-shift"></div>
+      </section>
+      <section id="acompanhamento" class="tab-panel activities-panel">
+        <div class="base-heading"><div><p class="eyebrow">ATIVIDADES</p><h2>Acompanhamento dos turnos</h2><p>O que foi feito, o que ficou pendente e as passagens de serviço.</p></div></div>
+        <form class="base-filters" id="activitiesHistoryForm" aria-label="Filtros do acompanhamento"><label>De<input id="activitiesFrom" type="date" required></label><label>Até<input id="activitiesTo" type="date" required></label><label>Assistente<select id="activitiesWho"><option value="">Todos</option></select></label><button type="submit" class="act-button is-primary">Filtrar</button></form>
+        <p class="base-status act-status-line" id="activitiesHistoryStatus" role="status" aria-live="polite"></p>
+        <div id="activitiesHistory"></div>
+      </section>
+      <section id="configuracao" class="tab-panel activities-panel">
+        <div class="base-heading"><div><p class="eyebrow">ATIVIDADES</p><h2>Configuração</h2><p>Escala 2x2, ajustes pontuais, atividades fixas e equipe.</p></div></div>
+        <p class="base-status act-status-line" id="activitiesSettingsStatus" role="status" aria-live="polite"></p>
+        <div id="activitiesSettings"></div>
+      </section>
     </main>
   </div>
 
@@ -217,6 +240,8 @@
   <script src="xlsx.full.min.js"></script>
   <script src="metrics.js"></script>
   <script src="url-state.js"></script>
+  <script src="shifts.js"></script>
+  <script src="activities.js"></script>
   <script src="production.js"></script>
   <script src="discharge.js"></script>
   <script src="app.js"></script>

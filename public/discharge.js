@@ -4,7 +4,8 @@
   const integer = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
   const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
   const $ = id => document.getElementById(id);
-  const state = { data: null, ready: false, chartPoints: [] };
+  const savedMode = (() => { try { return localStorage.getItem("tps-descarga-grafico"); } catch { return null; } })();
+  const state = { data: null, ready: false, chartPoints: [], chartMode: ["tons", "wagons", "both"].includes(savedMode) ? savedMode : "tons" };
   const fullDate = value => `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
   const isLastDischargeWindow = (start, end) => {
     const range = TpsMetrics.lastDischargeWindow(state.data.dischargeDays);
@@ -72,6 +73,7 @@
     $("dischargeWagons").textContent = integer.format(wagons);
     $("dischargeAverage").textContent = tons(days.length ? total / days.length : 0);
     $("dischargeStopTime").textContent = duration(stopped);
+    renderTargetCard(start, end, days.length ? total / days.length : 0);
     const context = isLastDischargeWindow(start, end) ? " · 7 dias até a última descarga registrada" : "";
     $("dischargeStatus").textContent = `Exibindo ${fullDate(start)} a ${fullDate(end)}${context} · ${days.length} ${days.length === 1 ? "dia" : "dias"} com descarga`;
     $("dischargeMethodNote").textContent = `Descarga reconhecida pela data da coluna “DATA DA DESCARGA” e status “FINALIZADO”. ${state.data.inProgress?.records || 0} registros “EM DESCARGA” sem data de conclusão não entram no volume realizado.`;
@@ -79,7 +81,35 @@
     renderPlan(start, end);
     renderOccurrences(events);
   }
+  /* Card "Meta diária": peso que deveria ser descarregado por dia (plano do mês ÷ dias do mês).
+     Com mais de um mês no período, mostra a média das metas dos dias do período. */
+  function renderTargetCard(start, end, average) {
+    const rates = TpsMetrics.dailyTargets(state.data.plans || [], start, end).days.map(day => day.rate).filter(rate => rate !== null);
+    if (!rates.length) {
+      $("dischargeTarget").textContent = "—";
+      $("dischargeTargetNote").textContent = "sem plano do mês para o período";
+      return;
+    }
+    const target = rates.reduce((sum, rate) => sum + rate, 0) / rates.length;
+    const sameMonth = rates.every(rate => Math.abs(rate - rates[0]) < 0.5);
+    $("dischargeTarget").textContent = `${integer.format(target)} t`;
+    const reached = average ? ` · média diária: ${integer.format(average / target * 100)}% da meta` : "";
+    $("dischargeTargetNote").textContent = `${sameMonth ? "plano do mês ÷ dias do mês" : "média das metas do período"}${reached}`;
+  }
+
+  /* Gráfico diário: "tons" (colunas de peso + meta diária), "wagons" (colunas de vagões)
+     ou "both" (colunas de peso + meta, com a linha de vagões numa escala própria). */
+  const CHART_TITLES = { tons: "Toneladas descarregadas", wagons: "Vagões descarregados", both: "Toneladas e vagões descarregados" };
+  const wagonsText = value => `${integer.format(value)} ${value === 1 ? "vagão" : "vagões"}`;
+  function pointDetail(point, mode) {
+    const parts = [point.fullLabel || point.label];
+    if (mode !== "wagons") parts.push(tons(point.value));
+    if (mode !== "tons") parts.push(wagonsText(point.wagons));
+    if (mode !== "wagons" && point.target) parts.push(`meta diária ${tons(point.target)}`);
+    return parts.join(" · ");
+  }
   function renderDaily(days, start, end) {
+    const mode = state.chartMode;
     const map = new Map(days.map(item => [item.date, item]));
     const dayCount = Math.round((new Date(`${end}T00:00:00Z`) - new Date(`${start}T00:00:00Z`)) / 86400000) + 1;
     const monthly = dayCount > 45;
@@ -89,38 +119,93 @@
       const last = end.slice(0, 7);
       for (let i = 0; cursor <= last && i < 120; i++) {
         const [year, month] = cursor.split("-").map(Number);
-        const value = days.filter(item => item.date.startsWith(cursor)).reduce((sum, item) => sum + item.tons, 0);
-        points.push({ label: `${months[month - 1].slice(0, 3)}/${String(year).slice(2)}`, value });
+        const inMonth = days.filter(item => item.date.startsWith(cursor));
+        points.push({ label: `${months[month - 1].slice(0, 3)}/${String(year).slice(2)}`, value: inMonth.reduce((sum, item) => sum + item.tons, 0), wagons: inMonth.reduce((sum, item) => sum + item.wagons, 0) });
         cursor = month === 12 ? `${year + 1}-01` : monthKey(year, month + 1);
       }
     } else {
       for (let i = 0; i < dayCount; i++) {
         const date = addDays(start, i);
-        points.push({ label: dayCount > 14 ? date.slice(8, 10) : dateLabel(date), fullLabel: dateLabel(date), value: map.get(date)?.tons || 0, showLabel: dayCount <= 14 || i % (dayCount > 28 ? 5 : 3) === 0 || i === dayCount - 1 });
+        points.push({ label: dayCount > 14 ? date.slice(8, 10) : dateLabel(date), fullLabel: dateLabel(date), value: map.get(date)?.tons || 0, wagons: map.get(date)?.wagons || 0, showLabel: dayCount <= 14 || i % (dayCount > 28 ? 5 : 3) === 0 || i === dayCount - 1 });
       }
     }
-    $("dischargeChartCaption").textContent = monthly ? "Agrupado por mês para períodos longos" : `${points.length} dias no intervalo`;
-    state.chartPoints=points;
-    $("dischargeDailyRows").innerHTML=points.map(point=>`<tr><td>${escape(point.fullLabel||point.label)}</td><td>${tons(point.value)}</td></tr>`).join("") || '<tr><td colspan="2">Sem dados.</td></tr>';
-    const peak=[...points].sort((a,b)=>b.value-a.value)[0];
-    $("dischargeDailyInsight").textContent=peak?.value>0?`Leitura: maior volume ${monthly?"mensal":"diário"} em ${peak.fullLabel||peak.label}, com ${tons(peak.value)}. Os períodos sem descarga concluída aparecem com zero.`:"Leitura: não há descarga concluída no intervalo selecionado.";
-    const chart=$("dischargeDailyChart");
-    chart.classList.toggle("is-compact",!monthly&&points.length>14);
-    chart.classList.toggle("is-monthly",monthly);
-    chart.closest(".base-chart-scroll").classList.toggle("long-range",monthly);
-    $("dischargeChartDetail").textContent="Passe o mouse ou toque em uma coluna para ver o valor exato.";
-    // Linha de referência: ritmo diário necessário para cumprir o plano do mês (plano ÷ dias do mês).
+    // Meta diária de peso (plano do mês ÷ dias do mês), só na visão por dia.
     const targets = monthly ? { days: [], segments: [] } : TpsMetrics.dailyTargets(state.data.plans || [], start, end);
     const rates = targets.days.map(day => day.rate);
     points.forEach((point, index) => { point.target = rates[index] || null; });
+    const showTarget = mode !== "wagons" && targets.segments.length > 0;
+
+    $("dischargeChartTitle").textContent = CHART_TITLES[mode];
+    $("dischargeChartCaption").textContent = monthly ? "Agrupado por mês para períodos longos" : `${points.length} dias no intervalo`;
+    state.chartPoints = points;
+    $("dischargeDailyRows").innerHTML = points.map(point => `<tr><td>${escape(point.fullLabel || point.label)}</td><td>${tons(point.value)}</td><td>${integer.format(point.wagons)}</td><td>${point.target ? tons(point.target) : "—"}</td></tr>`).join("") || '<tr><td colspan="4">Sem dados.</td></tr>';
+    const key = mode === "wagons" ? "wagons" : "value";
+    const peak = [...points].sort((a, b) => b[key] - a[key])[0];
+    const peakText = mode === "wagons" ? wagonsText(peak?.wagons || 0) : tons(peak?.value || 0);
+    $("dischargeDailyInsight").textContent = peak?.[key] > 0 ? `Leitura: maior ${mode === "wagons" ? "quantidade de vagões" : "volume"} ${monthly ? "mensal" : mode === "wagons" ? "diária" : "diário"} em ${peak.fullLabel || peak.label}, com ${peakText}. Os períodos sem descarga concluída aparecem com zero.` : "Leitura: não há descarga concluída no intervalo selecionado.";
+
+    const chart = $("dischargeDailyChart");
+    chart.classList.toggle("is-compact", !monthly && points.length > 14);
+    chart.classList.toggle("is-monthly", monthly);
+    chart.closest(".base-chart-scroll").classList.toggle("long-range", monthly);
+    $("dischargeChartDetail").textContent = "Passe o mouse ou toque em uma coluna para ver o valor exato.";
+
     const legend = $("dischargeTargetLegend");
-    legend.hidden = !targets.segments.length;
-    legend.innerHTML = targets.segments.length ? `<i aria-hidden="true"></i>Ritmo diário do plano: ${[...new Map(targets.segments.map(seg => [`${seg.year}-${seg.month}`, seg])).values()].map(seg => `<strong>${integer.format(seg.rate)} t/dia</strong> em ${months[seg.month - 1].slice(0, 3).toLowerCase()}/${seg.year}`).join(" · ")} (plano do mês ÷ dias do mês)` : "";
-    if (!points.some(point => point.value > 0)) { chart.innerHTML = '<p class="base-empty">Sem descarga concluída neste período.</p>'; return; }
+    const targetLegend = showTarget ? `<span><i class="base-legend-target" aria-hidden="true"></i>Meta diária: ${[...new Map(targets.segments.map(seg => [`${seg.year}-${seg.month}`, seg])).values()].map(seg => `<strong>${integer.format(seg.rate)} t/dia</strong> em ${months[seg.month - 1].slice(0, 3).toLowerCase()}/${seg.year}`).join(" · ")} (plano do mês ÷ dias do mês)</span>` : "";
+    const wagonLegend = mode === "both" ? `<span><i class="base-legend-wagons" aria-hidden="true"></i>Vagões descarregados (linha, escala própria)</span>` : "";
+    legend.innerHTML = targetLegend + wagonLegend;
+    legend.hidden = !legend.innerHTML;
+
+    if (!points.some(point => point.value > 0 || point.wagons > 0)) { chart.innerHTML = '<p class="base-empty">Sem descarga concluída neste período.</p>'; return; }
+    const barOf = point => mode === "wagons" ? point.wagons : point.value;
     // Com linha de meta, 8% de folga no topo para a linha não encostar nos rótulos.
-    const max = Math.max(...points.map(point => point.value), ...rates.filter(rate => rate !== null)) * (targets.segments.length ? 1.08 : 1);
-    chart.style.setProperty("--chart-columns",Math.max(7,points.length));
-    chart.innerHTML=points.map((point,index)=>`<div class="base-day" data-index="${index}" role="img" aria-label="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}${rates[index]?` · ritmo do plano ${escape(tons(rates[index]))}`:""}" title="${escape(point.fullLabel||point.label)}: ${escape(tons(point.value))}${rates[index]?` · ritmo do plano ${escape(tons(rates[index]))}`:""}"><div class="base-day-value">${point.value?(points.length>14&&!monthly?`${new Intl.NumberFormat("pt-BR",{maximumFractionDigits:1}).format(point.value/1000)} mil`:integer.format(point.value)):"0"}</div><div class="base-day-track"><i style="height:${point.value?Math.max(3,point.value/max*100):0}%"></i>${rates[index]?`<b class="base-day-target" style="bottom:${rates[index]/max*100}%"></b>`:""}</div><span>${point.showLabel===false?"":escape(point.label)}</span></div>`).join("");
+    const max = Math.max(1, ...points.map(barOf), ...(showTarget ? rates.filter(rate => rate !== null) : [])) * (showTarget ? 1.08 : 1);
+    const compactNumber = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+    const barLabel = point => {
+      const value = barOf(point);
+      if (!value) return "0";
+      if (mode === "wagons") return integer.format(value);
+      return points.length > 14 && !monthly ? `${compactNumber.format(value / 1000)} mil` : integer.format(value);
+    };
+    chart.style.setProperty("--chart-columns", Math.max(7, points.length));
+    chart.classList.toggle("is-wagons", mode === "wagons");
+    chart.classList.toggle("is-both", mode === "both");
+    chart.innerHTML = points.map((point, index) => {
+      const detail = escape(pointDetail(point, mode));
+      const target = showTarget && rates[index] ? `<b class="base-day-target" style="bottom:${rates[index] / max * 100}%"></b>` : "";
+      return `<div class="base-day" data-index="${index}" role="img" aria-label="${detail}" title="${detail}"><div class="base-day-value">${barLabel(point)}</div><div class="base-day-track"><i style="height:${barOf(point) ? Math.max(3, barOf(point) / max * 100) : 0}%"></i>${target}</div><span>${point.showLabel === false ? "" : escape(point.label)}</span></div>`;
+    }).join("") + (mode === "both" ? '<svg class="base-wagon-line" aria-hidden="true"></svg>' : "");
+    drawWagonLine();
+  }
+
+  /* Linha de vagões sobre as colunas de peso (modo "Peso e vagões"). Desenhada pelas posições reais das colunas,
+     por isso é refeita quando o gráfico muda de tamanho. */
+  function drawWagonLine() {
+    const chart = $("dischargeDailyChart");
+    const svg = chart.querySelector(".base-wagon-line");
+    if (!svg) return;
+    const points = state.chartPoints;
+    const tracks = [...chart.querySelectorAll(".base-day-track")];
+    if (!tracks.length) return;
+    const box = chart.getBoundingClientRect();
+    const maxWagons = Math.max(1, ...points.map(point => point.wagons)) * 1.12;
+    const coords = tracks.map((track, index) => {
+      const rect = track.getBoundingClientRect();
+      return { x: rect.left - box.left + rect.width / 2, y: rect.bottom - box.top - points[index].wagons / maxWagons * rect.height, wagons: points[index].wagons };
+    });
+    svg.setAttribute("width", box.width);
+    svg.setAttribute("height", box.height);
+    svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+    const showValues = points.length <= 14;
+    svg.innerHTML = `<polyline points="${coords.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}"></polyline>` +
+      coords.map(point => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${showValues ? 4 : 3}"></circle>${showValues && point.wagons ? `<text x="${point.x.toFixed(1)}" y="${(point.y - 9).toFixed(1)}">${integer.format(point.wagons)}</text>` : ""}`).join("");
+  }
+  function setChartMode(mode) {
+    if (!CHART_TITLES[mode]) return;
+    state.chartMode = mode;
+    try { localStorage.setItem("tps-descarga-grafico", mode); } catch { /* sem armazenamento: vale só nesta visita */ }
+    document.querySelectorAll("#dischargeChartMode [data-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.mode === mode)));
+    renderDischarge();
   }
   function renderPlan(start, end) {
     const selected = state.data.plans.filter(item => monthKey(item.year, item.month) >= start.slice(0, 7) && monthKey(item.year, item.month) <= end.slice(0, 7));
@@ -205,7 +290,11 @@
   }
   function setup() {
     const chart=$("dischargeDailyChart");
-    const showDay=event=>{const item=event.target.closest(".base-day");if(!item||!chart.contains(item))return;const point=state.chartPoints[Number(item.dataset.index)];if(point)$("dischargeChartDetail").textContent=`${point.fullLabel||point.label} · ${tons(point.value)}${point.target?` · ritmo do plano ${tons(point.target)}`:""}`};
+    const showDay=event=>{const item=event.target.closest(".base-day");if(!item||!chart.contains(item))return;const point=state.chartPoints[Number(item.dataset.index)];if(point)$("dischargeChartDetail").textContent=pointDetail(point,state.chartMode)};
+    $("dischargeChartMode").addEventListener("click",event=>{const button=event.target.closest("[data-mode]");if(button)setChartMode(button.dataset.mode)});
+    document.querySelectorAll("#dischargeChartMode [data-mode]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.mode===state.chartMode)));
+    // A linha de vagões depende da largura das colunas: redesenha quando o gráfico muda de tamanho.
+    if(window.ResizeObserver)new ResizeObserver(()=>drawWagonLine()).observe(chart);
     chart.addEventListener("pointerover",showDay);
     chart.addEventListener("click",showDay);
     const userChange = handler => event => { handler(event); window.syncUrl?.(); };

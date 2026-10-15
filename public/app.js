@@ -1,7 +1,7 @@
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null };
+const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null };
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const fmtOne = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtTwo = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -322,11 +322,13 @@ function closeDrawer(){state.activeDrawer=null;$("vesselDrawer").classList.remov
 
 function activateNavigation(){
   const indicatorMenu=state.menu==="indicadores";
-  $("indicatorNav").hidden=!indicatorMenu;$("lineupNav").hidden=state.menu!=="lineup";
+  $("indicatorNav").hidden=!indicatorMenu;$("lineupNav").hidden=state.menu!=="lineup";$("activityNav").hidden=state.menu!=="atividades";
   document.querySelectorAll(".side-link").forEach(button=>{const active=button.dataset.menu===state.menu;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-indicator]").forEach(button=>{const active=button.dataset.indicator===state.indicator;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-lineup]").forEach(button=>{const active=button.dataset.lineup===state.lineupView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="producao"?"producao":(state.lineupView==="mares"?"mares":"lineup");
+  document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
+  const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
@@ -335,6 +337,7 @@ function activateNavigation(){
   if(visible==="mares")renderTides();
   if(visible==="producao")window.productionPanel?.load();
   if(visible==="descarga"||visible==="pesagem")window.dischargePanel?.load();
+  window.activitiesPanel?.show(state.menu==="atividades"?state.activityView:null);
   renderDataSeal();
   syncUrl();
 }
@@ -356,6 +359,7 @@ function setupNavigation(){
   document.querySelector(".side-nav").addEventListener("click",event=>{const button=event.target.closest("[data-menu]");if(!button)return;state.menu=button.dataset.menu;activateNavigation();closeMenu();menuButton.focus({preventScroll:true})});
   $("indicatorNav").addEventListener("click",event=>{const button=event.target.closest("[data-indicator]");if(!button)return;state.indicator=button.dataset.indicator;activateNavigation()});
   $("lineupNav").addEventListener("click",event=>{const button=event.target.closest("[data-lineup]");if(!button)return;state.lineupView=button.dataset.lineup;activateNavigation()});
+  $("activityNav").addEventListener("click",event=>{const button=event.target.closest("[data-activity]");if(!button)return;state.activityView=button.dataset.activity;activateNavigation()});
   menuButton.addEventListener("mouseenter",()=>{if(!hoverEnabled.matches)return;clearTimeout(closeTimer);hovered=true;syncMenu()});
   menuButton.addEventListener("mouseleave",()=>{if(!hoverEnabled.matches)return;closeTimer=setTimeout(()=>{if(!sidebar.matches(":hover")){hovered=false;syncMenu()}},350)});
   sidebar.addEventListener("mouseenter",()=>{if(!hoverEnabled.matches)return;clearTimeout(closeTimer);hovered=true;syncMenu()});
@@ -576,6 +580,7 @@ function registerWebMCP(){
 const urlState={applying:false,pending:null};
 function currentView(){
   if(state.menu==="producao")return "producao";
+  if(state.menu==="atividades")return state.activityView==="turno"?"atividades":state.activityView;
   if(state.menu==="lineup")return state.lineupView==="mares"?"mares":"lineup";
   return state.indicator;
 }
@@ -601,6 +606,7 @@ function applyUrl(search){
   urlState.applying=true;
   try{
     if(target.view==="producao")state.menu="producao";
+    else if(["atividades","acompanhamento","configuracao"].includes(target.view)){state.menu="atividades";state.activityView=target.view==="atividades"?"turno":target.view}
     else if(target.view==="lineup"||target.view==="mares"){state.menu="lineup";state.lineupView=target.view==="mares"?"mares":"planejamento"}
     else{state.menu="indicadores";state.indicator=target.view}
     if(target.view==="operacional"||target.view==="ocupacao"){
@@ -699,7 +705,7 @@ function renderDataSeal(){
   const seal=$("updatedAt");if(!seal)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
   const wrap=$("dataSealWrap");
-  if(state.menu==="producao"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
+  if(state.menu==="producao"||state.menu==="atividades"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
   wrap.hidden=false;
   renderChanges();
   const meta=dischargeView?window.dischargePanel?.getMeta():state.dataMeta;
@@ -722,6 +728,8 @@ window.getExportDataNote=sectionId=>{
   return meta?TpsMetrics.freshness(meta,new Date()).text:"";
 };
 
-async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupChanges();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
+async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupChanges();window.activitiesPanel?.start();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
 document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)render()});
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});
+/* Clique numa notificação de atividade: abre a lista do turno. */
+window.openActivities=()=>{state.menu="atividades";state.activityView="turno";activateNavigation()};
