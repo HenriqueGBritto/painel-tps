@@ -21,11 +21,21 @@
     <aside class="sidebar" id="sidebar" aria-label="Menu principal">
       <div class="sidebar-brand"><img src="/logo-triunfo-branco.svg" alt="Triunfo Logística"><span>PAINEL DE OPERAÇÕES</span></div>
       <nav class="side-nav" aria-label="Menu principal">
-        <button type="button" class="side-link active" data-menu="indicadores" aria-current="page"><span aria-hidden="true">▦</span> Indicadores</button>
-        <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
-        <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
-        <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
-        <button type="button" class="side-link" data-menu="equipe"><span aria-hidden="true">▨</span> Equipe</button>
+        <div class="side-group" data-group="operacao">
+          <button type="button" class="side-group-toggle" aria-expanded="true" aria-controls="sideGroupOperacao">Operação<i aria-hidden="true"></i></button>
+          <div class="side-group-items" id="sideGroupOperacao">
+            <button type="button" class="side-link active" data-menu="indicadores" aria-current="page"><span aria-hidden="true">▦</span> Indicadores</button>
+            <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
+            <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
+            <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
+          </div>
+        </div>
+        <div class="side-group" data-group="rh">
+          <button type="button" class="side-group-toggle" aria-expanded="true" aria-controls="sideGroupRh">RH<i aria-hidden="true"></i></button>
+          <div class="side-group-items" id="sideGroupRh">
+            <button type="button" class="side-link" data-menu="equipe"><span aria-hidden="true">▨</span> Equipe</button>
+          </div>
+        </div>
       </nav>
       <div class="sidebar-foot">TRIUNFO LOGÍSTICA</div>
     </aside>
