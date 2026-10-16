@@ -43,7 +43,7 @@
 @media(max-width:720px){.sync-health summary{width:42px;height:42px;justify-content:center;padding:0}.sync-health-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.sync-health-panel{right:-96px}}
 @media(max-width:900px){.sync-check-text{display:none}.sync-check-button{width:42px;padding:0}}
 @media(prefers-reduced-motion:reduce){.sync-check-button,.sync-check-button.is-checking>span:first-child{transition:none;animation:none}}
-/* Menu lateral em grupos (Operação e RH): o título abre e fecha; o grupo da tela aberta fica destacado. */
+/* Menu lateral em grupos (Operação e RH), fechados ao abrir o painel: o título abre e fecha; o grupo da tela aberta fica destacado. */
 .side-nav{gap:14px}
 .side-group{display:grid;gap:4px}
 .side-group-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;border-radius:6px;background:transparent;color:var(--trl-cinza-300);padding:8px 16px;font:inherit;font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
@@ -51,7 +51,7 @@
 .side-group-toggle:focus-visible{box-shadow:0 0 0 2px var(--trl-vermelho)}
 .side-group-toggle i{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin-top:-4px;transition:transform .15s}
 .side-group-toggle[aria-expanded="false"] i{transform:rotate(-45deg);margin-top:0}
-.side-group.has-active>.side-group-toggle{color:var(--trl-branco)}
+.side-group.has-active>.side-group-toggle{color:var(--trl-branco);box-shadow:inset 3px 0 0 var(--trl-vermelho)}
 .side-group-items{display:grid;gap:5px;padding-left:8px;border-left:1px solid rgba(255,255,255,.12);margin-left:16px}
 .side-group-items[hidden]{display:none}
 .side-group-items .side-link{padding:11px 14px}

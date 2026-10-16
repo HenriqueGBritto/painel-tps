@@ -324,8 +324,8 @@ function activateNavigation(){
   const indicatorMenu=state.menu==="indicadores";
   $("indicatorNav").hidden=!indicatorMenu;$("lineupNav").hidden=state.menu!=="lineup";$("activityNav").hidden=state.menu!=="atividades";$("teamNav").hidden=state.menu!=="equipe";
   document.querySelectorAll(".side-link").forEach(button=>{const active=button.dataset.menu===state.menu;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
-  // Grupo do menu (Operação, RH) que contém a tela aberta: destacado e sempre aberto.
-  document.querySelectorAll(".side-group").forEach(group=>{const has=Boolean(group.querySelector(".side-link.active"));group.classList.toggle("has-active",has);if(has)setSideGroupOpen(group,true)});
+  // Grupo do menu (Operação, RH) que contém a tela aberta: título destacado (os grupos começam fechados).
+  document.querySelectorAll(".side-group").forEach(group=>group.classList.toggle("has-active",Boolean(group.querySelector(".side-link.active"))));
   document.querySelectorAll("[data-indicator]").forEach(button=>{const active=button.dataset.indicator===state.indicator;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-lineup]").forEach(button=>{const active=button.dataset.lineup===state.lineupView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
