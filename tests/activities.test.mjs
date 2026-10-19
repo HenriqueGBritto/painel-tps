@@ -14,7 +14,7 @@ let store;
 
 /* A maioria dos testes parte sem as atividades fixas iniciais, para conferir só o que cada um cria. */
 const withoutDefaultTemplates = async () => { await A.getConfig(store); await Promise.all(A.DEFAULT_TEMPLATES.map(t => store.remove("taskTemplates", t.id))); };
-beforeEach(async () => { store = memoryStore(); useActivitiesStore(store); await withoutDefaultTemplates(); });
+beforeEach(async () => { store = memoryStore(); useActivitiesStore(store); A.useTeamProvider(async () => null); await withoutDefaultTemplates(); });
 
 test("primeiro uso grava os 4 assistentes e a escala combinada", async () => {
   const settings = await A.getSettings(store, { now: br("2026-10-14T10:00") });
@@ -288,4 +288,67 @@ test("escala noturna invertida da primeira versão é corrigida uma vez (Andrés
   const edited = memoryStore();
   await edited.set("shiftConfig", "main", { hours: { dayStart: "07:00", nightStart: "19:00" }, rotations: { D: A.DEFAULT_CONFIG.rotations.D, N: { members: ["andres", "matheus"], blockDays: 2, referenceDate: "2026-10-13" } }, updatedBy: { name: "Gestão" } });
   assert.equal((await A.getConfig(edited)).rotations.N.referenceDate, "2026-10-13", "escala alterada pela tela não é mexida");
+});
+
+/* Planilha da equipe de exemplo: um assistente por equipe (matrículas dos assistentes iniciais). */
+const teamSheet = (absences = []) => ({
+  people: [
+    { id: "9019", name: "Roger da Silva", team: "A", role: "Assistente de Operações", status: "Ativo" },
+    { id: "7343", name: "Hélio Marques", team: "B", role: "Assistente de Operações", status: "Ativo" },
+    { id: "7144", name: "Andrés Esteves", team: "C", role: "Assistente de Operações", status: "Ativo" },
+    { id: "8940", name: "Matheus Silva", team: "D", role: "Assistente de Operações", status: "Ativo" }
+  ],
+  absences
+});
+
+test("escala pela aba Equipe: assistente da equipe de plantão no dia e na noite", async () => {
+  A.useTeamProvider(async () => teamSheet());
+  const now = br("2026-10-19T08:00");
+  const day = await A.getShiftView(store, "2026-10-19_D", { now });
+  assert.deepEqual([day.shift.scheduled.name, day.shift.scheduled.team, day.shift.scheduled.dayOfBlock, day.shift.scheduled.source], ["Roger", "A", 1, "equipe"], "19/10 = A + C (1º dia)");
+  const night = await A.getShiftView(store, "2026-10-21_N", { now });
+  assert.deepEqual([night.shift.scheduled.name, night.shift.scheduled.team], ["Matheus", "D"], "21/10 = B + D");
+  const settings = await A.getSettings(store, { now });
+  assert.deepEqual(settings.preview[0].N.name, "Andrés");
+  assert.deepEqual(settings.assistants.find(item => item.id === "helio").linked, { name: "Hélio Marques", team: "B", role: "Assistente de Operações", status: "Ativo" });
+});
+
+test("escala pela aba Equipe: de férias entra quem cobre; sem cobertura, fica marcado como fora", async () => {
+  const absences = [
+    { person: { id: "9019", name: "Roger" }, motive: "Férias", start: "2026-10-19", end: "2026-10-28", cover: { id: "7343", name: "Hélio" }, coverStatus: "com cobertura" },
+    { person: { id: "7144", name: "Andrés" }, motive: "Férias", start: "2026-10-19", end: "2026-10-28", cover: null, coverStatus: "sem cobertura" }
+  ];
+  A.useTeamProvider(async () => teamSheet(absences));
+  const now = br("2026-10-19T08:00");
+  const day = (await A.getShiftView(store, "2026-10-19_D", { now })).shift.scheduled;
+  assert.deepEqual([day.name, day.source, day.reason], ["Hélio", "cobertura", "cobre Roger (férias até 28/10)"]);
+  const night = (await A.getShiftView(store, "2026-10-19_N", { now })).shift.scheduled;
+  assert.deepEqual([night.name, night.absent, night.reason], ["Andrés", true, "Andrés está fora (férias até 28/10); sem cobertura registrada"]);
+});
+
+test("escala pela aba Equipe: ajuste pontual vale mais; antes do 2x2 ou sem planilha, vale o rodízio", async () => {
+  A.useTeamProvider(async () => teamSheet());
+  const now = br("2026-10-19T08:00");
+  await A.saveOverride(store, { shiftId: "2026-10-19_D", assistantId: "matheus", reason: "Troca" }, roger, { now });
+  assert.deepEqual([(await A.getShiftView(store, "2026-10-19_D", { now })).shift.scheduled.name, (await A.getShiftView(store, "2026-10-19_D", { now })).shift.scheduled.source], ["Matheus", "ajuste"]);
+  const settings = await A.getSettings(store, { now: br("2026-05-20T08:00") });
+  assert.equal(settings.preview[0].D.source, "escala", "maio/2026: antes do 2x2, rodízio de reserva");
+  A.useTeamProvider(async () => { throw new Error("planilha fora"); });
+  assert.equal((await A.getSettings(store, { now })).preview[1].D.source, "escala", "planilha indisponível: rodízio de reserva");
+});
+
+test("escala pela aba Equipe: a virada agendada atualiza turnos já criados quando a planilha muda", async () => {
+  A.useTeamProvider(async () => teamSheet());
+  const now = br("2026-10-19T08:00");
+  await A.ensureShift(store, "2026-10-19_D", { now });
+  A.useTeamProvider(async () => teamSheet([{ person: { id: "9019", name: "Roger" }, motive: "Férias", start: "2026-10-19", end: "2026-10-20", cover: { id: "7343", name: "Hélio" }, coverStatus: "com cobertura" }]));
+  await A.refreshScheduled(store, "2026-10-19_D", now);
+  assert.equal((await A.getShiftView(store, "2026-10-19_D", { now })).shift.scheduled.name, "Hélio");
+});
+
+test("assistente: matrícula do Cadastro é gravada e validada", async () => {
+  const now = br("2026-10-19T08:00");
+  await A.saveAssistant(store, { id: "roger", name: "Roger", matricula: "9019" }, roger, { now });
+  assert.equal((await store.get("shiftAssistants", "roger")).matricula, "9019");
+  await assert.rejects(A.saveAssistant(store, { id: "roger", name: "Roger", matricula: "90-19" }, roger, { now }), /Matrícula inválida/);
 });

@@ -201,3 +201,9 @@ details.act-card>summary:focus-visible{outline:2px solid var(--trl-vermelho);out
 .act-report footer{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;color:#777;font-size:10px}
 .act-list-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .act-grip-icon{display:inline-block;width:10px;height:14px;vertical-align:-2px;color:var(--trl-cinza-600);background:radial-gradient(circle,currentColor 1.4px,transparent 1.6px) 0 0/5px 5px}
+
+/* Configuração: escala pela aba Equipe, rodízio de reserva e matrícula dos assistentes */
+.act-reserve>summary{cursor:pointer;font-weight:800;font-size:.88rem;margin-bottom:6px}
+.act-reserve>summary:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:3px}
+.act-inline-form .act-matricula{width:110px;min-height:38px;border:1px solid var(--trl-cinza-200);border-radius:4px;padding:7px 9px;font:inherit;font-size:.9rem}
+.act-linked{flex-basis:100%;color:var(--trl-cinza-600);font-size:.78rem}

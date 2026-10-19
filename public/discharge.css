@@ -121,3 +121,13 @@ a.base-upload[hidden]{display:none}
 .base-week li{margin:4px 0}
 .base-week li strong{color:var(--trl-vermelho)}
 .base-week .base-week-hint{font-size:.78rem;color:var(--trl-cinza-600)}
+/* Previsão de fechamento do mês (quadro Plano de descarga) */
+.base-forecast{margin:14px 0;padding:14px 18px;border:1px solid var(--trl-cinza-200);border-left:4px solid var(--trl-texto);border-radius:5px;background:var(--trl-cinza-100);font-size:.88rem;line-height:1.55;color:var(--trl-cinza-800)}
+.base-forecast[hidden]{display:none}
+.base-forecast h4{margin:2px 0 6px;font-size:1rem;color:var(--trl-texto)}
+.base-forecast p{margin:6px 0}
+.base-forecast strong{color:var(--trl-texto)}
+.base-forecast ul{margin:6px 0;padding-left:20px}
+.base-forecast li{margin:4px 0}
+.base-forecast li.is-late strong{color:var(--trl-vermelho)}
+.base-forecast li.is-ok strong{color:var(--trl-status-ok)}

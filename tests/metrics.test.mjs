@@ -149,3 +149,21 @@ test("ritmo diário do plano: plano do mês ÷ dias do mês, sem linha em mês s
   assert.equal(M.dailyTargets([], "2026-10-01", "2026-10-07").segments.length, 0);
   assert.equal(M.dailyTargets([{ year: 2028, month: 2, plan: 2900 }], "2028-02-01", "2028-02-01").days[0].rate, 100, "fevereiro bissexto");
 });
+
+test("previsão do mês: ritmo pelos dias corridos até a última descarga e quanto falta por dia", () => {
+  const days = [{ date: "2026-10-01", tons: 6000 }, { date: "2026-10-02", tons: 4000 }, { date: "2026-10-04", tons: 5000 }, { date: "2026-09-30", tons: 9999 }];
+  const forecast = M.monthForecast(days, { year: 2026, month: 10, plan: 155000, challenge: 200000 });
+  assert.deepEqual([forecast.lastDate, forecast.elapsed, forecast.remaining, forecast.realized, forecast.pace], ["2026-10-04", 4, 27, 15000, 3750], "o dia 3 sem descarga conta como zero");
+  assert.equal(forecast.projection, 15000 + 3750 * 27);
+  assert.equal(forecast.plan.onTrack, false);
+  assert.equal(Math.round(forecast.plan.neededPerDay), Math.round((155000 - 15000) / 27));
+  assert.equal(forecast.challenge.label, "desafio");
+});
+
+test("previsão do mês: plano já alcançado, mês completo e mês sem descarga", () => {
+  const full = Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, "0")}`, tons: 1000 }));
+  const forecast = M.monthForecast(full, { year: 2026, month: 9, plan: 25000 });
+  assert.deepEqual([forecast.remaining, forecast.projection, forecast.plan.reached, forecast.plan.neededPerDay], [0, 30000, true, null]);
+  assert.equal(forecast.challenge, null, "sem desafio na planilha");
+  assert.equal(M.monthForecast(full, { year: 2026, month: 11, plan: 1 }), null);
+});

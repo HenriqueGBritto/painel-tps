@@ -191,5 +191,29 @@
     return { days, segments };
   }
 
-  root.TpsMetrics = { STALE_DAYS, filterRecords, occupancy, kpis, previousPeriod, previousKpis, variation, kpiVariation, freshness, lastDischargeWindow, isoDay, cargoRanking, dailyTargets };
+  /**
+   * Previsão de fechamento do mês da descarga, no ritmo atual.
+   * Ritmo = realizado ÷ dias corridos até a última descarga registrada no mês (dias sem descarga contam como zero).
+   * Devolve null se o mês não tem descarga registrada. Mês já encerrado: previsão = realizado.
+   */
+  function monthForecast(dischargeDays, { year, month, plan = null, challenge = null }) {
+    const prefix = `${year}-${String(month).padStart(2, "0")}`;
+    const inMonth = dischargeDays.filter(row => row.date.startsWith(prefix));
+    if (!inMonth.length) return null;
+    const lastDate = inMonth.reduce((max, row) => row.date > max ? row.date : max, "");
+    const total = daysInMonth(year, month);
+    const elapsed = Number(lastDate.slice(8, 10));
+    const remaining = total - elapsed;
+    const realized = inMonth.reduce((sum, row) => sum + row.tons, 0);
+    const pace = realized / elapsed;
+    const projection = realized + pace * remaining;
+    const target = (value, label) => {
+      if (!Number.isFinite(value) || value <= 0) return null;
+      const missing = Math.max(0, value - realized);
+      return { label, value, share: projection / value, reached: realized >= value, missing, neededPerDay: remaining ? missing / remaining : null, onTrack: projection >= value };
+    };
+    return { year, month, lastDate, elapsed, remaining, total, realized, pace, projection, plan: target(plan, "plano"), challenge: target(challenge, "desafio") };
+  }
+
+  root.TpsMetrics = { STALE_DAYS, filterRecords, occupancy, kpis, previousPeriod, previousKpis, variation, kpiVariation, freshness, lastDischargeWindow, isoDay, cargoRanking, dailyTargets, monthForecast };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -80,6 +80,7 @@
     renderDaily(days, start, end);
     renderWeekSummary(start, end);
     renderPlan(start, end);
+    renderForecast();
     renderOccurrences(events);
   }
   /* Card "Meta diária": peso que deveria ser descarregado por dia (plano do mês ÷ dias do mês).
@@ -301,6 +302,33 @@
     try { localStorage.setItem("tps-descarga-grafico", mode); } catch { /* sem armazenamento: vale só nesta visita */ }
     document.querySelectorAll("#dischargeChartMode [data-mode]").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.mode === mode)));
     renderDischarge();
+  }
+  /* Previsão de fechamento do mês atual (qualquer que seja o filtro): no ritmo de hoje, quanto o mês fecha
+     contra o plano e o desafio, e quanto falta por dia para alcançá-los. */
+  function renderForecast() {
+    const box = $("dischargeForecast");
+    const today = todayISO();
+    const year = Number(today.slice(0, 4)), month = Number(today.slice(5, 7));
+    const plan = (state.data.plans || []).find(item => item.year === year && item.month === month) || {};
+    const forecast = TpsMetrics.monthForecast(state.data.dischargeDays, { year, month, plan: plan.plan, challenge: plan.challenge });
+    const monthName = `${months[month - 1].toLowerCase()}/${year}`;
+    const head = `<p class="eyebrow">PREVISÃO DO MÊS</p><h4 id="dischargeForecastTitle">Fechamento de ${monthName}</h4>`;
+    if (!forecast) { box.innerHTML = `${head}<p>Ainda não há descarga concluída registrada em ${monthName}.</p>`; box.hidden = false; return; }
+    const roundTons = value => `${integer.format(value)} t`;
+    const goal = target => {
+      if (!target) return "";
+      if (target.reached) return `<li class="is-ok"><strong>${target.label[0].toUpperCase()}${target.label.slice(1)} já alcançado</strong>: ${roundTons(forecast.realized)} de ${roundTons(target.value)}.</li>`;
+      const status = target.onTrack ? `no ritmo atual, <strong>alcança</strong> (${integer.format(target.share * 100)}% do ${target.label})` : `no ritmo atual, <strong>fica ${roundTons(target.value - forecast.projection)} abaixo</strong> (${integer.format(target.share * 100)}% do ${target.label})`;
+      const need = forecast.remaining ? ` Para alcançar: <strong>${roundTons(target.neededPerDay)} por dia</strong> nos ${forecast.remaining} ${forecast.remaining === 1 ? "dia restante" : "dias restantes"}${target.neededPerDay > forecast.pace ? ` (${integer.format((target.neededPerDay / forecast.pace - 1) * 100)}% acima do ritmo atual)` : ""}.` : "";
+      return `<li class="${target.onTrack ? "is-ok" : "is-late"}">${target.label[0].toUpperCase()}${target.label.slice(1)} de ${roundTons(target.value)}: ${status}.${need}</li>`;
+    };
+    const goals = [goal(forecast.plan), goal(forecast.challenge)].join("");
+    box.innerHTML = `${head}
+      <p>Realizado até ${fullDate(forecast.lastDate)}: <strong>${roundTons(forecast.realized)}</strong> em ${forecast.elapsed} ${forecast.elapsed === 1 ? "dia" : "dias"}, ritmo de <strong>${roundTons(forecast.pace)} por dia</strong>.
+      ${forecast.remaining ? `Mantido esse ritmo, o mês fecha em cerca de <strong>${roundTons(forecast.projection)}</strong>.` : "O mês está completo na planilha."}</p>
+      ${goals ? `<ul>${goals}</ul>` : `<p class="base-footnote">Sem plano ou desafio do mês na planilha para comparar.</p>`}
+      <p class="base-footnote">Ritmo pelos dias corridos até a última descarga registrada (dias sem descarga contam como zero). Realizado pela soma das descargas FINALIZADAS, como no gráfico.</p>`;
+    box.hidden = false;
   }
   function renderPlan(start, end) {
     const selected = state.data.plans.filter(item => monthKey(item.year, item.month) >= start.slice(0, 7) && monthKey(item.year, item.month) <= end.slice(0, 7));

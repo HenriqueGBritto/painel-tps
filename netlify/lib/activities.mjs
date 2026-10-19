@@ -11,6 +11,8 @@
    Turno = "AAAA-MM-DD_D" ou "AAAA-MM-DD_N" (public/shifts.js). */
 import { randomUUID } from "node:crypto";
 import "../../public/shifts.js";
+import "../../public/team-schedule.js";
+import { readSnapshot, loadForServing } from "./snapshots.mjs";
 import { ALLOWED_TYPES, MAX_BYTES, MAX_FILES } from "./attachments-store.mjs";
 
 const S = globalThis.TpsShifts;
@@ -25,10 +27,10 @@ export const MAX_HISTORY_DAYS = 31;
 /* Escala inicial, alinhada às equipes do 2x2 (aba Equipe): Diurno Hélio (B) / Roger (A) e Noturno Andrés (C) / Matheus (D).
    13–14/10/2026 = B + D (Hélio e Matheus) e 15–16/10/2026 = A + C (Roger e Andrés). */
 export const DEFAULT_ASSISTANTS = [
-  { id: "roger", name: "Roger", active: true, order: 1 },
-  { id: "helio", name: "Hélio", active: true, order: 2 },
-  { id: "matheus", name: "Matheus", active: true, order: 3 },
-  { id: "andres", name: "Andrés", active: true, order: 4 }
+  { id: "roger", name: "Roger", matricula: "9019", active: true, order: 1 },
+  { id: "helio", name: "Hélio", matricula: "7343", active: true, order: 2 },
+  { id: "matheus", name: "Matheus", matricula: "8940", active: true, order: 3 },
+  { id: "andres", name: "Andrés", matricula: "7144", active: true, order: 4 }
 ];
 export const DEFAULT_CONFIG = {
   hours: { ...S.DEFAULT_HOURS },
@@ -118,19 +120,68 @@ async function overridesBetween(store, fromId, toId) {
   return Object.fromEntries(rows.map(({ id, ...row }) => [id, row]));
 }
 
-/** Escalado no turno, com nome (para o histórico guardar quem estava escalado na época). */
-function scheduledSnapshot(shiftId, config, assistants, overrides) {
+/* ---------- Escala pela aba Equipe ---------- */
+
+const TEAM = globalThis.TpsTeam;
+/** Matrículas dos assistentes iniciais, para quem foi cadastrado antes do campo existir. */
+const DEFAULT_MATRICULAS = Object.fromEntries(DEFAULT_ASSISTANTS.map(item => [item.id, item.matricula]));
+const matriculaOf = assistant => assistant?.matricula || DEFAULT_MATRICULAS[assistant?.id] || null;
+const brDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/* Dados da planilha da equipe (cópia guardada; lida 1 vez por dia). Trocável nos testes. */
+let teamProvider = async () => (await readSnapshot("team")) || (await loadForServing("team").catch(() => null));
+/** Só para testes: troca a fonte dos dados da equipe (null = planilha indisponível). */
+export function useTeamProvider(provider) { teamProvider = provider; }
+async function teamData() {
+  try { const data = await teamProvider(); return Array.isArray(data?.people) ? data : null; } catch { return null; }
+}
+
+/**
+ * Assistente da equipe de plantão (aba Equipe): dia = A ou B, noite = C ou D, pelo ciclo 2x2.
+ * De férias ou afastado: entra quem o cobre, se for um dos assistentes cadastrados; senão, fica marcado como ausente.
+ * Devolve null quando não dá para decidir (antes do 2x2, nenhum assistente cadastrado na equipe) → vale o rodízio.
+ */
+function scheduleFromTeam(shiftId, assistants, team) {
+  const { date, kind } = S.parseId(shiftId);
+  const turn = TEAM.rotation(date);
+  if (!turn) return null;
+  const duty = kind === "D" ? turn.day : turn.night;
+  const people = new Map(team.people.map(person => [person.id, person]));
+  const active = assistants.filter(item => item.active !== false);
+  const member = active.find(item => people.get(matriculaOf(item))?.team === duty);
+  if (!member) return null;
+  const base = { team: duty, dayOfBlock: turn.dayOfBlock, source: "equipe", reason: "" };
+  const absence = TEAM.absenceOf(people.get(matriculaOf(member)), date, team.absences || []);
+  if (!absence) return { ...base, assistantId: member.id, name: member.name };
+  const what = `${absence.motive.toLowerCase()}${absence.end ? ` até ${brDate(absence.end)}` : ""}`;
+  const cover = absence.cover && !absence.cover.external ? active.find(item => matriculaOf(item) === absence.cover.id) : null;
+  if (cover) return { ...base, assistantId: cover.id, name: cover.name, source: "cobertura", reason: `cobre ${member.name} (${what})` };
+  return { ...base, assistantId: member.id, name: member.name, absent: true, reason: `${member.name} está fora (${what})${absence.cover ? `; cobertura na planilha: ${absence.cover.name}` : "; sem cobertura registrada"}` };
+}
+
+/**
+ * Escalado no turno, com nome (o histórico guarda quem estava escalado na época).
+ * Ordem: ajuste pontual → equipe de plantão (aba Equipe) → rodízio de reserva da Configuração.
+ */
+function scheduledSnapshot(shiftId, config, assistants, overrides, team = null) {
+  if (!overrides[shiftId]?.assistantId && team) {
+    const fromTeam = scheduleFromTeam(shiftId, assistants, team);
+    if (fromTeam) return fromTeam;
+  }
   const slot = S.scheduledFor(shiftId, config, overrides);
   const person = assistants.find(item => item.id === slot.assistantId);
   return { ...slot, name: person?.name || null };
 }
 
-/** Atualiza o escalado gravado nos turnos já criados a partir de `fromId` (depois de mudar escala ou ajuste). */
-async function refreshScheduled(store, fromId, now) {
-  const [config, assistants, shifts] = await Promise.all([getConfig(store), listAssistants(store), store.list(COLLECTIONS.shifts, { from: fromId })]);
+/**
+ * Atualiza o escalado gravado nos turnos já criados a partir de `fromId` (depois de mudar escala, ajuste ou
+ * a planilha da equipe — a virada agendada chama isto 2 vezes por dia).
+ */
+export async function refreshScheduled(store, fromId, now) {
+  const [config, assistants, shifts, team] = await Promise.all([getConfig(store), listAssistants(store), store.list(COLLECTIONS.shifts, { from: fromId }), teamData()]);
   const overrides = await overridesBetween(store, fromId, shifts.at(-1)?.id || fromId);
   await Promise.all(shifts.map(shift => {
-    const scheduled = scheduledSnapshot(shift.id, config, assistants, overrides);
+    const scheduled = scheduledSnapshot(shift.id, config, assistants, overrides, team);
     if (JSON.stringify(scheduled) === JSON.stringify(shift.scheduled)) return null;
     return store.set(COLLECTIONS.shifts, shift.id, { scheduled, version: newVersion(now) }, { merge: true });
   }));
@@ -140,12 +191,26 @@ export async function getSettings(store, { now = new Date() } = {}) {
   const config = await getConfig(store);
   const current = S.shiftIdAt(now, config.hours);
   const today = current.slice(0, 10);
-  const [assistants, templates, overrides] = await Promise.all([
+  const [assistants, templates, overrides, team] = await Promise.all([
     listAssistants(store),
     store.list(COLLECTIONS.templates),
-    store.list(COLLECTIONS.overrides, { from: S.makeId(S.addDays(today, -14), "D"), to: S.makeId(S.addDays(today, 90), "N") })
+    store.list(COLLECTIONS.overrides, { from: S.makeId(S.addDays(today, -14), "D"), to: S.makeId(S.addDays(today, 90), "N") }),
+    teamData()
   ]);
-  return { config, assistants, templates: templates.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99") || a.title.localeCompare(b.title)), overrides, currentShiftId: current };
+  // Cada assistente com a pessoa do Cadastro (equipe), e os próximos 14 dias calculados como na tela do turno.
+  const people = new Map((team?.people || []).map(person => [person.id, person]));
+  const linked = assistants.map(item => {
+    const person = people.get(matriculaOf(item));
+    return { ...item, matricula: matriculaOf(item), linked: person ? { name: person.name, team: person.team, role: person.role, status: person.status } : null };
+  });
+  const overrideMap = Object.fromEntries(overrides.map(({ id, ...row }) => [id, row]));
+  const preview = Array.from({ length: 14 }, (_, i) => S.addDays(today, i)).map(date => ({
+    date, D: scheduledSnapshot(S.makeId(date, "D"), config, assistants, overrideMap, team), N: scheduledSnapshot(S.makeId(date, "N"), config, assistants, overrideMap, team)
+  }));
+  return {
+    config, assistants: linked, templates: templates.sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99") || a.title.localeCompare(b.title)),
+    overrides, currentShiftId: current, preview, teamSource: team ? { generatedAt: team.generatedAt } : null
+  };
 }
 
 const slug = name => name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "assistente";
@@ -163,7 +228,10 @@ export async function saveAssistant(store, input, actor, { now = new Date() } = 
     for (let n = 2; assistants.some(item => item.id === id); n++) id = `${base}-${n}`;
   }
   const current = assistants.find(item => item.id === id);
-  await store.set(COLLECTIONS.assistants, id, { name, active: input.active !== false, order: current?.order ?? assistants.length + 1, updatedBy: actor, updatedAt: iso(now) }, { merge: true });
+  // Matrícula do Cadastro (aba Equipe): liga o assistente à equipe A/B/C/D para a escala automática.
+  const matricula = input.matricula === undefined ? matriculaOf(current) : String(input.matricula ?? "").trim();
+  if (matricula && !/^\d{1,6}$/.test(matricula)) fail(400, "Matrícula inválida: use só números.");
+  await store.set(COLLECTIONS.assistants, id, { name, matricula: matricula || null, active: input.active !== false, order: current?.order ?? assistants.length + 1, updatedBy: actor, updatedAt: iso(now) }, { merge: true });
   await refreshScheduled(store, S.shiftIdAt(now, (await getConfig(store)).hours), now);
   return { id };
 }
@@ -321,10 +389,10 @@ export async function ensureShift(store, shiftId, { now = new Date() } = {}) {
   const { start, end } = S.bounds(shiftId, config.hours);
   if (!shift) {
     if (end <= now) return null;
-    const [assistants, overrides] = await Promise.all([listAssistants(store), overridesBetween(store, shiftId, shiftId)]);
+    const [assistants, overrides, team] = await Promise.all([listAssistants(store), overridesBetween(store, shiftId, shiftId), teamData()]);
     const { date, kind } = S.parseId(shiftId);
     await store.create(COLLECTIONS.shifts, shiftId, {
-      date, kind, start: iso(start), end: iso(end), scheduled: scheduledSnapshot(shiftId, config, assistants, overrides),
+      date, kind, start: iso(start), end: iso(end), scheduled: scheduledSnapshot(shiftId, config, assistants, overrides, team),
       handover: null, received: null, templatesGenerated: false, carryDone: false, version: newVersion(now), createdAt: iso(now)
     });
     shift = await store.get(COLLECTIONS.shifts, shiftId);
@@ -379,8 +447,8 @@ export async function getShiftView(store, shiftId, { now = new Date(), since = n
   if (!view) {
     // Turno passado sem registro: mostra só quem estava escalado.
     const { start, end } = S.bounds(shiftId, config.hours);
-    const [assistants, overrides] = await Promise.all([listAssistants(store), overridesBetween(store, shiftId, shiftId)]);
-    view = { id: shiftId, label: S.label(shiftId), ...S.parseId(shiftId), start: iso(start), end: iso(end), scheduled: scheduledSnapshot(shiftId, config, assistants, overrides), handover: null, received: null, version: null, missing: true };
+    const [assistants, overrides, team] = await Promise.all([listAssistants(store), overridesBetween(store, shiftId, shiftId), teamData()]);
+    view = { id: shiftId, label: S.label(shiftId), ...S.parseId(shiftId), start: iso(start), end: iso(end), scheduled: scheduledSnapshot(shiftId, config, assistants, overrides, team), handover: null, received: null, version: null, missing: true };
   }
   return {
     shift: view, tasks: arrangeTasks(tasks, shift?.taskOrder, config.templateOrder), previous: publicShift(previousId, previous), next: publicShift(nextId, next),

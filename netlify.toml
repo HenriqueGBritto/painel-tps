@@ -1,4 +1,6 @@
 [build]
+  # Os testes rodam antes de cada publicação: se algum falhar, a publicação é cancelada e o site fica na versão anterior.
+  command = "npm test"
   publish = "public"
   functions = "netlify/functions"
 

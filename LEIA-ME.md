@@ -24,12 +24,19 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 - Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP`, `TPS_SHEET_DISCHARGE` e/ou `TPS_SHEET_TEAM` com o link do novo arquivo.
 - Se o Google estiver indisponível, o painel abre com a última base salva no Firestore (ou com a cópia inicial do pacote) e mostra o aviso "planilha indisponível" no topo.
 
+## Aba Descarga
+
+- **Meta diária:** plano do mês ÷ dias do mês, mostrada na linha tracejada do gráfico e no card.
+- **Gráfico:** mostra peso, vagões ou os dois; clicar num dia mostra as ocorrências dele.
+- **Desempenho da semana:** aparece no filtro "Últimos 7 dias", com os dias abaixo da meta e as principais ocorrências de cada um.
+- **Previsão do mês** (quadro Plano de descarga): sempre do mês atual. Mostra o realizado até a última descarga registrada e o ritmo por dia corrido (dias sem descarga contam como zero). Com isso, estima o fechamento no ritmo atual e quanto falta por dia para alcançar o plano e o desafio.
+
 ## Aba Atividades (turnos dos assistentes)
 
 Rastreio das atividades de cada turno e passagem de serviço. Os dados ficam no Firestore e só a API (`/api/atividades/…`) acessa.
 
 - **Turnos:** Diurno 07:00–19:00 e Noturno 19:00–07:00, horário de Brasília. O turno é identificado pela data em que começa: uma atividade às 02:00 do dia 15 pertence ao Noturno do dia 14.
-- **Escala 2x2:** rodízio do Diurno (Hélio e Roger) e do Noturno (Andrés e Matheus), 2 dias cada. A referência inicial é 13/10/2026, primeiro dia de Hélio e de Andrés. Trocas, faltas e coberturas são ajustes pontuais por turno. Tudo isso pode ser alterado em **Atividades → Configuração**, que mostra a prévia dos próximos 14 dias.
+- **Escala dos assistentes:** segue a aba Equipe. O escalado de cada turno é o assistente cadastrado da equipe de plantão (dia: A ou B; noite: C ou D), ligado pela matrícula do Cadastro (Roger 9019, Hélio 7343, Andrés 7144, Matheus 8940). Se ele estiver de férias ou afastado na aba Férias, entra quem cobre, quando for um dos assistentes; sem cobertura, o turno mostra o aviso. Ajustes pontuais (trocas, faltas, coberturas) têm prioridade. O rodízio em **Atividades → Configuração** é só a reserva, usada se a planilha da equipe estiver indisponível ou antes de 01/06/2026. A virada agendada (07:02 e 19:02) atualiza o escalado dos turnos já criados.
 - **Lista do turno:** gerada a partir dos modelos (atividades fixas) no primeiro acesso ao turno, mais as atividades incluídas pelo "+" no fim da lista e as pendências herdadas. Modelo incluído ou alterado vale a partir do turno atual; turnos encerrados não mudam.
 - **Atividades fixas iniciais:** no primeiro uso o painel cadastra a lista da operação.
   - **Sem horário, nos dois turnos:** atualizar SOF, GEPORT e lineup, dobra de TPA, produção do navio.
@@ -101,6 +108,8 @@ Com o Node.js 22 instalado, na pasta do projeto:
 `FIREBASE_SERVICE_ACCOUNT_JSON` é **obrigatório para a aba Atividades**. Para o resto do painel ele só serve como reserva, caso o Google esteja indisponível. A variável `TPS_IMPORT_PIN` não é mais usada e pode ser apagada no Netlify.
 
 ## Publicação
+
+**Testes antes de publicar:** o Netlify roda `npm test` antes de cada publicação (`netlify.toml`). Se algum teste falhar, a publicação é cancelada e o site continua na versão anterior; o motivo aparece no log da publicação no Netlify. O GitHub também roda os testes a cada envio (`.github/workflows/testes.yml`) e marca cada commit com ✓ ou ✗.
 
 **Não use Netlify Drop (arrastar e soltar) para esta versão:** essa modalidade não executa build, e as funções que conectam o Firestore não seriam publicadas. O ZIP é o código-fonte completo, não um ZIP para arrastar diretamente na página.
 

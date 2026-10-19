@@ -580,9 +580,7 @@
     if (!box || !data) return;
     const flags = shiftFlags(data);
     const shift = data.shift;
-    const scheduled = shift.scheduled?.name
-      ? `${escapeHtml(shift.scheduled.name)}${shift.scheduled.dayOfBlock ? ` (${shift.scheduled.dayOfBlock}º dia)` : ""}${shift.scheduled.source === "ajuste" ? ` <span class="act-badge">Ajuste: ${escapeHtml(shift.scheduled.reason)}</span>` : ""}`
-      : "Sem escala definida";
+    const scheduled = scheduledHtml(shift.scheduled);
     const tag = flags.isCurrent ? "TURNO ATUAL" : flags.isFuture ? "TURNO FUTURO" : "TURNO ANTERIOR";
     const done = data.tasks.filter(task => task.status === "done").length;
     const counted = data.tasks.filter(task => task.status !== "transferred").length;
@@ -784,14 +782,22 @@
     return { hours: { dayStart: data.get("dayStart"), nightStart: data.get("nightStart") }, rotations: { D: rotation("D"), N: rotation("N") } };
   }
 
-  function previewHtml(config) {
-    const overrides = Object.fromEntries((state.settings.overrides || []).map(({ id, ...row }) => [id, row]));
+  /** Próximos 14 dias como o servidor calcula para os turnos (equipe de plantão, coberturas, ajustes ou rodízio). */
+  function previewHtml() {
     const today = S.zonedParts(new Date()).date;
-    const rows = Array.from({ length: 14 }, (_, i) => S.addDays(today, i)).map(date => {
-      const cell = kind => { const slot = S.scheduledFor(S.makeId(date, kind), config, overrides); return `${escapeHtml(nameOf(slot.assistantId))}${slot.source === "ajuste" ? " *" : slot.dayOfBlock ? ` <small>${slot.dayOfBlock}º</small>` : ""}`; };
-      return `<tr${date === today ? ` class="is-today"` : ""}><td>${brDate(date).slice(0, 5)} ${S.WEEKDAYS[S.weekday(date)]}</td><td>${cell("D")}</td><td>${cell("N")}</td></tr>`;
-    }).join("");
-    return `<table class="base-table act-table"><thead><tr><th>Dia</th><th>Diurno</th><th>Noturno</th></tr></thead><tbody>${rows}</tbody></table><p class="act-muted">* ajuste pontual. O número indica o dia do bloco de cada assistente.</p>`;
+    const mark = slot => slot.source === "ajuste" ? " *" : slot.source === "cobertura" ? " ↺" : slot.absent ? " !" : "";
+    const cell = slot => `${escapeHtml(slot.name || "—")}${slot.team ? ` <small>${escapeHtml(slot.team)}</small>` : ""}${slot.dayOfBlock ? ` <small>${slot.dayOfBlock}º</small>` : ""}${mark(slot)}`;
+    const rows = (state.settings.preview || []).map(({ date, D, N }) => `<tr${date === today ? ` class="is-today"` : ""}><td>${brDate(date).slice(0, 5)} ${S.WEEKDAYS[S.weekday(date)]}</td><td title="${escapeHtml(D.reason || "")}">${cell(D)}</td><td title="${escapeHtml(N.reason || "")}">${cell(N)}</td></tr>`).join("");
+    return `<table class="base-table act-table"><thead><tr><th>Dia</th><th>Diurno</th><th>Noturno</th></tr></thead><tbody>${rows}</tbody></table><p class="act-muted">Letra = equipe de plantão; número = dia do plantão. * ajuste pontual · ↺ cobrindo férias · ! assistente fora sem cobertura (passe o mouse para ver).</p>`;
+  }
+
+  /** Escalado no cabeçalho do turno: nome, equipe, dia do plantão e avisos (ajuste, cobertura, ausência). */
+  function scheduledHtml(slot) {
+    if (!slot?.name) return slot?.reason ? `<span class="act-badge is-late">${escapeHtml(slot.reason)}</span>` : "Sem escala definida";
+    return `${escapeHtml(slot.name)}${slot.team ? ` · Equipe ${escapeHtml(slot.team)}` : ""}${slot.dayOfBlock ? ` (${slot.dayOfBlock}º dia)` : ""}`
+      + (slot.source === "ajuste" ? ` <span class="act-badge">Ajuste: ${escapeHtml(slot.reason)}</span>` : "")
+      + (slot.source === "cobertura" ? ` <span class="act-badge is-carried">${escapeHtml(slot.reason)}</span>` : "")
+      + (slot.absent ? ` <span class="act-badge is-late">${escapeHtml(slot.reason)}</span>` : "");
   }
 
   function templateFormHtml(template = null) {
@@ -829,16 +835,22 @@
     const templateRows = templates.map(t => `<li><span class="act-time">${t.time || "—"}</span><div class="act-body"><strong>${escapeHtml(t.title)}</strong><p>${shiftText[t.shift]} · ${daysText(t.weekdays)}${t.remindBefore ? ` · lembrete ${t.remindBefore} min antes` : ""}${t.assigneeId ? ` · responsável: ${escapeHtml(nameOf(t.assigneeId))}` : ""}</p></div><div class="act-actions"><button type="button" class="act-link" data-action="edit-template" data-id="${escapeHtml(t.id)}">Editar</button><button type="button" class="act-link" data-action="remove-template" data-id="${escapeHtml(t.id)}">Excluir</button></div></li>`).join("");
     box.innerHTML = `
       <section class="act-card">
-        <div class="act-card-head"><p class="eyebrow">ESCALA 2X2</p><h3>Turnos e rodízio</h3></div>
+        <div class="act-card-head"><p class="eyebrow">ESCALA DOS ASSISTENTES</p><h3>Segue a aba Equipe</h3></div>
+        <p class="${state.settings.teamSource ? "act-ok" : "act-warning"}">${state.settings.teamSource
+          ? "O escalado de cada turno é o assistente da equipe de plantão (dia A ou B, noite C ou D), pela matrícula do Cadastro. De férias, entra quem cobre, se for um dos assistentes abaixo."
+          : "A planilha da equipe não está disponível agora: vale o rodízio de reserva abaixo."}</p>
         <div class="act-settings-grid">
-          <form data-form="schedule" class="act-form">
-            <label>Início do Diurno<input name="dayStart" type="time" value="${config.hours.dayStart}" required></label>
-            <label>Início do Noturno<input name="nightStart" type="time" value="${config.hours.nightStart}" required></label>
-            ${rotationFields("D")}${rotationFields("N")}
-            <p class="is-wide act-muted">"1º dia do 1º" é uma data em que o 1º do rodízio faz o primeiro dia do seu bloco. O sistema repete o ciclo para frente e para trás.</p>
-            <div class="is-wide act-form-buttons"><button type="submit" class="act-button is-primary">Salvar escala</button></div>
-          </form>
-          <div><h4>Próximos 14 dias</h4><div id="activitiesPreview">${previewHtml(config)}</div></div>
+          <details class="act-reserve"${state.settings.teamSource ? "" : " open"}>
+            <summary>Horários dos turnos e rodízio de reserva</summary>
+            <form data-form="schedule" class="act-form">
+              <label>Início do Diurno<input name="dayStart" type="time" value="${config.hours.dayStart}" required></label>
+              <label>Início do Noturno<input name="nightStart" type="time" value="${config.hours.nightStart}" required></label>
+              ${rotationFields("D")}${rotationFields("N")}
+              <p class="is-wide act-muted">O rodízio só vale quando a planilha da equipe está indisponível, antes de 01/06/2026 ou se nenhum assistente estiver ligado à equipe de plantão. "1º dia do 1º" é uma data em que o 1º do rodízio faz o primeiro dia do seu bloco.</p>
+              <div class="is-wide act-form-buttons"><button type="submit" class="act-button is-primary">Salvar</button></div>
+            </form>
+          </details>
+          <div><h4>Próximos 14 dias</h4><div id="activitiesPreview">${previewHtml()}</div></div>
         </div>
       </section>
       <section class="act-card">
@@ -860,8 +872,9 @@
       </section>
       <section class="act-card">
         <div class="act-card-head"><p class="eyebrow">EQUIPE</p><h3>Assistentes</h3></div>
-        <ul class="act-simple-list">${assistants.map(item => `<li><form data-form="assistant" data-id="${escapeHtml(item.id)}" class="act-inline-form"><input name="name" value="${escapeHtml(item.name)}" maxlength="60" required aria-label="Nome"><label class="act-check"><input type="checkbox" name="active"${item.active !== false ? " checked" : ""}>Ativo</label><button type="submit" class="act-link">Salvar</button></form></li>`).join("")}
-          <li><form data-form="assistant" class="act-inline-form"><input name="name" maxlength="60" required placeholder="Novo assistente" aria-label="Nome do novo assistente"><input type="hidden" name="active" value="on"><button type="submit" class="act-link">Incluir</button></form></li></ul>
+        <p class="act-muted">A matrícula liga o assistente à pessoa do Cadastro e à equipe A/B/C/D dela.</p>
+        <ul class="act-simple-list">${assistants.map(item => `<li><form data-form="assistant" data-id="${escapeHtml(item.id)}" class="act-inline-form"><input name="name" value="${escapeHtml(item.name)}" maxlength="60" required aria-label="Nome"><input name="matricula" value="${escapeHtml(item.matricula || "")}" inputmode="numeric" maxlength="6" placeholder="Matrícula" aria-label="Matrícula de ${escapeHtml(item.name)}" class="act-matricula"><label class="act-check"><input type="checkbox" name="active"${item.active !== false ? " checked" : ""}>Ativo</label><button type="submit" class="act-link">Salvar</button><small class="act-linked">${item.linked ? `${escapeHtml(item.linked.name)} · Equipe ${escapeHtml(item.linked.team)}${item.linked.status !== "Ativo" ? ` · ${escapeHtml(item.linked.status)}` : ""}` : item.matricula && state.settings.teamSource ? `<span class="act-warning">matrícula não encontrada no Cadastro</span>` : ""}</small></form></li>`).join("")}
+          <li><form data-form="assistant" class="act-inline-form"><input name="name" maxlength="60" required placeholder="Novo assistente" aria-label="Nome do novo assistente"><input name="matricula" inputmode="numeric" maxlength="6" placeholder="Matrícula" aria-label="Matrícula do novo assistente" class="act-matricula"><input type="hidden" name="active" value="on"><button type="submit" class="act-link">Incluir</button></form></li></ul>
       </section>`;
   }
 
@@ -887,7 +900,7 @@
     const data = Object.fromEntries(new FormData(form));
     if (form.dataset.form === "schedule") settingsAct(actor => api("/escala", { ...scheduleFromForm(form), actor }), "Escala salva.");
     if (form.dataset.form === "override") settingsAct(actor => api("/ajustes", { shiftId: S.makeId(data.date, data.kind), assistantId: data.assistantId, reason: data.reason, actor }), "Ajuste registrado.");
-    if (form.dataset.form === "assistant") settingsAct(actor => api("/assistentes", { id: form.dataset.id || null, name: data.name, active: Boolean(data.active), actor }), "Assistente salvo.");
+    if (form.dataset.form === "assistant") settingsAct(actor => api("/assistentes", { id: form.dataset.id || null, name: data.name, matricula: data.matricula ?? "", active: Boolean(data.active), actor }), "Assistente salvo.");
     if (form.dataset.form === "template") {
       const weekdays = new FormData(form).getAll("weekdays").map(Number);
       const body = { id: state.editingTemplate?.id || null, title: data.title, description: data.description, shift: data.shift, time: data.time, remindBefore: data.remindBefore, weekdays, assigneeId: data.assigneeId || null };
@@ -905,13 +918,6 @@
     if (action === "remove-override") settingsAct(actor => api("/ajustes/remover", { shiftId: button.dataset.shift, actor }), "Ajuste removido.");
   }
 
-  function onSettingsInput(event) {
-    const form = event.target.closest("form[data-form='schedule']");
-    if (!form) return;
-    const config = scheduleFromForm(form);
-    if (S.isTime(config.hours.dayStart) && ["D", "N"].every(kind => config.rotations[kind].members.length && S.isDate(config.rotations[kind].referenceDate))) $("activitiesPreview").innerHTML = previewHtml(config);
-  }
-
   /* ---------- Entrada ---------- */
 
   /** Chamado ao abrir o painel: liga o acompanhamento em segundo plano se os alertas estiverem ativos. */
@@ -927,7 +933,6 @@
     $("activitiesHistoryForm").addEventListener("submit", event => { event.preventDefault(); loadHistory(); });
     $("activitiesSettings").addEventListener("submit", onSettingsSubmit);
     $("activitiesSettings").addEventListener("click", onSettingsClick);
-    $("activitiesSettings").addEventListener("input", onSettingsInput);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && (state.view === "turno" || alertsEnabled())) refresh().catch(() => {}); schedulePolling(); });
     state.alertTimer = setInterval(() => { checkAlerts(); if (state.view === "turno") renderShift(); }, ALERT_CHECK_MS);
     renderAlertButton();

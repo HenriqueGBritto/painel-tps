@@ -135,14 +135,23 @@ test("guarda a leitura por alguns minutos para não consultar o Google a cada ac
 
 test("sem acesso à planilha, a API devolve a última base salva com aviso", async () => {
   const saved = { ...process.env };
+  const realFetch = globalThis.fetch;
   delete process.env.TPS_SHEET_OPERATIONS; delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  const response = await handler(new Request("https://painel.test/api/data"));
-  const body = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(body.origin, "fallback");
-  assert.ok(body.records.length > 0);
-  assert.equal((await handler(new Request("https://painel.test/api/import", { method: "POST" }))).status, 404, "importação manual removida");
-  Object.assign(process.env, saved);
+  // Google fora do ar: o teste não depende da internet (com rede, a leitura real funcionaria e o teste falharia).
+  globalThis.fetch = async () => { throw new Error("rede indisponível no teste"); };
+  clearSheetCache();
+  try {
+    const response = await handler(new Request("https://painel.test/api/data"));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.origin, "fallback");
+    assert.match(body.fallbackReason, /rede indisponível no teste/);
+    assert.ok(body.records.length > 0);
+    assert.equal((await handler(new Request("https://painel.test/api/import", { method: "POST" }))).status, 404, "importação manual removida");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(process.env, saved);
+  }
 });
 
 test("cada base informa o nome e o link dos arquivos lidos", () => {

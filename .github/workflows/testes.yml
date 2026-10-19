@@ -1,0 +1,19 @@
+# Roda os testes a cada envio ao GitHub e em pull requests: o commit ganha ✓ ou ✗.
+# (O Netlify também roda os testes antes de publicar; ver netlify.toml.)
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # Só as dependências do site; o netlify-cli (desenvolvimento) não é necessário para os testes.
+      - run: npm install --omit=dev --no-package-lock --no-audit --no-fund
+      - run: npm test
