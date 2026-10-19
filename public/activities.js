@@ -8,7 +8,7 @@
   const ALERT_CHECK_MS = 20000;
   /** Alerta perdido (página fechada no horário) só sai se a página abrir até este tempo depois. */
   const ALERT_GRACE_MS = 15 * 60000;
-  const KEYS = { identity: "tps-atividades-identidade", alerts: "tps-atividades-alertas", sent: "tps-atividades-alertas-enviados" };
+  const KEYS = { alerts: "tps-atividades-alertas", sent: "tps-atividades-alertas-enviados" };
 
   const state = {
     view: null,            // "turno" | "acompanhamento" | "configuracao" | null (aba fechada)
@@ -47,36 +47,21 @@
     return data;
   }
 
-  /* ---------- Identificação (até existir login) ---------- */
+  /* ---------- Quem registra: a pessoa logada (o servidor grava o autor pelo login) ---------- */
 
-  /** Pessoa confirmada no turno atual; a cada turno a confirmação é pedida de novo (computador compartilhado). */
-  function identity(shiftId = state.current?.shift.id) {
-    const saved = storage.get(KEYS.identity);
-    return saved?.name && saved.shiftId === shiftId ? { id: saved.id || null, name: saved.name } : null;
+  function identity() {
+    const user = window.TpsAuth?.user;
+    return user ? { id: user.assistantId || user.uid, name: user.name } : null;
   }
-  /** Para a configuração vale a última pessoa identificada, de qualquer turno. */
-  const lastIdentity = () => { const saved = storage.get(KEYS.identity); return saved?.name ? { id: saved.id || null, name: saved.name } : null; };
 
   function identityHtml() {
-    const shift = state.current?.shift;
-    if (!shift) return "";
     const me = identity();
-    if (me) return `<div class="act-identity is-confirmed"><span>Você: <strong>${escapeHtml(me.name)}</strong></span><button type="button" class="act-link" data-action="change-identity">Trocar</button></div>`;
-    const assistants = (state.settings?.assistants || []).filter(item => item.active !== false);
-    const suggested = shift.scheduled?.assistantId;
-    const options = assistants.map(item => `<option value="${escapeHtml(item.id)}"${item.id === suggested ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
-    return `<form class="act-identity" data-form="identity">
-      <label>Quem é você?<select name="who">${options}<option value="__other">Outra pessoa (gestão)</option></select></label>
-      <label class="act-other-name" hidden>Nome<input name="other" maxlength="80" autocomplete="name"></label>
-      <button type="submit" class="act-button is-primary">Confirmar</button>
-      <small>Confirme a cada turno. Fica salvo só neste navegador.</small>
-    </form>`;
+    return me ? `<div class="act-identity is-confirmed"><span>Registrando como <strong>${escapeHtml(me.name)}</strong></span></div>` : "";
   }
 
-  function requireIdentity(shiftId) {
-    // No turno atual vale só quem confirmou neste turno; para incluir em turno futuro, a última identificação basta.
-    const me = identity() || (shiftId !== state.current?.shift.id ? lastIdentity() : null);
-    if (!me) { announce("Confirme quem é você antes de registrar.", true); $("activitiesShift").querySelector("[data-form='identity'] select")?.focus(); }
+  function requireIdentity() {
+    const me = identity();
+    if (!me) announce("Entre com seu login para registrar.", true);
     return me;
   }
 
@@ -383,7 +368,7 @@
         if (file.size > ATTACH_MAX_MB * 1048576) throw new Error(`"${original.name}" passa de ${ATTACH_MAX_MB} MB.`);
         const response = await fetch(`/api/atividades/anexo?turno=${encodeURIComponent(shiftId)}`, {
           method: "POST", body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream", "X-Arquivo": encodeURIComponent(file.name), "X-Autor-Nome": encodeURIComponent(actor.name), "X-Autor-Id": encodeURIComponent(actor.id || "") }
+          headers: { "Content-Type": file.type || "application/octet-stream", "X-Arquivo": encodeURIComponent(file.name) }
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Não foi possível enviar o arquivo.");
@@ -657,7 +642,6 @@
       return;
     }
     if (action === "current") { state.viewedId = null; state.editor = null; refresh().catch(error => announce(error.message, true)); return; }
-    if (action === "change-identity") { storage.set(KEYS.identity, null); renderShift(); return; }
     if (["not-done", "note", "assign", "add"].includes(action)) { openEditor(action, taskId); return; }
     if (action === "cancel") { openEditor(null); return; }
     if (action === "unattach") { state.noteFiles = state.noteFiles.filter(file => file.id !== button.dataset.file); renderNoteFiles(); return; }
@@ -674,16 +658,6 @@
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     const shiftId = state.viewed.shift.id;
-    if (form.dataset.form === "identity") {
-      const assistant = (state.settings?.assistants || []).find(item => item.id === data.who);
-      const name = data.who === "__other" ? String(data.other || "").trim() : assistant?.name;
-      if (!name) { announce("Escreva o seu nome.", true); return; }
-      storage.set(KEYS.identity, { id: data.who === "__other" ? null : data.who, name, shiftId: state.current.shift.id });
-      announce(`Identificado como ${name}.`);
-      form.remove();
-      renderShift();
-      return;
-    }
     const actor = requireIdentity(shiftId);
     if (!actor) return;
     const taskId = form.dataset.task;
@@ -707,7 +681,6 @@
 
   /** Caixa de seleção: marca como concluída ou volta para pendente. */
   function onShiftChange(event) {
-    if (event.target.name === "who") { event.target.form.querySelector(".act-other-name").hidden = event.target.value !== "__other"; return; }
     if (event.target.dataset.action === "attach") { uploadFiles(event.target); return; }
     if (event.target.dataset.pick) {
       const bar = event.target.closest(".act-pick");
@@ -879,8 +852,8 @@
   }
 
   async function settingsAct(run, success) {
-    const actor = lastIdentity();
-    if (!actor) { announce("Identifique-se na aba Turno (quem é você?) antes de alterar a configuração.", true); return; }
+    const actor = requireIdentity();
+    if (!actor) return;
     try {
       await run(actor);
       await loadSettings();

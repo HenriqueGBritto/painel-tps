@@ -4,6 +4,7 @@ import { memoryStore, useActivitiesStore } from "../netlify/lib/activities-store
 import { memoryAttachmentsStore, useAttachmentsStore } from "../netlify/lib/attachments-store.mjs";
 import * as A from "../netlify/lib/activities.mjs";
 import handler from "../netlify/functions/atividades.mjs";
+import { sessionCookie } from "./auth-helper.mjs";
 
 const br = text => new Date(`${text}:00-03:00`);
 const helio = { id: "helio", name: "Hélio" };
@@ -118,15 +119,18 @@ test("acompanhamento por período e por assistente", async () => {
   await assert.rejects(A.history(store, { from: "2026-09-01", to: "2026-10-14" }), /até 31 dias/);
 });
 
-test("API: rotas, autor obrigatório e versão que evita reler a lista", async () => {
+test("API: login obrigatório, autor pelo login e versão que evita reler a lista", async () => {
   const now = () => br("2026-10-14T20:00");
-  const call = (path, body) => handler(new Request(`https://painel.test/api/atividades${path}`, body ? { method: "POST", body: JSON.stringify(body), headers: { origin: "https://painel.test" } } : {}), {}, { now });
+  const { cookie } = await sessionCookie({ name: "Andrés", assistantId: "andres" });
+  const request = (path, body, extra = {}) => new Request(`https://painel.test/api/atividades${path}`, body ? { method: "POST", body: JSON.stringify(body), headers: { origin: "https://painel.test", ...extra } } : { headers: extra });
+  const call = (path, body) => handler(request(path, body, { cookie }), {}, { now });
+  assert.equal((await handler(request("/status"), {}, { now })).status, 401, "sem login");
+  assert.equal((await handler(request("/tarefa", { shiftId: "2026-10-14_N", title: "X" }), {}, { now })).status, 401, "sem login não grava");
   assert.deepEqual(await (await call("/status")).json(), { ok: true, storage: "memory", persistent: false });
-  assert.equal((await call("/tarefa", { shiftId: "2026-10-14_N", title: "X" })).status, 400, "sem autor");
-  assert.equal((await call("/tarefa", { shiftId: "2026-10-14_N", title: "X", actor: andres })).status, 200);
+  assert.equal((await call("/tarefa", { shiftId: "2026-10-14_N", title: "X", actor: { id: "helio", name: "Outro nome" } })).status, 200);
   const view = await (await call("/turno?id=atual")).json();
   assert.equal(view.shift.id, "2026-10-14_N");
-  assert.equal(view.tasks[0].createdBy.name, "Andrés");
+  assert.deepEqual([view.tasks[0].createdBy.id, view.tasks[0].createdBy.name], ["andres", "Andrés"], "o autor é quem está logado, não o que veio no pedido");
   assert.deepEqual(await (await call(`/turno?id=atual&versao=${encodeURIComponent(view.shift.version)}`)).json(), { unchanged: true, version: view.shift.version });
   assert.equal((await call("/nada")).status, 404);
   const foreign = await handler(new Request("https://painel.test/api/atividades/tarefa", { method: "POST", body: "{}", headers: { origin: "https://outro.site" } }), {}, { now });
@@ -134,11 +138,12 @@ test("API: rotas, autor obrigatório e versão que evita reler a lista", async (
 });
 
 test("API: sem Firestore em produção, responde 503 em vez de gravar em memória", async () => {
+  const { cookie } = await sessionCookie();
   useActivitiesStore(null);
   const saved = { FIREBASE: process.env.FIREBASE_SERVICE_ACCOUNT_JSON, DEV: process.env.NETLIFY_DEV, MEM: process.env.TPS_ACTIVITIES_MEMORY };
   delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON; delete process.env.NETLIFY_DEV; delete process.env.TPS_ACTIVITIES_MEMORY;
   try {
-    const response = await handler(new Request("https://painel.test/api/atividades/status"), {});
+    const response = await handler(new Request("https://painel.test/api/atividades/status", { headers: { cookie } }), {});
     assert.equal(response.status, 503);
     assert.match((await response.json()).error, /FIREBASE_SERVICE_ACCOUNT_JSON/);
   } finally {
@@ -205,7 +210,8 @@ test("responsável: modelo com pessoa fixa, atribuição manual e volta ao escal
 
 test("API: observação e responsável passam pelas rotas novas", async () => {
   const now = () => br("2026-10-14T20:00");
-  const call = (path, body) => handler(new Request(`https://painel.test/api/atividades${path}`, { method: "POST", body: JSON.stringify(body), headers: { origin: "https://painel.test" } }), {}, { now });
+  const { cookie } = await sessionCookie({ name: "Andrés", assistantId: "andres" });
+  const call = (path, body) => handler(new Request(`https://painel.test/api/atividades${path}`, { method: "POST", body: JSON.stringify(body), headers: { origin: "https://painel.test", cookie } }), {}, { now });
   const { id } = await (await call("/tarefa", { shiftId: "2026-10-14_N", title: "X", actor: andres })).json();
   assert.equal((await call("/tarefa/observacao", { shiftId: "2026-10-14_N", taskId: id, note: "ok", actor: andres })).status, 200);
   assert.equal((await call("/tarefa/responsavel", { shiftId: "2026-10-14_N", taskId: id, assigneeId: "matheus", actor: andres })).status, 200);
@@ -263,14 +269,15 @@ test("API: anexo enviado como arquivo e lido de volta", async () => {
   useAttachmentsStore(memoryAttachmentsStore());
   try {
     const now = () => br("2026-10-14T10:00");
+    const { cookie } = await sessionCookie({ name: "Hélio", assistantId: "helio" });
     const upload = await handler(new Request("https://painel.test/api/atividades/anexo?turno=2026-10-14_D", {
       method: "POST", body: new Uint8Array([37, 80, 68, 70]),
-      headers: { origin: "https://painel.test", "content-type": "application/pdf", "x-arquivo": encodeURIComponent("Relatório.pdf"), "x-autor-nome": encodeURIComponent("Hélio"), "x-autor-id": "helio" }
+      headers: { origin: "https://painel.test", "content-type": "application/pdf", "x-arquivo": encodeURIComponent("Relatório.pdf"), cookie }
     }), {}, { now });
     const meta = await upload.json();
     assert.equal(upload.status, 200, JSON.stringify(meta));
-    assert.deepEqual([meta.name, meta.by], ["Relatório.pdf", helio]);
-    const file = await handler(new Request(`https://painel.test/api/atividades/anexo?turno=2026-10-14_D&id=${meta.id}&baixar=1`), {}, { now });
+    assert.deepEqual([meta.name, meta.by.id, meta.by.name], ["Relatório.pdf", "helio", "Hélio"]);
+    const file = await handler(new Request(`https://painel.test/api/atividades/anexo?turno=2026-10-14_D&id=${meta.id}&baixar=1`, { headers: { cookie } }), {}, { now });
     assert.equal(file.headers.get("content-type"), "application/pdf");
     assert.match(file.headers.get("content-disposition"), /^attachment; filename\*=UTF-8''Relat%C3%B3rio\.pdf$/);
     assert.deepEqual(new Uint8Array(await file.arrayBuffer()), new Uint8Array([37, 80, 68, 70]));

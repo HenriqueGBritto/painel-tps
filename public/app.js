@@ -1,7 +1,7 @@
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", teamView: "resumo", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null };
+const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", teamView: "resumo", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null, ready: false, access: {} };
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const fmtOne = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtTwo = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -331,7 +331,7 @@ function activateNavigation(){
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-team]").forEach(button=>{const active=button.dataset.team===state.teamView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="acessos"?"acessos":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
@@ -342,6 +342,7 @@ function activateNavigation(){
   if(visible==="descarga"||visible==="pesagem")window.dischargePanel?.load();
   window.activitiesPanel?.show(state.menu==="atividades"?state.activityView:null);
   window.teamPanel?.show(state.menu==="equipe"?state.teamView:null);
+  window.accessPanel?.show(state.menu==="acessos");
   renderDataSeal();
   syncUrl();
 }
@@ -584,6 +585,7 @@ function registerWebMCP(){
 /* ---------- Visão na URL (aba, ano, mês e intervalo) ---------- */
 const urlState={applying:false,pending:null};
 function currentView(){
+  if(state.menu==="acessos")return "acessos";
   if(state.menu==="producao")return "producao";
   if(state.menu==="atividades")return state.activityView==="turno"?"atividades":state.activityView;
   if(state.menu==="equipe")return state.teamView==="resumo"?"equipe":`equipe-${state.teamView}`;
@@ -598,7 +600,7 @@ function currentUrlView(){
 }
 /* Grava a visão atual na URL. Cada mudança feita pela pessoa vira uma entrada do histórico (voltar/avançar). */
 function syncUrl(){
-  if(urlState.applying||!state.records.length)return;
+  if(urlState.applying||!state.ready)return;
   const view=currentView();
   if((view==="descarga"||view==="pesagem")&&window.dischargePanel?.isLoading?.())return;
   const query=TpsUrlState.serialize(currentUrlView());
@@ -611,7 +613,8 @@ function applyUrl(search){
   const target=TpsUrlState.parse(search);
   urlState.applying=true;
   try{
-    if(target.view==="producao")state.menu="producao";
+    if(target.view==="acessos")state.menu="acessos";
+    else if(target.view==="producao")state.menu="producao";
     else if(["atividades","acompanhamento","configuracao"].includes(target.view)){state.menu="atividades";state.activityView=target.view==="atividades"?"turno":target.view}
     else if(target.view==="equipe"||target.view.startsWith("equipe-")){state.menu="equipe";state.teamView=target.view==="equipe"?"resumo":target.view.slice(7)}
     else if(target.view==="lineup"||target.view==="mares"){state.menu="lineup";state.lineupView=target.view==="mares"?"mares":"planejamento"}
@@ -625,6 +628,7 @@ function applyUrl(search){
       updateFilterSummaries();
     }
     urlState.pending=target;
+    allowedView();
     activateNavigation();
     if(target.view==="ocupacao")render();
     window.onDischargeReady();
@@ -703,7 +707,7 @@ function renderChanges(){
 function setupChanges(){
   const seal=$("updatedAt"),panel=$("changesPanel"),wrap=$("dataSealWrap");
   // A planilha de indicadores só carrega ao abrir Descarga/Pesagem; o painel pede a leitura para mostrar as duas.
-  const toggle=open=>{panel.hidden=!open;seal.setAttribute("aria-expanded",String(open));if(open){renderChanges();window.dischargePanel?.load()}};
+  const toggle=open=>{panel.hidden=!open;seal.setAttribute("aria-expanded",String(open));if(open){renderChanges();if(state.access.discharge)window.dischargePanel?.load()}};
   seal.addEventListener("click",()=>toggle(panel.hidden));
   $("changesClose").addEventListener("click",()=>{toggle(false);seal.focus()});
   document.addEventListener("click",event=>{if(!panel.hidden&&!wrap.contains(event.target))toggle(false)});
@@ -716,7 +720,8 @@ function renderDataSeal(){
   const seal=$("updatedAt");if(!seal)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
   const wrap=$("dataSealWrap");
-  if(state.menu==="producao"||state.menu==="atividades"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
+  $("refreshData").hidden=state.menu==="acessos"||(state.menu!=="equipe"&&!state.access.refresh);
+  if(state.menu==="producao"||state.menu==="atividades"||state.menu==="acessos"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
   wrap.hidden=false;
   renderChanges();
   if(state.menu==="equipe"){
@@ -746,7 +751,51 @@ window.getExportDataNote=sectionId=>{
   return meta?TpsMetrics.freshness(meta,new Date()).text:"";
 };
 
-async function init(){const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);setupFilters();setupLineup();window.dischargePanel?.setup();urlState.applying=true;setupNavigation();await setupTides();setupCardDetails();setupRefresh();setupChanges();window.activitiesPanel?.start();setupActiveOperationDetails();render();urlState.applying=false;applyUrl(location.search);setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(render,120)})}
+/* Abertura: espera o login (auth.js), mostra só as telas liberadas para a pessoa e lê só as bases dela. */
+async function init(){
+  const {can}=await window.TpsAuth.ready;
+  state.access=can;applyAccess();
+  if(!TpsUrlState.VIEWS.some(canView))throw new Error("Seu acesso ainda não tem nenhuma tela liberada. Fale com o administrador do painel.");
+  if(can.operations){
+    const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);
+  }
+  if(can.operations){setupFilters();setupLineup()}
+  if(can.discharge)window.dischargePanel?.setup();
+  urlState.applying=true;setupNavigation();
+  if(can.lineup)await setupTides();
+  if(can.operations)setupCardDetails();
+  setupRefresh();setupChanges();
+  if(can.atividades)window.activitiesPanel?.start();
+  if(can.operations){setupActiveOperationDetails();render()}
+  state.ready=true;urlState.applying=false;applyUrl(location.search);
+  if(can.operations)setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);
+  if(can.operations)registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(()=>{if(state.records.length)render()},120)})
+}
+/* Telas de cada menu e o acesso que libera cada uma (o servidor confere de novo em cada pedido). */
+const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin"};
+const canView=view=>{if(view.startsWith("equipe"))return Boolean(state.access.equipe);const need=[].concat(VIEW_ACCESS[view]||[]);return need.some(key=>state.access[key])};
+/** Esconde menus, grupos e subabas sem acesso. */
+function applyAccess(){
+  const has=key=>Boolean(state.access[key]);
+  document.querySelectorAll("[data-menu]").forEach(button=>{const menu=button.dataset.menu;button.hidden=menu==="atividades"?!(has("atividades")||has("atividades-config")):menu==="acessos"?!has("admin"):!has(menu)});
+  document.querySelectorAll("[data-indicator]").forEach(button=>{button.hidden=!has("indicadores")});
+  document.querySelector('[data-activity="turno"]').hidden=!has("atividades");
+  document.querySelector('[data-activity="configuracao"]').hidden=!has("atividades-config");
+  document.querySelectorAll(".side-group").forEach(group=>{group.hidden=!group.querySelector(".side-link:not([hidden])")});
+}
+/** Se a URL pede uma tela sem acesso (ou nenhuma), abre a primeira liberada. */
+function allowedView(){
+  if(canView(currentView()))return;
+  const first=TpsUrlState.VIEWS.find(canView);
+  if(!first){state.menu=null;return}
+  const target=TpsUrlState.parse(`?aba=${first}`).view;
+  if(target==="acessos")state.menu="acessos";
+  else if(target==="producao")state.menu="producao";
+  else if(["atividades","acompanhamento","configuracao"].includes(target)){state.menu="atividades";state.activityView=target==="atividades"?"turno":target}
+  else if(target.startsWith("equipe")){state.menu="equipe";state.teamView="resumo"}
+  else if(target==="lineup"||target==="mares"){state.menu="lineup";state.lineupView=target==="mares"?"mares":"planejamento"}
+  else{state.menu="indicadores";state.indicator=target}
+}
 document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)render()});
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});
 /* Clique numa notificação de atividade: abre a lista do turno. */

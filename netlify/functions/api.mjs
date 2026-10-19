@@ -6,7 +6,7 @@ import { firestore } from "../lib/firebase.mjs";
 import { loadDataset } from "../lib/dataset.mjs";
 import { downloadWorkbook, sourceFiles } from "../lib/sheets.mjs";
 import { loadForServing, requestRefresh, FREQUENT_KINDS } from "../lib/snapshots.mjs";
-import { authorize, ACTIONS } from "../lib/access.mjs";
+import { authorize, denied, ACTIONS } from "../lib/access.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const json = (value, status = 200, extra = {}) => new Response(JSON.stringify(value), { status, headers: { ...headers, ...extra, "Content-Type": "application/json; charset=utf-8" } });
@@ -107,7 +107,7 @@ async function fallbackDataset(kind, error) {
    Sem cópia de reserva: se o Google falhar e não houver cópia guardada, a página mostra o erro. */
 async function teamData(request) {
   const access = await authorize(request, ACTIONS.readTeam);
-  if (!access.allowed) return json({ error: access.error || "Acesso negado." }, access.status || 403);
+  if (!access.allowed) return denied(access, headers);
   try {
     return json({ ...(await loadForServing("team")), files: sourceFiles("team") });
   } catch (error) {
@@ -119,9 +119,15 @@ async function teamData(request) {
 export default async function handler(request) {
   const url = new URL(request.url);
   const path = url.pathname;
-  if (request.method === "GET" && path === "/api/production-workbook") return productionWorkbook(url);
+  // Todas as rotas exigem login (ponto único: netlify/lib/access.mjs).
+  if (request.method === "GET" && path === "/api/production-workbook") {
+    const access = await authorize(request, ACTIONS.readProduction);
+    return access.allowed ? productionWorkbook(url) : denied(access, headers);
+  }
   if (request.method === "GET" && (path === "/api/data" || path === "/api/discharge")) {
     const kind = path === "/api/data" ? "operations" : "discharge";
+    const access = await authorize(request, kind === "operations" ? ACTIONS.readOperations : ACTIONS.readDischarge);
+    if (!access.allowed) return denied(access, headers);
     const finish = data => withLastRecord(kind, kind === "operations" ? normalizeOperations(data) : data);
     try {
       return json(finish(await loadForServing(kind)));
@@ -131,17 +137,15 @@ export default async function handler(request) {
     }
   }
   if (request.method === "POST" && path === "/api/refresh") {
-    // O site é público: aceita só pedidos vindos da própria página.
+    // Aceita só pedidos vindos da própria página.
     const origin = request.headers.get("origin");
     const allowedHosts = [url.host, request.headers.get("host"), request.headers.get("x-forwarded-host")].filter(Boolean);
     if (origin && !allowedHosts.includes(new URL(origin).host)) return json({ error: "Origem não permitida." }, 403);
     try {
       // ?base=equipe relê só a planilha da equipe (botão na aba Equipe); sem parâmetro, navios e indicadores.
       const team = url.searchParams.get("base") === "equipe";
-      if (team) {
-        const access = await authorize(request, ACTIONS.refreshTeam);
-        if (!access.allowed) return json({ error: access.error || "Acesso negado." }, access.status || 403);
-      }
+      const access = await authorize(request, team ? ACTIONS.refreshTeam : ACTIONS.refreshData);
+      if (!access.allowed) return denied(access, headers);
       const result = await requestRefresh({ kinds: team ? ["team"] : FREQUENT_KINDS });
       const status = result.status === "refreshed" || result.status === "recent" ? 200 : result.status === "running" ? 409 : 502;
       return json(result, status);

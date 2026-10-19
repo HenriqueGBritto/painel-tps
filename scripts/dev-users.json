@@ -1,0 +1,44 @@
+{
+  "_leia": "Contas de teste do servidor local (npm run dev, sem Firebase). Só existem em memória no seu computador; não valem no site publicado.",
+  "users": [
+    {
+      "uid": "dev-admin",
+      "email": "admin@painel.test",
+      "name": "Administrador (teste)",
+      "password": "Devb6cb7a3e71be7",
+      "permissions": [
+        "indicadores",
+        "lineup",
+        "producao",
+        "atividades",
+        "atividades-config",
+        "equipe",
+        "admin"
+      ],
+      "mustChangePassword": false
+    },
+    {
+      "uid": "dev-assistente",
+      "email": "assistente@painel.test",
+      "name": "Assistente (teste)",
+      "password": "Devd50ccd9d30857",
+      "permissions": [
+        "indicadores",
+        "lineup",
+        "producao",
+        "atividades"
+      ],
+      "mustChangePassword": false
+    },
+    {
+      "uid": "dev-novo",
+      "email": "novo@painel.test",
+      "name": "Novo acesso (teste)",
+      "password": "Dev7279fcd4959f7",
+      "permissions": [
+        "atividades"
+      ],
+      "mustChangePassword": true
+    }
+  ]
+}

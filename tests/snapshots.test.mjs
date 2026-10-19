@@ -116,7 +116,10 @@ test("rotina agendada: equipe só na rodada das 06h UTC", async () => {
 test("API /api/equipe: entrega a cópia guardada da planilha da equipe com o link do arquivo", async () => {
   const { default: handler } = await import("../netlify/functions/api.mjs");
   saved.set("snapshot-team", { generatedAt: new Date().toISOString(), origin: "google-sheets", people: [{ id: "1", name: "Ana" }], absences: [], trainings: [], report: [] });
-  const response = await handler(new Request("https://painel.test/api/equipe"));
+  const { sessionCookie } = await import("./auth-helper.mjs");
+  const { cookie } = await sessionCookie({ permissions: ["equipe"] });
+  assert.equal((await handler(new Request("https://painel.test/api/equipe", { headers: { cookie: (await sessionCookie({ permissions: ["indicadores"] })).cookie } }))).status, 403, "sem o acesso Equipe");
+  const response = await handler(new Request("https://painel.test/api/equipe", { headers: { cookie } }));
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.deepEqual(body.people, [{ id: "1", name: "Ana" }]);

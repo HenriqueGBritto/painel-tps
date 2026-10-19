@@ -60,8 +60,8 @@ Rastreio das atividades de cada turno e passagem de serviço. Os dados ficam no 
 - **Atividade fixa que se repete:** se ficar pendente (ex.: "Atualizar SOF"), ela não é duplicada no turno seguinte. A de lá ganha a marca "ficou pendente também no turno anterior".
 - **Passagem de serviço:** "Encerrar turno" grava as observações e leva as pendências para o turno seguinte. Se ninguém encerrar, a função agendada `atividades-scheduled` (07:02 e 19:02) leva as pendências mesmo assim, marcadas "sem passagem registrada". Quem assume confirma o recebimento.
 - **Alertas:** o botão "Ativar alertas" pede permissão ao navegador. Atividades com horário avisam no horário e, se o modelo pedir, X minutos antes (ex.: 30 min para pedidos de estiva). Só funcionam com o painel aberto em alguma aba. Com várias abas abertas, só uma avisa.
-- **Identificação:** enquanto não há login, quem usa confirma o próprio nome a cada turno, e o nome fica salvo no navegador. Toda gravação guarda quem fez e quando. As rotas passam por `authorize()` em `netlify/lib/access.mjs`, onde o login vai entrar.
-- **Acesso:** sem login, qualquer pessoa com o endereço do site consegue marcar atividades e alterar a escala e os modelos.
+- **Quem registra:** a pessoa logada. Toda gravação guarda quem fez e quando; o servidor grava o autor pelo login, não pelo que a página manda. Se o acesso estiver ligado a um assistente (tela Acessos), o registro sai no nome desse assistente.
+- **Acesso:** marcar atividades exige o acesso "Atividades"; escala, ajustes e modelos exigem "Configuração das Atividades".
 
 Coleções no Firestore: `shiftAssistants`, `shiftConfig`, `shiftOverrides`, `taskTemplates`, `shifts` e `shifts/{turno}/tasks`.
 
@@ -95,6 +95,18 @@ Somente leitura: a planilha da equipe é a fonte da verdade e o painel só lê d
   - Importação.
 - **Escala diferenciada:** observações que citam escala, horário, folga, vespertino ou noite aparecem destacadas, sem interpretação do texto.
 
+## Login e acessos
+
+- **Quem entra:** só quem o administrador cadastrou na tela **Administração → Acessos**, com e-mail, nome e senha provisória. Não existe cadastro pelo próprio site.
+- **Primeiro acesso:** a pessoa entra com a senha provisória e é obrigada a criar uma senha própria (pelo menos 8 caracteres, com letras e números, diferente da provisória). Até trocar, o servidor não entrega nenhum dado.
+- **Manter conectado:** marcado, a sessão dura 14 dias naquele navegador. Sem marcar, termina ao fechar o navegador (e em no máximo 12 horas).
+- **O que cada pessoa vê:** o administrador marca as telas de cada pessoa: Indicadores, Lineup, Produção, Atividades (registrar no turno), Configuração das Atividades, Equipe (RH) e Administrador. Atalhos: **Assistente** (Indicadores, Lineup, Produção e Atividades) e **Gestão** (tudo, menos Administrador). Menus sem acesso somem, e o servidor recusa os dados também (não basta esconder o botão). Mudanças valem em até 30 segundos.
+- **Esqueceu a senha:** o administrador define uma senha provisória nova em Acessos → Editar. As sessões abertas da pessoa terminam e ela troca a senha no próximo acesso.
+- **Bloquear:** Acessos → Editar → Bloquear acesso. As sessões abertas terminam na hora.
+- **Histórico:** criações, mudanças de acesso, bloqueios e senhas redefinidas ficam registrados (quem e quando), sem guardar senhas.
+- **Administrador inicial:** o e-mail em `TPS_ADMIN_EMAILS` (variável do Netlify, separados por vírgula; padrão henrique.goncalves@triunfologistica.com.br) sempre tem todos os acessos. A conta dele é criada uma vez no console do Firebase (Authentication → Usuários → Adicionar usuário); no primeiro login o perfil completo é criado sozinho.
+- **Como funciona:** as contas ficam no Firebase Authentication (projeto painel-tps) e os acessos no Firestore (`panelUsers`, histórico em `panelAccessLog`). A senha nunca fica no navegador: o servidor confere com o Firebase e devolve a sessão num cookie que o JavaScript da página não consegue ler. Toda rota passa por `authorize()` em `netlify/lib/access.mjs`.
+
 ## Testar no computador
 
 Com o Node.js 22 instalado, na pasta do projeto:
@@ -102,10 +114,11 @@ Com o Node.js 22 instalado, na pasta do projeto:
 1. `npm install` (só na primeira vez)
 2. `npm test` roda os testes.
 3. `npm run dev` abre o painel em `http://localhost:8888`. A aba Atividades guarda os dados em memória, e eles somem ao parar o servidor (Ctrl+C). Os indicadores leem as planilhas reais no Google.
+4. Login local: use as contas de teste de `scripts/dev-users.json` (administrador, assistente e um acesso novo que precisa trocar a senha). Elas só existem em memória no servidor local e não valem no site publicado.
 
 ## Antes de publicar
 
-`FIREBASE_SERVICE_ACCOUNT_JSON` é **obrigatório para a aba Atividades**. Para o resto do painel ele só serve como reserva, caso o Google esteja indisponível. A variável `TPS_IMPORT_PIN` não é mais usada e pode ser apagada no Netlify.
+`FIREBASE_SERVICE_ACCOUNT_JSON` é **obrigatório para o login e para a aba Atividades**. Para o resto do painel ele só serve como reserva, caso o Google esteja indisponível. A variável `TPS_IMPORT_PIN` não é mais usada e pode ser apagada no Netlify.
 
 ## Publicação
 
@@ -118,15 +131,15 @@ Para manter o mesmo endereço do site, use uma destas opções:
 - **Git (recomendado):** extraia o ZIP, coloque seu conteúdo em um repositório privado no GitHub, conecte esse repositório ao projeto Netlify existente e configure `public` como diretório de publicação. O arquivo `netlify.toml` já declara a pasta das funções. O Netlify instalará `firebase-admin` e publicará a função `api` em cada implantação.
 - **Netlify CLI:** instale o Node.js 22 (com npm), extraia o ZIP e abra um terminal na pasta extraída. Execute `npm install`, `npm install -g netlify-cli`, `netlify login`, `netlify link` (escolha o site Netlify já criado) e `netlify deploy --prod`. O `netlify.toml` informa as pastas corretas; não envie apenas `public/`.
 
-Após publicar, abra no navegador:
+Após publicar, entre no painel e abra no mesmo navegador (com login):
 
 - `https://SEU-SITE.netlify.app/api/data`
 - `https://SEU-SITE.netlify.app/api/discharge`
 
-Ambos devem retornar JSON. No JSON de `/api/data` e `/api/discharge`, o campo `"origin"` deve ser `"google-sheets"`. Se aparecer `"fallback"`, o campo `"fallbackReason"` explica o motivo (geralmente o compartilhamento da planilha). A produção continua consultando as duas planilhas Google próprias dela.
+Ambos devem retornar JSON (sem login, respondem 401). No JSON de `/api/data` e `/api/discharge`, o campo `"origin"` deve ser `"google-sheets"`. Se aparecer `"fallback"`, o campo `"fallbackReason"` explica o motivo (geralmente o compartilhamento da planilha). A produção continua consultando as duas planilhas Google próprias dela.
 
 ## Segurança
 
-Qualquer pessoa com o endereço do site pode visualizar os indicadores e acessar os dados retornados pelos endpoints públicos. Qualquer pessoa com o link das planilhas também consegue abri-las. Não publique o site se esses dados não puderem ser compartilhados. Para controle de acesso completo, será preciso acrescentar autenticação depois.
+Os dados do painel só saem do servidor para quem está logado e tem o acesso da tela (ver **Login e acessos**). As páginas (HTML, CSS e JavaScript) continuam públicas, mas sem dados. Atenção: qualquer pessoa com o link das planilhas no Google continua conseguindo abri-las; o login do painel não muda o compartilhamento das planilhas.
 
 O segredo da conta de serviço fica exclusivamente nas variáveis do Netlify. Nunca adicione esse valor ao ZIP, ao JavaScript do navegador ou ao Git. Se alguém obtiver acesso a ele, revogue a chave da conta de serviço no Firebase.

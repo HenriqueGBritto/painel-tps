@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { XLSX } from "../netlify/lib/parsers.mjs";
 import { sheetId, sourceId, lineupId, sourceFiles, downloadWorkbook, parseSheet, loadSheet, clearSheetCache } from "../netlify/lib/sheets.mjs";
 import handler from "../netlify/functions/api.mjs";
+import { sessionCookie } from "./auth-helper.mjs";
 
 const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 const toBytes = workbook => new Uint8Array(XLSX.write(workbook, { type: "array", bookType: "xlsx" }));
@@ -141,7 +142,9 @@ test("sem acesso à planilha, a API devolve a última base salva com aviso", asy
   globalThis.fetch = async () => { throw new Error("rede indisponível no teste"); };
   clearSheetCache();
   try {
-    const response = await handler(new Request("https://painel.test/api/data"));
+    const { cookie } = await sessionCookie({ permissions: ["lineup"] });
+    assert.equal((await handler(new Request("https://painel.test/api/data"))).status, 401, "sem login não entrega dados");
+    const response = await handler(new Request("https://painel.test/api/data", { headers: { cookie } }));
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.equal(body.origin, "fallback");

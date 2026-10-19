@@ -1,7 +1,7 @@
 /* API da aba Atividades (turnos, passagem de serviço, escala e modelos).
-   Toda rota passa por authorize() (netlify/lib/access.mjs), hoje liberado; o login entra lá depois.
+   Toda rota passa por authorize() (netlify/lib/access.mjs): exige login e o acesso certo; o autor é a pessoa logada.
    As regras ficam em netlify/lib/activities.mjs; os dados no Firestore (activities-store.mjs). */
-import { authorize, actorOf, ACTIONS } from "../lib/access.mjs";
+import { authorize, actorOf, denied, ACTIONS } from "../lib/access.mjs";
 import { activitiesStore } from "../lib/activities-store.mjs";
 import * as activities from "../lib/activities.mjs";
 import { attachmentsStore, MAX_BYTES } from "../lib/attachments-store.mjs";
@@ -26,12 +26,12 @@ const routes = {
   "POST /tarefa/responsavel": { action: ACTIONS.editShift, run: ({ store, body, actor, now }) => activities.assignTask(store, body, actor, { now }) },
   "POST /encerrar": { action: ACTIONS.editShift, run: ({ store, body, actor, now }) => activities.closeShift(store, body, actor, { now }) },
   "POST /turno/ordem": { action: ACTIONS.editShift, run: ({ store, body, actor, now }) => activities.reorderTasks(store, body, actor, { now }) },
-  // Anexo: o corpo é o próprio arquivo; turno na URL, nome e autor nos cabeçalhos.
+  // Anexo: o corpo é o próprio arquivo; turno na URL e nome do arquivo no cabeçalho.
   "POST /anexo": { action: ACTIONS.editShift, raw: true, run: async ({ store, url, request, access, now }) => {
     const length = Number(request.headers.get("content-length") || 0);
     if (length > MAX_BYTES) throw new activities.ActivityError(413, `Arquivo grande demais: o limite é ${MAX_BYTES / 1048576} MB.`);
     const header = name => { try { return decodeURIComponent(request.headers.get(name) || ""); } catch { return ""; } };
-    const actor = actorOf(access, { actor: { id: header("x-autor-id"), name: header("x-autor-nome") } });
+    const actor = actorOf(access);
     const type = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     return activities.uploadAttachment(store, attachmentsStore(), { shiftId: url.searchParams.get("turno"), name: header("x-arquivo"), type, bytes: new Uint8Array(await request.arrayBuffer()) }, actor, { now });
   } },
@@ -66,12 +66,12 @@ export default async function handler(request, _context, { now = () => new Date(
     if (origin && !allowedHosts.includes(new URL(origin).host)) return json({ error: "Origem não permitida." }, 403);
   }
   const access = await authorize(request, route.action);
-  if (!access.allowed) return json({ error: access.error || "Acesso negado." }, access.status || 403);
+  if (!access.allowed) return denied(access);
   const store = activitiesStore();
   if (!store) return json({ error: "A aba Atividades precisa do Firestore: configure FIREBASE_SERVICE_ACCOUNT_JSON no Netlify.", storage: null }, 503);
   try {
     const body = request.method === "POST" && !route.raw ? await readBody(request) : {};
-    const result = await route.run({ store, url, body, request, access, actor: actorOf(access, body), now: now() });
+    const result = await route.run({ store, url, body, request, access, actor: actorOf(access), now: now() });
     return result instanceof Response ? result : json(result);
   } catch (error) {
     if (error instanceof activities.ActivityError) return json({ error: error.message }, error.status);

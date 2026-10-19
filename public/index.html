@@ -15,8 +15,9 @@
   <link rel="stylesheet" href="insights.css">
   <link rel="stylesheet" href="activities.css">
   <link rel="stylesheet" href="team.css">
+  <link rel="stylesheet" href="auth.css">
 </head>
-<body>
+<body class="auth-locked">
   <div class="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Menu principal">
       <div class="sidebar-brand"><img src="/logo-triunfo-branco.svg" alt="Triunfo Logística"><span>PAINEL DE OPERAÇÕES</span></div>
@@ -34,6 +35,12 @@
           <button type="button" class="side-group-toggle" aria-expanded="false" aria-controls="sideGroupRh">RH<i aria-hidden="true"></i></button>
           <div class="side-group-items" id="sideGroupRh" hidden>
             <button type="button" class="side-link" data-menu="equipe"><span aria-hidden="true">▨</span> Equipe</button>
+          </div>
+        </div>
+        <div class="side-group" data-group="admin" hidden>
+          <button type="button" class="side-group-toggle" aria-expanded="false" aria-controls="sideGroupAdmin">Administração<i aria-hidden="true"></i></button>
+          <div class="side-group-items" id="sideGroupAdmin" hidden>
+            <button type="button" class="side-link" data-menu="acessos"><span aria-hidden="true">▩</span> Acessos</button>
           </div>
         </div>
       </nav>
@@ -249,6 +256,11 @@
         <p class="base-status act-status-line" id="activitiesSettingsStatus" role="status" aria-live="polite"></p>
         <div id="activitiesSettings"></div>
       </section>
+      <section id="acessos" class="tab-panel activities-panel">
+        <div class="base-heading"><div><p class="eyebrow">ADMINISTRAÇÃO</p><h2>Acessos</h2><p>Quem entra no painel e o que cada pessoa pode ver e fazer.</p></div></div>
+        <p class="base-status act-status-line" id="accessStatus" role="status" aria-live="polite"></p>
+        <div id="accessContent"></div>
+      </section>
     </main>
   </div>
 
@@ -263,6 +275,7 @@
   </aside>
 
   <div class="export-status" id="exportStatus" role="status" aria-live="polite" hidden></div>
+  <script src="auth.js"></script>
   <script src="xlsx.full.min.js"></script>
   <script src="metrics.js"></script>
   <script src="url-state.js"></script>
@@ -272,6 +285,7 @@
   <script src="team.js"></script>
   <script src="production.js"></script>
   <script src="discharge.js"></script>
+  <script src="access-admin.js"></script>
   <script src="app.js"></script>
   <script src="export.js"></script>
 </body>

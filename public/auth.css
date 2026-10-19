@@ -1,0 +1,66 @@
+/* Login (auth.js) e tela Acessos (access-admin.js). Cores só dos tokens de brand.css. */
+
+/* Até o login, o painel fica escondido atrás da tela de entrada. */
+body.auth-locked .app-shell{visibility:hidden}
+body.auth-locked{overflow:hidden}
+.auth-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px 16px;background:var(--trl-bg-alt);overflow:auto}
+.auth-screen[hidden]{display:none}
+.auth-card{width:min(400px,100%);background:var(--trl-branco);border:1px solid var(--trl-border);border-top:4px solid var(--trl-vermelho);border-radius:10px;padding:28px 26px 24px;box-shadow:0 18px 40px rgb(0 0 0 / 8%)}
+.auth-logo{display:block;height:44px;width:auto;margin-bottom:18px}
+.auth-card h1{margin:0 0 6px;font-size:1.35rem;color:var(--trl-texto)}
+.auth-lead{margin:0 0 18px;color:var(--trl-fg-muted);font-size:.9rem;line-height:1.45}
+.auth-form{display:grid;gap:12px}
+.auth-form label{display:grid;gap:5px;font-size:.8rem;font-weight:700;color:var(--trl-cinza-800)}
+.auth-form input[type=email],.auth-form input[type=password],.auth-form input[type=text]{width:100%;box-sizing:border-box;border:1px solid var(--trl-cinza-300);border-radius:7px;padding:11px 12px;font:inherit;font-size:.95rem;color:var(--trl-texto);background:var(--trl-branco)}
+.auth-form input:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:1px;border-color:var(--trl-vermelho)}
+.auth-password{position:relative;display:block}
+.auth-password input{padding-right:78px!important}
+.auth-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--trl-fg-muted);font:inherit;font-size:.75rem;font-weight:700;padding:6px 8px;cursor:pointer}
+.auth-eye:hover,.auth-eye:focus-visible{color:var(--trl-vermelho)}
+.auth-form .auth-check{display:flex;align-items:center;gap:8px;font-weight:600}
+.auth-check input{width:18px;height:18px;accent-color:var(--trl-vermelho)}
+.auth-hint{margin:-4px 0 0;font-size:.75rem;color:var(--trl-fg-muted);line-height:1.4}
+.auth-message{margin:0;min-height:1.2em;font-size:.82rem;color:var(--trl-fg-muted)}
+.auth-message.is-error{color:var(--trl-vermelho);font-weight:700}
+.auth-submit{border:0;border-radius:7px;background:var(--trl-vermelho);color:var(--trl-branco);padding:12px;font:inherit;font-weight:800;font-size:.95rem;cursor:pointer}
+.auth-submit:disabled{opacity:.6;cursor:wait}
+.auth-submit:focus-visible{outline:2px solid var(--trl-preto);outline-offset:2px}
+.auth-link{justify-self:center;border:0;background:none;color:var(--trl-fg-muted);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;text-decoration:underline}
+
+/* Conta no rodapé do menu lateral. */
+.account-box{display:grid;gap:6px;text-align:left}
+.account-name{font-weight:800;color:var(--trl-branco);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:0;text-transform:none}
+.account-actions{display:flex;gap:14px;flex-wrap:wrap}
+.account-link{border:0;background:none;padding:0;color:var(--trl-cinza-300);font:inherit;font-size:.75rem;font-weight:700;cursor:pointer;text-decoration:underline;letter-spacing:0;text-transform:none}
+.account-link:hover,.account-link:focus-visible{color:var(--trl-branco)}
+
+/* Tela Acessos. */
+.access-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.access-card{background:var(--trl-branco);border:1px solid var(--trl-border);border-radius:10px;padding:18px}
+.access-card h3{margin:0 0 4px;font-size:1rem}
+.access-card .act-muted{margin:0 0 12px}
+.access-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end}
+.access-form label{display:grid;gap:5px;font-size:.78rem;font-weight:700;color:var(--trl-cinza-800)}
+.access-form input,.access-form select{width:100%;box-sizing:border-box;border:1px solid var(--trl-cinza-300);border-radius:7px;padding:9px 10px;font:inherit;font-size:.9rem;background:var(--trl-branco);color:var(--trl-texto)}
+.access-perms{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 18px;border:1px solid var(--trl-cinza-200);border-radius:8px;padding:10px 12px;margin:0}
+.access-perms legend{font-size:.78rem;font-weight:800;padding:0 4px}
+.access-perms label{display:flex;align-items:center;gap:6px;font-weight:600;font-size:.85rem}
+.access-perms input{width:16px;height:16px;accent-color:var(--trl-vermelho)}
+.access-presets{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.78rem;color:var(--trl-fg-muted)}
+.access-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.access-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.access-item{border:1px solid var(--trl-cinza-200);border-radius:8px;padding:12px 14px}
+.access-item.is-disabled{background:var(--trl-bg-alt)}
+.access-item-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+.access-item-head strong{font-size:.95rem}
+.access-item-head small{color:var(--trl-fg-muted);overflow-wrap:anywhere}
+.access-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.access-tag{font-size:.72rem;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--trl-cinza-100);color:var(--trl-cinza-800)}
+.access-tag.is-warn{background:var(--trl-vermelho-15);color:var(--trl-vermelho)}
+.access-item .access-form{margin-top:12px;padding-top:12px;border-top:1px solid var(--trl-cinza-200)}
+.access-history{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:.82rem;max-height:360px;overflow:auto}
+.access-history li{border-bottom:1px solid var(--trl-cinza-100);padding-bottom:6px;overflow-wrap:anywhere}
+.access-history time{color:var(--trl-fg-muted);margin-right:6px}
+
+/* Menus e subabas sem acesso somem (app.js applyAccess). */
+.side-group[hidden],.side-link[hidden],.subtab[hidden],.refresh-button[hidden]{display:none!important}
