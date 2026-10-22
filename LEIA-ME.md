@@ -24,6 +24,18 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 - Para trocar de arquivo sem alterar o código, crie no Netlify as variáveis `TPS_SHEET_OPERATIONS`, `TPS_SHEET_LINEUP`, `TPS_SHEET_DISCHARGE` e/ou `TPS_SHEET_TEAM` com o link do novo arquivo.
 - Se o Google estiver indisponível, o painel abre com a última base salva no Firestore (ou com a cópia inicial do pacote) e mostra o aviso "planilha indisponível" no topo.
 
+## Alertas (sino no cabeçalho)
+
+O sino mostra alertas calculados na hora, a partir do que o painel já tem guardado. Cada pessoa só vê os alertas das telas liberadas para ela. O número no sino conta os alertas ainda não vistos naquele navegador. O painel confere ao abrir, a cada 5 minutos e quando a aba volta a ficar visível. Clicar num alerta abre a tela dele.
+
+- **Planilha de navios** (Indicadores ou Lineup): nenhuma alteração encontrada nas leituras das últimas 24 horas, ou planilha que não pôde ser lida (cópia de reserva).
+- **Planilha de indicadores** (Indicadores): nenhuma descarga FINALIZADO há mais de 2 dias, ou planilha que não pôde ser lida.
+- **Descarga abaixo do ritmo** (Indicadores): a previsão do mês, no ritmo atual, não alcança o plano. O alerta mostra quanto falta por dia.
+- **Atividades atrasadas** (Atividades): atividades pendentes com o horário vencido no turno atual.
+- **Passagem não recebida** (Atividades): o turno atual começou há mais de 30 minutos e ninguém confirmou o recebimento.
+
+Os limites ficam em `LIMITS`, em `netlify/lib/alerts.mjs`. Por enquanto os alertas aparecem só no painel; envio por e-mail precisa de um serviço de e-mail configurado.
+
 ## Aba Descarga
 
 - **Meta diária:** plano do mês ÷ dias do mês, mostrada na linha tracejada do gráfico e no card.
@@ -51,6 +63,7 @@ Rastreio das atividades de cada turno e passagem de serviço. Os dados ficam no 
 - **Ordem da lista:** arraste a atividade pela alça de seis pontinhos à esquerda, com mouse ou dedo (ou use as setas do teclado com a alça selecionada). Só aparece em turnos ainda não encerrados. A ordem vale para o turno, e as atividades fixas passam a nascer nessa ordem nos turnos seguintes.
 - **Anexos nas observações:** em cada atividade, "Observação / anexo" aceita texto e arquivos: fotos, PDF, Word, Excel ou texto, até 5 MB cada e 8 por atividade. Fotos grandes são reduzidas no navegador antes do envio. Se a atividade passar para o turno seguinte, os anexos vão junto. Os arquivos ficam no Netlify Blobs (loja `painel-tps-anexos`); o Firestore guarda só a lista.
 - **Calendário:** no cabeçalho do turno, "Ver o dia" e "Turno" abrem qualquer turno. Além disso, o Acompanhamento mostra vários dias de uma vez.
+- **Baixar o período em Excel:** no Acompanhamento, depois de filtrar, "Baixar Excel" gera uma planilha com duas abas. A aba Turnos traz escalado, totais, passagem e recebimento; a aba Atividades traz uma linha por atividade, com situação, quem registrou, quando, motivo e observação.
 - **Baixar a passagem:** turnos encerrados têm os botões PDF e JPG, na tela do turno e no Acompanhamento. O arquivo traz:
   - cabeçalho com a marca;
   - quem encerrou e quem recebeu;
@@ -104,6 +117,9 @@ Somente leitura: a planilha da equipe é a fonte da verdade e o painel só lê d
 - **Esqueceu a senha:** o administrador define uma senha provisória nova em Acessos → Editar. As sessões abertas da pessoa terminam e ela troca a senha no próximo acesso.
 - **Bloquear:** Acessos → Editar → Bloquear acesso. As sessões abertas terminam na hora.
 - **Histórico:** criações, mudanças de acesso, bloqueios e senhas redefinidas ficam registrados (quem e quando), sem guardar senhas.
+- **Entradas no painel:** a tela Acessos mostra os logins dos últimos 30 dias e as tentativas recusadas (senha errada, e-mail desconhecido ou acesso bloqueado). Muitas tentativas recusadas seguidas para o mesmo e-mail merecem atenção. Firestore: `panelLoginLog`.
+- **Sem nenhuma tela liberada:** a pessoa vê um aviso para pedir acesso ao administrador.
+- **Abertura:** a planilha de navios é lida em paralelo. Descarga, Produção, Atividades, Equipe e Acessos abrem sem esperar por ela.
 - **Administrador inicial:** o e-mail em `TPS_ADMIN_EMAILS` (variável do Netlify, separados por vírgula; padrão henrique.goncalves@triunfologistica.com.br) sempre tem todos os acessos. A conta dele é criada uma vez no console do Firebase (Authentication → Usuários → Adicionar usuário); no primeiro login o perfil completo é criado sozinho.
 - **Como funciona:** as contas ficam no Firebase Authentication (projeto painel-tps) e os acessos no Firestore (`panelUsers`, histórico em `panelAccessLog`). A senha nunca fica no navegador: o servidor confere com o Firebase e devolve a sessão num cookie que o JavaScript da página não consegue ler. Toda rota passa por `authorize()` em `netlify/lib/access.mjs`.
 

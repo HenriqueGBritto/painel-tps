@@ -43,6 +43,7 @@
     const { users, history, permissions } = state.data;
     const me = window.TpsAuth?.user?.uid;
     const label = key => permissions[key] || key;
+    const failed = (state.data.logins || []).filter(item => !item.ok).length;
     const items = users.map(user => {
       const editing = state.editing === user.uid;
       const tags = [
@@ -83,6 +84,11 @@
         <h3>Pessoas com acesso (${users.length})</h3>
         <p class="act-muted">Mudanças de acesso valem em até 30 segundos. Bloquear encerra as sessões abertas da pessoa.</p>
         <ul class="access-list">${items || `<li class="act-muted">Ninguém cadastrado ainda.</li>`}</ul>
+      </section>
+      <section class="access-card">
+        <h3>Entradas no painel (últimos 30 dias)</h3>
+        <p class="act-muted">Cada login, e as tentativas recusadas (senha errada, e-mail desconhecido ou acesso bloqueado).${failed ? ` <strong>${failed} ${failed === 1 ? "tentativa recusada" : "tentativas recusadas"}.</strong>` : ""}</p>
+        <ul class="access-history">${(state.data.logins || []).map(item => `<li class="${item.ok ? "" : "is-failed"}"><time>${when(item.at)}</time><strong>${escapeHtml(item.name || item.email)}</strong>${item.name ? ` <small>${escapeHtml(item.email)}</small>` : ""} · ${item.ok ? `entrou${item.remember ? " (manter conectado)" : ""}` : `recusado: ${escapeHtml(item.reason || "")}`}</li>`).join("") || `<li class="act-muted">Nenhuma entrada registrada.</li>`}</ul>
       </section>
       <section class="access-card">
         <h3>Histórico de alterações</h3>

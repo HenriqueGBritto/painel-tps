@@ -131,6 +131,17 @@ test("administrador altera acessos, bloqueia e redefine a senha", async () => {
   assert.ok(!JSON.stringify(history).includes("Nova1234"), "o histórico não guarda senhas");
 });
 
+test("entradas no painel: login certo e tentativas recusadas ficam registradas, sem a senha", async () => {
+  await call("/api/auth/login", { body: { email: ADMIN.email, password: "Errada123" } });
+  const admin = await signIn(ADMIN.email, ADMIN.password, true);
+  const { logins } = (await call("/api/acessos", { cookie: admin })).body;
+  // As duas entradas podem cair no mesmo milissegundo: confere pelo conteúdo, não pela posição.
+  assert.equal(logins.length, 2);
+  const ok = logins.find(item => item.ok), refused = logins.find(item => !item.ok);
+  assert.deepEqual([ok.email, ok.remember, refused.email, refused.reason], [ADMIN.email, true, ADMIN.email, "E-mail ou senha incorretos."]);
+  assert.ok(!JSON.stringify(logins).includes("Errada123"));
+});
+
 test("administrador não tira o próprio acesso nem se bloqueia; pedidos de outro site são recusados", async () => {
   const admin = await signIn(ADMIN.email, ADMIN.password);
   const { uid } = (await call("/api/auth/eu", { cookie: admin })).body.user;

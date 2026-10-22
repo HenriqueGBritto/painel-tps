@@ -726,11 +726,39 @@
     try {
       const { shifts } = await api(`/historico?de=${from}&ate=${to}${who ? `&assistente=${encodeURIComponent(who)}` : ""}`);
       state.historyRows = shifts.slice();
+      $("activitiesExport").disabled = !shifts.length;
       $("activitiesHistory").innerHTML = shifts.length ? shifts.reverse().map(historyShiftHtml).join("") : `<p class="act-empty">Nenhum turno registrado no período.</p>`;
       announce(`${shifts.length} ${shifts.length === 1 ? "turno" : "turnos"} no período.`);
     } catch (error) {
       announce(error.message, true);
     }
+  }
+
+  /** Excel do período filtrado: uma aba com os turnos (passagem e totais) e outra com cada atividade. */
+  function exportHistory() {
+    const rows = state.historyRows;
+    if (!rows.length || !window.XLSX) return;
+    const when = value => value ? dmhm(value) : "";
+    const shifts = rows.map(shift => {
+      const count = status => shift.tasks.filter(task => task.status === status).length;
+      return {
+        Turno: shift.label, Data: brDate(shift.date), Escalado: shift.scheduled?.name || "",
+        Atividades: shift.tasks.length, Feitas: count("done"), "Não feitas": count("not_done"), Pendentes: count("pending"), "Passaram adiante": count("transferred"),
+        "Encerrado por": shift.handover?.by?.name || "", "Encerrado em": when(shift.handover?.at), "Observações da passagem": shift.handover?.notes || "",
+        "Recebido por": shift.received?.by?.name || "", "Recebido em": when(shift.received?.at)
+      };
+    });
+    const tasks = rows.flatMap(shift => shift.tasks.map(task => ({
+      Turno: shift.label, Data: brDate(shift.date), "Até": task.dueAt ? hm(task.dueAt) : "", Atividade: task.title,
+      Origem: task.origin === "carried" ? "Herdada" : task.origin === "template" ? "Fixa" : "Incluída",
+      "Responsável": task.assignee?.name || shift.scheduled?.name || "", "Situação": STATUS_TEXT[task.status] || task.status,
+      Motivo: task.reason || "", "Registrado por": task.doneBy?.name || "", "Registrado em": when(task.doneAt),
+      "Observação": task.note || "", Anexos: (task.attachments || []).length || ""
+    })));
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(shifts), "Turnos");
+    XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(tasks), "Atividades");
+    XLSX.writeFile(book, `atividades-${$("activitiesFrom").value}-a-${$("activitiesTo").value}.xlsx`);
   }
 
   function setupHistoryFilters() {
@@ -904,6 +932,7 @@
     $("activitiesHistory").addEventListener("click", event => { const button = event.target.closest("button[data-download]"); if (button) downloadHandover(button.dataset.shift, button.dataset.download, button); });
     $("activitiesAlerts").addEventListener("click", toggleAlerts);
     $("activitiesHistoryForm").addEventListener("submit", event => { event.preventDefault(); loadHistory(); });
+    $("activitiesExport").addEventListener("click", exportHistory);
     $("activitiesSettings").addEventListener("submit", onSettingsSubmit);
     $("activitiesSettings").addEventListener("click", onSettingsClick);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && (state.view === "turno" || alertsEnabled())) refresh().catch(() => {}); schedulePolling(); });

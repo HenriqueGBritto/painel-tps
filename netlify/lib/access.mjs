@@ -16,7 +16,8 @@ export const ACTIONS = {
   readProduction: "dados:producao",
   refreshData: "dados:atualizar",
   manageAccess: "acessos:gerenciar",
-  ownAccount: "conta:propria"
+  ownAccount: "conta:propria",
+  readAlerts: "alertas:ver"
 };
 
 /** Acessos que liberam cada ação (basta ter um). Lista vazia = qualquer pessoa logada. */
@@ -32,7 +33,9 @@ export const REQUIRED = {
   [ACTIONS.readProduction]: ["producao"],
   [ACTIONS.refreshData]: ["indicadores", "lineup", "producao"],
   [ACTIONS.manageAccess]: ["admin"],
-  [ACTIONS.ownAccount]: []
+  [ACTIONS.ownAccount]: [],
+  // Cada pessoa recebe só os alertas das telas dela (filtro em alerts.mjs).
+  [ACTIONS.readAlerts]: []
 };
 
 export function can(user, action) {

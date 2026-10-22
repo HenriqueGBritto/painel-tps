@@ -64,3 +64,10 @@ body.auth-locked{overflow:hidden}
 
 /* Menus e subabas sem acesso somem (app.js applyAccess). */
 .side-group[hidden],.side-link[hidden],.subtab[hidden],.refresh-button[hidden]{display:none!important}
+
+/* Login ativo sem nenhuma tela liberada (app.js showNoAccess). */
+.no-access{max-width:560px;margin:48px auto;padding:28px 26px;background:var(--trl-branco);border:1px solid var(--trl-border);border-top:4px solid var(--trl-vermelho);border-radius:10px}
+.no-access h2{margin:4px 0 10px}
+.no-access p{color:var(--trl-fg-muted);line-height:1.5}
+.no-access-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.access-history li.is-failed{color:var(--trl-vermelho)}

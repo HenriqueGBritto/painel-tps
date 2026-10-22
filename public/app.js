@@ -1,7 +1,7 @@
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", teamView: "resumo", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null, ready: false, access: {} };
+const state = { records: [], activeRecords: [], years: new Set(), months: new Set(), chartPoints: [], gusaRecords: [], gusaActiveRecords: [], lineupRecords: [], lineupDisplayRecords: [], tideDays: null, tidePeaks: [], menu: "indicadores", indicator: "operacional", lineupView: "planejamento", activityView: "turno", teamView: "resumo", gusaMonths: new Set(), activeDrawer: null, dataUpdatedAt: null, ready: false, dataLoaded: false, access: {} };
 const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const fmtOne = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtTwo = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -335,8 +335,8 @@ function activateNavigation(){
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
-  if(visible==="geral"&&state.indicator==="operacional")render();
-  if(visible==="lineup")renderLineup();
+  if(visible==="geral"&&state.indicator==="operacional"&&state.dataLoaded)render();
+  if(visible==="lineup"&&state.dataLoaded)renderLineup();
   if(visible==="mares")renderTides();
   if(visible==="producao")window.productionPanel?.load();
   if(visible==="descarga"||visible==="pesagem")window.dischargePanel?.load();
@@ -630,7 +630,7 @@ function applyUrl(search){
     urlState.pending=target;
     allowedView();
     activateNavigation();
-    if(target.view==="ocupacao")render();
+    if(target.view==="ocupacao"&&state.dataLoaded)render();
     window.onDischargeReady();
   }finally{urlState.applying=false}
 }
@@ -751,26 +751,45 @@ window.getExportDataNote=sectionId=>{
   return meta?TpsMetrics.freshness(meta,new Date()).text:"";
 };
 
-/* Abertura: espera o login (auth.js), mostra só as telas liberadas para a pessoa e lê só as bases dela. */
+/* Abertura: espera o login (auth.js) e mostra só as telas liberadas para a pessoa.
+   A planilha de navios é lida em paralelo: Descarga, Produção, Atividades, Equipe e Acessos abrem sem esperar por ela. */
 async function init(){
   const {can}=await window.TpsAuth.ready;
   state.access=can;applyAccess();
-  if(!TpsUrlState.VIEWS.some(canView))throw new Error("Seu acesso ainda não tem nenhuma tela liberada. Fale com o administrador do painel.");
-  if(can.operations){
-    const response=await fetch("/api/data");if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");const payload=await response.json();state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);
-  }
-  if(can.operations){setupFilters();setupLineup()}
+  if(!TpsUrlState.VIEWS.some(canView)){showNoAccess();return}
+  const operations=can.operations?fetch("/api/data").then(response=>{if(!response.ok)throw new Error("Não foi possível carregar a base operacional.");return response.json()}):null;
   if(can.discharge)window.dischargePanel?.setup();
   urlState.applying=true;setupNavigation();
   if(can.lineup)await setupTides();
-  if(can.operations)setupCardDetails();
   setupRefresh();setupChanges();
   if(can.atividades)window.activitiesPanel?.start();
-  if(can.operations){setupActiveOperationDetails();render()}
+  if(operations)$("lineupGantt").innerHTML='<div class="empty">Lendo a planilha de navios…</div>';
+  $("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(()=>{if(state.dataLoaded)render()},120)});
   state.ready=true;urlState.applying=false;applyUrl(location.search);
-  if(can.operations)setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);
-  if(can.operations)registerWebMCP();$("monthlyChart").addEventListener("mousemove",handleChartMove);$("monthlyChart").addEventListener("mouseleave",()=>$("chartTooltip").style.opacity=0);$("monthlyChart").addEventListener("click",handleChartClick);$("closeDrawer").addEventListener("click",closeDrawer);$("drawerBackdrop").addEventListener("click",closeDrawer);document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});window.addEventListener("resize",()=>{clearTimeout(window.__resize);window.__resize=setTimeout(()=>{if(state.records.length)render()},120)})
+  if(operations)operations.then(loadOperations).catch(error=>{
+    const message=`<div class="empty"><strong>Não foi possível ler a planilha de navios.</strong><p>${escapeHtml(error.message)} Recarregue a página em alguns minutos.</p></div>`;
+    $("lineupGantt").innerHTML=message;$("generalTitle").insertAdjacentHTML("afterend",message);
+  });
 }
+/** Planilha de navios chegou: monta filtros, lineup e indicadores e reaplica a visão da URL (anos e meses). */
+function loadOperations(payload){
+  state.records=payload.records;state.activeRecords=payload.activeRecords||[];state.gusaActiveRecords=payload.gusaActiveRecords||[];state.lineupRecords=payload.lineupRecords||[];state.dataUpdatedAt=payload.generatedAt||null;const today=new Date();state.gusaRecords=(payload.gusaRecords||[]).filter(r=>r.year===2026&&parseDate(r.departure)<=today);showDataSource(payload);
+  setupFilters();setupLineup();setupCardDetails();setupActiveOperationDetails();
+  state.dataLoaded=true;
+  if(["operacional","ocupacao","lineup","mares"].includes(currentView()))applyUrl(location.search);
+  renderDataSeal();
+  setInterval(()=>{renderActiveOverview();refreshActiveOperationDetail();renderLineup()},60000);
+  registerWebMCP();
+}
+/** Pessoa logada sem nenhuma tela liberada. */
+function showNoAccess(){
+  document.querySelectorAll(".subnav,.tab-panel").forEach(node=>{node.hidden=true;node.classList.remove("active")});
+  $("dataSealWrap").hidden=true;$("refreshData").hidden=true;$("exportMenu").hidden=true;
+  const name=window.TpsAuth.user?.name||"";
+  document.querySelector("main").insertAdjacentHTML("beforeend",`<section class="no-access"><p class="eyebrow">ACESSO</p><h2>Olá${name?`, ${escapeHtml(name)}`:""}.</h2><p>Seu login está ativo, mas ainda não tem nenhuma tela liberada. Peça ao administrador do painel para liberar as telas que você precisa usar.</p><p>Depois que ele liberar, recarregue a página.</p><div class="no-access-actions"><button type="button" class="act-button is-primary" onclick="location.reload()">Recarregar</button><button type="button" class="act-button" data-logout>Sair</button></div></section>`);
+}
+/** Abre uma tela pelo nome da aba (alertas e atalhos). */
+window.openView=view=>{if(!canView(view))return;applyUrl(`?aba=${view}`);syncUrl()};
 /* Telas de cada menu e o acesso que libera cada uma (o servidor confere de novo em cada pedido). */
 const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin"};
 const canView=view=>{if(view.startsWith("equipe"))return Boolean(state.access.equipe);const need=[].concat(VIEW_ACCESS[view]||[]);return need.some(key=>state.access[key])};
@@ -796,7 +815,7 @@ function allowedView(){
   else if(target==="lineup"||target==="mares"){state.menu="lineup";state.lineupView=target==="mares"?"mares":"planejamento"}
   else{state.menu="indicadores";state.indicator=target}
 }
-document.fonts?.addEventListener?.("loadingdone",()=>{if(state.records.length)render()});
+document.fonts?.addEventListener?.("loadingdone",()=>{if(state.dataLoaded)render()});
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});
 /* Clique numa notificação de atividade: abre a lista do turno. */
 window.openActivities=()=>{state.menu="atividades";state.activityView="turno";activateNavigation()};

@@ -7,6 +7,8 @@ import { loadDataset } from "../lib/dataset.mjs";
 import { downloadWorkbook, sourceFiles } from "../lib/sheets.mjs";
 import { loadForServing, requestRefresh, FREQUENT_KINDS } from "../lib/snapshots.mjs";
 import { authorize, denied, ACTIONS } from "../lib/access.mjs";
+import { alertsFor } from "../lib/alerts.mjs";
+import { activitiesStore } from "../lib/activities-store.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const json = (value, status = 200, extra = {}) => new Response(JSON.stringify(value), { status, headers: { ...headers, ...extra, "Content-Type": "application/json; charset=utf-8" } });
@@ -155,7 +157,13 @@ export default async function handler(request) {
     }
   }
   if (request.method === "GET" && path === "/api/equipe") return teamData(request);
+  if (request.method === "GET" && path === "/api/alertas") {
+    const access = await authorize(request, ACTIONS.readAlerts);
+    if (!access.allowed) return denied(access, headers);
+    const alerts = await alertsFor(access.user, { readOperations: () => loadForServing("operations"), readDischarge: () => loadForServing("discharge"), store: activitiesStore() });
+    return json({ alerts, checkedAt: new Date().toISOString() });
+  }
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh", "/api/equipe"] };
+export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh", "/api/equipe", "/api/alertas"] };

@@ -15,6 +15,9 @@ export const REMEMBER_MS = 14 * 24 * 60 * 60 * 1000;
 export const SHORT_MS = 12 * 60 * 60 * 1000;
 export const USERS = "panelUsers";
 export const ACCESS_LOG = "panelAccessLog";
+/** Entradas no painel (login certo e tentativas recusadas). A tela Acessos mostra os últimos 30 dias. */
+export const LOGIN_LOG = "panelLoginLog";
+export const LOGIN_LOG_DAYS = 30;
 /** Chave web do Firebase (pública por natureza: vai para o navegador em qualquer app Firebase). */
 const WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || "AIzaSyBMB0OYAd2Stos2kQbmvK85GoQvQUCyyyc";
 
@@ -182,6 +185,11 @@ async function log(store, by, action, target, details = "") {
   await store.set(ACCESS_LOG, `${at}-${randomUUID().slice(0, 6)}`, { at, by, action, target, details });
 }
 
+async function logLogin(store, entry) {
+  const at = new Date().toISOString();
+  await store.set(LOGIN_LOG, `${at}-${randomUUID().slice(0, 6)}`, { at, ...entry });
+}
+
 /**
  * Quem está logado (a partir do cookie) → { user } ou { error, status, code }.
  * Administrador inicial sem perfil ganha o perfil completo no primeiro login.
@@ -212,12 +220,17 @@ export async function login(input, { secure = true } = {}) {
   const email = String(input?.email || "").trim().toLowerCase();
   const password = String(input?.password || "");
   if (!email || !password) fail(400, "Preencha o e-mail e a senha.");
-  const { idToken, uid } = await backend.signIn(email, password);
-  const profile = store ? await readProfile(store, uid, { fresh: true }) : null;
-  if (profile?.disabled) fail(403, "Este acesso está bloqueado. Fale com o administrador do painel.", "bloqueado");
   const remember = Boolean(input?.remember);
+  const record = (ok, extra = {}) => store ? logLogin(store, { email, ok, remember, ...extra }).catch(error => console.error("Falha ao registrar a entrada:", error)) : null;
+  let signed;
+  try { signed = await backend.signIn(email, password); }
+  catch (error) { if (error instanceof AuthError) await record(false, { reason: error.message }); throw error; }
+  const { idToken, uid } = signed;
+  const profile = store ? await readProfile(store, uid, { fresh: true }) : null;
+  if (profile?.disabled) { await record(false, { uid, name: profile.name, reason: "acesso bloqueado" }); fail(403, "Este acesso está bloqueado. Fale com o administrador do painel.", "bloqueado"); }
   const cookie = await backend.createSession(idToken, remember ? REMEMBER_MS : SHORT_MS);
   if (profile) await writeProfile(store, uid, { ...profile, lastLoginAt: new Date().toISOString() });
+  await record(true, { uid, name: profile?.name || null });
   return { setCookie: sessionCookieHeader(cookie, { remember, secure }) };
 }
 
@@ -245,11 +258,13 @@ export async function changePassword(user, input, { secure = true } = {}) {
 
 export async function listUsers() {
   const { store } = context();
-  const [users, history] = await Promise.all([store.list(USERS), store.list(ACCESS_LOG)]);
+  const since = new Date(Date.now() - LOGIN_LOG_DAYS * 86400000).toISOString();
+  const [users, history, logins] = await Promise.all([store.list(USERS), store.list(ACCESS_LOG), store.list(LOGIN_LOG, { from: since })]);
   return {
     users: users.map(({ id, ...profile }) => ({ ...publicUser(id, { ...profile, permissions: normalizePermissions(profile.permissions) }), disabled: Boolean(profile.disabled), createdAt: profile.createdAt, lastLoginAt: profile.lastLoginAt || null, bootstrap: adminEmails().includes(profile.email) }))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     history: history.slice(-200).reverse(),
+    logins: logins.slice(-300).reverse().map(({ at, email, name, ok, remember, reason }) => ({ at, email, name: name || null, ok: Boolean(ok), remember: Boolean(remember), reason: reason || null })),
     permissions: PERMISSIONS, presets: PRESETS
   };
 }
