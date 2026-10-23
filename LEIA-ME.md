@@ -89,7 +89,7 @@ O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO
   - **Confirmar:** só tem pontos a verificar.
   - **Aprovada:** nada a apontar.
 
-  Cada item mostra o motivo e a seção da IT. Qualquer pessoa com acesso pode **aprovar com justificativa** uma reprovada ou uma para confirmar; fica registrado quem aprovou, quando e o motivo.
+  Cada item mostra o motivo e a seção da IT. Qualquer pessoa com acesso pode **aprovar com justificativa** uma reprovada ou uma para confirmar; ela passa a aparecer como **Justificada**, e fica registrado quem aprovou, quando e o motivo.
 - **O que é conferido:**
   - porto Rio de Janeiro e Longo Curso;
   - frase do EPI, aceitando variações;
@@ -123,19 +123,10 @@ O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO
   - Terno só de bloco (6.1 Nota 3) é aceito.
   - Operação que não está na IT (por exemplo, carga geral ao largo) fica para confirmar.
 - **Retroativo:** mostra o dia e o período do trabalho original e os do pedido, para conferir se o custo é o mesmo (seção 10).
-- **Reoferta:** hora informada dentro da 2ª reoferta do edital fica para confirmar; depois dela, é erro (seção 11).
 - **Ao largo:** a balsa e o navio do mesmo período são conferidos juntos (mesmo número de ternos; com mais de uma balsa, CFC em só uma). Até chegar a segunda requisição, a primeira fica "confirmar".
 - **Lineup:** o navio (o de "(AT. …)", no caso da balsa) precisa estar no Lineup e o local precisa combinar com o berço. Nome parecido mas diferente (ex.: SMOKER × SKOMER) ou local diferente ficam para confirmar.
-- **Prazo:** limite do OGMO no dia da operação. O 01x07 leva a data do dia anterior à madrugada.
-
-  | Período | Limite |
-  |---|---|
-  | 07x13 | 03:45 |
-  | 13x19 | 09:45 |
-  | 19x01 | 15:45 |
-  | 01x07 | 18:45 |
-
-  O PDF só traz a hora da **impressão**. Impresso até o limite, está no prazo. Impresso depois, o assistente informa a hora em que fez o pedido. Por isso, salve o PDF logo depois de fazer o pedido.
+- **Horário:** a hora do pedido não é conferida. O PDF só traz a hora da impressão, e ela não importa.
+- **Tela:** uma linha por requisição, com situação, período, navio e número. Ao clicar, abre só o que precisa corrigir (o mesmo erro em vários ternos aparece numa linha só), com Abrir PDF, Aprovar com justificativa e Ver detalhes (itens conferidos, composição lida e envios anteriores).
 - **Reenvio:** a mesma requisição corrigida no OGMO e enviada de novo substitui a conferência; os envios anteriores ficam no histórico, com o PDF.
 - **Atividades:** requisição aprovada (direto ou com justificativa) marca como feita a atividade "Requisição de estiva · período" do turno e anexa o PDF à observação dela. Se o turno já foi encerrado, a requisição avisa e não mexe nele.
 - **Feriados:** lista inicial com feriados nacionais, do estado e da cidade do Rio, Carnaval e Corpus Christi. Quem tem "Configuração das Atividades" ou é administrador edita a lista na própria aba.

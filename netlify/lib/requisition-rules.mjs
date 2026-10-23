@@ -4,14 +4,12 @@
      reprovado = algum erro; confirmar = só pontos a verificar; aprovado = nada a apontar.
    Composições tiradas dos exemplos da IT: ferro gusa (5.2 a 5.7), tubos (6.1 a 6.3), carga geral e balsa (7.1 a 7.4),
    granéis e enlonamento (8.1), big bag (9.1), amarras (9.2), dormentes (9.3) e containers (9.4).
+   A hora do pedido não é conferida (o PDF só traz a hora da impressão, que não importa).
    Itens que a IT manda "perguntar ao responsável" (guia, empilhador, alavanca, tratorista do granel) são aceitos e
    aparecem como observação. Testado em tests/requisitions.test.mjs. */
 
-/** Horário-limite do edital do OGMO, no dia da operação (o 01-07 leva a data do dia anterior à madrugada). */
-export const DEADLINES = { "07-13": "03:45", "13-19": "09:45", "19-01": "15:45", "01-07": "18:45" };
-export const PERIODS = Object.keys(DEADLINES);
-/** 2ª reoferta do Rio (edital, seção 11): pedido fora do horário-limite, com vagas que podem aparecer zeradas. */
-const REOFERTA = { "07-13": ["07:00", "08:30", 0], "13-19": ["13:00", "14:30", 0], "19-01": ["19:00", "20:30", 0], "01-07": ["01:00", "02:30", 1] };
+/** Períodos do OGMO no Rio (o 01-07 leva a data do dia anterior à madrugada). A hora do pedido não é conferida. */
+export const PERIODS = ["07-13", "13-19", "19-01", "01-07"];
 
 /** Fainas da tabela da seção 12 (mais a 3.8.7, balsa de descarga atracada, que existe fora da tabela). */
 export const FAINAS = {
@@ -35,7 +33,6 @@ const BLOCO = ["BLE", "BLP", "ENB", "BLM", "BLC"];
 
 const normalize = text => String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 const brDay = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-const brDateTime = local => `${local.slice(8, 10)}/${local.slice(5, 7)} às ${local.slice(11, 16)}`;
 const addDays = (iso, days) => new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10) + days)).toISOString().slice(0, 10);
 const weekday = iso => new Date(`${iso}T12:00:00Z`).getUTCDay();
 const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -229,29 +226,13 @@ export function lineupCheck(requisition, lineup) {
   return items;
 }
 
-/* ---------- Prazo ---------- */
+/* ---------- Retroativo (seção 10) ---------- */
 
-/** Prazo pela hora da impressão (ou pela hora informada pelo assistente quando a impressão é posterior). */
-export function deadlineCheck(requisition, { requestedAt = null } = {}) {
+/** Pedido retroativo: mostra o dia do trabalho original e o do pedido, para conferir se o custo do período é o mesmo. */
+export function retroactiveCheck(requisition) {
   const retro = requisition.vessel.retroactive;
-  if (retro) {
-    return [{ level: "confirmar", text: `Pedido retroativo do trabalho de ${WEEKDAYS[weekday(retro)]} ${brDay(retro)}, lançado com data de ${WEEKDAYS[weekday(requisition.date)]} ${brDay(requisition.date)}, período ${requisition.period.replace("-", "x")}. Confira se o período tem o mesmo custo do trabalho original.`, ref: "10" }];
-  }
-  const limitTime = DEADLINES[requisition.period];
-  if (!limitTime || !requisition.date) return [{ level: "erro", text: `Período "${requisition.period}" não reconhecido.`, ref: "1.7" }];
-  const limit = `${requisition.date}T${limitTime}:00`;
-  const limitText = `${limitTime} de ${brDay(requisition.date).slice(0, 5)}`;
-  if (requisition.printedAt && requisition.printedAt <= limit) return [{ level: "ok", text: `Impresso em ${brDateTime(requisition.printedAt)}, antes do limite (${limitText}).`, ref: "11" }];
-  if (requestedAt) {
-    if (requestedAt.at <= limit) return [{ level: "ok", text: `Pedido feito em ${brDateTime(requestedAt.at)}, antes do limite (${limitText}). Hora informada por ${requestedAt.by?.name || "—"}.`, ref: "11" }];
-    const [from, to, offset] = REOFERTA[requisition.period];
-    const day = addDays(requisition.date, offset);
-    if (requestedAt.at >= `${day}T${from}:00` && requestedAt.at <= `${day}T${to}:00`) {
-      return [{ level: "confirmar", text: `Pedido feito em ${brDateTime(requestedAt.at)}, na 2ª reoferta (${from} às ${to}), depois do limite (${limitText}). Confirme que foi pedido de reoferta.`, ref: "11" }];
-    }
-    return [{ level: "erro", text: `Pedido feito em ${brDateTime(requestedAt.at)}, depois do limite (${limitText}). Hora informada por ${requestedAt.by?.name || "—"}.`, ref: "11" }];
-  }
-  return [{ level: "confirmar", text: `O PDF foi impresso em ${requisition.printedAt ? brDateTime(requisition.printedAt) : "horário desconhecido"}, depois do limite (${limitText}). Informe a hora em que o pedido foi feito.`, ref: "11", action: "informar-hora" }];
+  if (!retro) return [];
+  return [{ level: "confirmar", text: `Pedido retroativo do trabalho de ${WEEKDAYS[weekday(retro)]} ${brDay(retro)}, lançado com data de ${WEEKDAYS[weekday(requisition.date)]} ${brDay(requisition.date)}, período ${requisition.period.replace("-", "x")}. Confira se o período tem o mesmo custo do trabalho original.`, ref: "10" }];
 }
 
 /* ---------- Conferência completa ---------- */
@@ -260,7 +241,7 @@ const count = (terno, code) => terno.functions.filter(f => f.code === code && f.
 const sameShift = (a, b) => a.number !== b.number && a.date === b.date && a.period === b.period;
 const shipOf = requisition => vesselKey(requisition.vessel.attachedTo || requisition.vessel.name);
 
-export function checkRequisition(requisition, { lineup = null, holidays = [], related = [], requestedAt = null } = {}) {
+export function checkRequisition(requisition, { lineup = null, holidays = [], related = [] } = {}) {
   const items = [];
   const add = (level, text, ref, extra = {}) => items.push({ level, text, ref, ...extra });
   const op = operationOf(requisition);
@@ -347,7 +328,7 @@ export function checkRequisition(requisition, { lineup = null, holidays = [], re
   }
 
   items.push(...lineupCheck(requisition, lineup));
-  items.push(...deadlineCheck(requisition, { requestedAt }));
+  items.push(...retroactiveCheck(requisition));
   const result = items.some(item => item.level === "erro") ? "reprovado" : items.some(item => item.level === "confirmar") ? "confirmar" : "aprovado";
   return { result, operation: spec ? { key: spec.key, title: spec.title, ref: spec.ref } : { key: null, title: op.faina ? FAINAS[op.faina] || `faina ${op.faina}` : "não identificada" }, items };
 }

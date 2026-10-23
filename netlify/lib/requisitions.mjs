@@ -53,7 +53,7 @@ async function sameShift(store, record) {
 }
 
 function recheck(record, context, related) {
-  return checkRequisition(record, { lineup: context.lineup, holidays: context.holidays, related, requestedAt: record.requestedAt || null });
+  return checkRequisition(record, { lineup: context.lineup, holidays: context.holidays, related });
 }
 
 /** Ao largo: a balsa e o navio do mesmo período se conferem juntos; ao chegar um, os outros são reconferidos. */
@@ -90,10 +90,10 @@ export async function submit(store, input, actor, context) {
 
   const holidays = (await getHolidays(store, now)).holidays;
   const ctx = { lineup: context.lineup, holidays };
-  const record = { id, ...parsed, fileKey, fileName, fileSize: bytes.byteLength, uploadedBy: actor, uploadedAt: iso(now), requestedAt: null, override: null, activity: null };
+  const record = { id, ...parsed, fileKey, fileName, fileSize: bytes.byteLength, uploadedBy: actor, uploadedAt: iso(now), override: null, activity: null };
   const related = await sameShift(store, record);
   record.check = recheck(record, ctx, related);
-  record.history = previous ? [{ at: previous.uploadedAt, by: previous.uploadedBy, status: status(previous), fileKey: previous.fileKey, fileName: previous.fileName, override: previous.override || null, requestedAt: previous.requestedAt || null }, ...(previous.history || [])].slice(0, MAX_HISTORY) : [];
+  record.history = previous ? [{ at: previous.uploadedAt, by: previous.uploadedBy, status: status(previous), fileKey: previous.fileKey, fileName: previous.fileName, override: previous.override || null }, ...(previous.history || [])].slice(0, MAX_HISTORY) : [];
   await store.set(COLLECTION, id, record);
   await recheckPartners(store, record, ctx);
   if (record.check.result === "aprovado") record.activity = await markActivity(store, record, actor, { files: context.files, now, bytes });
@@ -106,25 +106,6 @@ async function load(store, id) {
   const record = await store.get(COLLECTION, id);
   if (!record) fail(404, "Requisição não encontrada.");
   return { id, ...record };
-}
-
-/** Hora em que o pedido foi feito, informada pelo assistente quando o PDF foi impresso depois do limite. */
-export async function informRequestTime(store, input, actor, context) {
-  const now = context.now || new Date();
-  const record = await load(store, input?.id);
-  const at = String(input?.at || "");
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at)) fail(400, "Informe a data e a hora do pedido.");
-  const local = `${at}:00`;
-  if (local > S.zonedParts(now).date + "T23:59:59") fail(400, "A hora do pedido não pode ser no futuro.");
-  record.requestedAt = { at: local, by: actor, informedAt: iso(now) };
-  const holidays = (await getHolidays(store, now)).holidays;
-  record.check = recheck(record, { lineup: context.lineup, holidays }, await sameShift(store, record));
-  await store.set(COLLECTION, record.id, { requestedAt: record.requestedAt, check: record.check }, { merge: true });
-  if (record.check.result === "aprovado" && !record.activity?.done) {
-    record.activity = await markActivity(store, record, actor, { files: context.files, now });
-    await store.set(COLLECTION, record.id, { activity: record.activity }, { merge: true });
-  }
-  return publicRecord(record);
 }
 
 /** Aprovar uma requisição reprovada (ou com pontos a confirmar) explicando o motivo. Fica registrado quem e quando. */

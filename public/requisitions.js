@@ -7,12 +7,11 @@
   const state = { rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false };
   const RESULT = {
     reprovado: { label: "Reprovada", css: "is-error" }, confirmar: { label: "Confirmar", css: "is-warn" },
-    aprovado: { label: "Aprovada", css: "is-ok" }, "aprovado-justificado": { label: "Aprovada com justificativa", css: "is-ok" }
+    aprovado: { label: "Aprovada", css: "is-ok" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
   };
   const brDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
   const period = value => String(value || "").replace("-", "x");
   const when = value => value ? new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value)).replace(",", " às") : "";
-  const localWhen = local => local ? `${local.slice(8, 10)}/${local.slice(5, 7)} às ${local.slice(11, 16)}` : "";
 
   async function api(path, body) {
     const response = await fetch(`/api/requisicoes${path}`, body === undefined ? { cache: "no-store" } : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -51,49 +50,54 @@
     announce(results.join(" · "), results.some(text => /Não |inválid|grande|Envie/.test(text)));
   }
 
-  /* ---------- Lista ---------- */
+  /* ---------- Lista (tabela compacta: uma linha por requisição; abre só o que precisa corrigir) ---------- */
 
-  function itemsHtml(row) {
-    const order = { erro: 0, confirmar: 1, ok: 2 };
-    const items = [...row.check.items].sort((a, b) => order[a.level] - order[b.level]);
-    const shown = items.filter(item => item.level !== "ok");
-    const ok = items.filter(item => item.level === "ok");
-    const line = item => `<li class="req-item is-${item.level}"><span class="req-mark" aria-hidden="true">${item.level === "erro" ? "✖" : item.level === "confirmar" ? "!" : "✔"}</span><span>${escapeHtml(item.text)}${item.ref ? ` <small>IT ${escapeHtml(item.ref)}</small>` : ""}</span></li>`;
-    return `${shown.length ? `<ul class="req-items">${shown.map(line).join("")}</ul>` : `<p class="req-allok">Tudo conforme a instrução de trabalho.</p>`}
-      ${ok.length ? `<details class="req-ok"><summary>Ver os ${ok.length} itens conferidos sem problema</summary><ul class="req-items">${ok.map(line).join("")}</ul></details>` : ""}`;
+  /** Problemas da conferência, juntando o mesmo problema em vários ternos ("Ternos 1 e 2: CMG no lugar do CMP"). */
+  function problems(row) {
+    const groups = new Map();
+    for (const item of row.check.items.filter(entry => entry.level !== "ok")) {
+      const match = /^Terno (\d+)(?: \([^)]*\))?: (.*)$/.exec(item.text);
+      const text = match ? match[2] : item.text;
+      const key = `${item.level}|${text}`;
+      if (!groups.has(key)) groups.set(key, { level: item.level, text, ternos: [] });
+      if (match) groups.get(key).ternos.push(match[1]);
+    }
+    const order = { erro: 0, confirmar: 1 };
+    return [...groups.values()].sort((a, b) => order[a.level] - order[b.level]).map(group => ({
+      level: group.level,
+      text: group.ternos.length ? `${group.ternos.length > 1 ? `Ternos ${group.ternos.slice(0, -1).join(", ")} e ${group.ternos.at(-1)}` : `Terno ${group.ternos[0]}`}: ${group.text}` : group.text
+    }));
   }
 
-  function ternosHtml(row) {
-    return `<details class="req-ternos"><summary>Composição lida do PDF (${row.ternos.length} ${row.ternos.length === 1 ? "terno" : "ternos"})</summary><div class="base-table-scroll"><table class="base-table"><thead><tr><th>Terno</th><th>Faina</th><th>Observação</th><th>Funções</th></tr></thead><tbody>${row.ternos.map(terno => `<tr><td>${terno.equipe}</td><td>${escapeHtml(terno.fainas.map(f => f.code).join(", ") || "—")}</td><td>${escapeHtml(terno.observation || "—")}</td><td>${terno.functions.map(f => `${escapeHtml(f.code)} ${f.vagas ?? "?"}`).join(" · ")}</td></tr>`).join("")}</tbody></table></div></details>`;
-  }
-
-  function actionsHtml(row) {
-    const parts = [];
-    if (row.check.items.some(item => item.action === "informar-hora") && !row.override) {
-      parts.push(`<form class="req-inline" data-form="hora" data-id="${escapeHtml(row.id)}"><label>Hora em que o pedido foi feito<input type="datetime-local" name="at" required value="${escapeHtml(row.requestedAt?.at?.slice(0, 16) || "")}"></label><button type="submit" class="act-button">Salvar hora</button></form>`);
-    }
-    if (row.status === "reprovado" || row.status === "confirmar") {
-      parts.push(`<details class="req-approve"><summary class="act-button">Aprovar com justificativa</summary><form class="req-inline" data-form="aprovar" data-id="${escapeHtml(row.id)}"><label>Motivo<textarea name="reason" rows="2" maxlength="1000" required placeholder="Ex.: CMG pedido pelo especialista para esta operação."></textarea></label><button type="submit" class="act-button is-primary">Aprovar</button></form></details>`);
-    }
-    return parts.length ? `<div class="req-actions">${parts.join("")}</div>` : "";
+  function detailsHtml(row) {
+    const ok = row.check.items.filter(item => item.level === "ok");
+    const history = row.history?.length ? `<p><strong>Envios anteriores:</strong> ${row.history.map(item => `${when(item.at)} por ${escapeHtml(item.by?.name || "—")} (${escapeHtml(RESULT[item.status]?.label || item.status)}, <a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}&versao=${encodeURIComponent(item.fileKey.split("/").pop().replace(".pdf", ""))}" target="_blank" rel="noopener">PDF</a>)`).join(" · ")}</p>` : "";
+    return `<details class="req-more"><summary>Ver detalhes</summary>
+      <p>${escapeHtml([row.local, `${row.ternos.length} ${row.ternos.length === 1 ? "terno" : "ternos"}`, row.check.operation.title].join(" · "))}. Enviada por ${escapeHtml(row.uploadedBy?.name || "—")} em ${when(row.uploadedAt)}.</p>
+      ${ok.length ? `<ul class="req-oklist">${ok.map(item => `<li>${escapeHtml(item.text)}</li>`).join("")}</ul>` : ""}
+      <div class="base-table-scroll"><table class="base-table req-ternos"><thead><tr><th>Terno</th><th>Faina</th><th>Observação</th><th>Funções</th></tr></thead><tbody>${row.ternos.map(terno => `<tr><td>${terno.equipe}</td><td>${escapeHtml(terno.fainas.map(f => f.code).join(", ") || "—")}</td><td>${escapeHtml(terno.observation || "—")}</td><td>${terno.functions.filter(f => f.vagas).map(f => `${escapeHtml(f.code)} ${f.vagas}`).join(" · ")}</td></tr>`).join("")}</tbody></table></div>
+      ${history}
+    </details>`;
   }
 
   function rowHtml(row) {
     const result = RESULT[row.status];
-    const vessel = row.vessel.raw;
-    const meta = [`${brDate(row.date)} · ${period(row.period)}`, row.local, `${row.ternos.length} ${row.ternos.length === 1 ? "terno" : "ternos"}`, row.check.operation.title].filter(Boolean).map(escapeHtml).join(" · ");
+    const v = row.vessel;
+    const name = v.kind === "balsa" ? `Balsa ${escapeHtml(v.name)}${v.attachedTo ? ` <small>(at. ${escapeHtml(v.attachedTo)})</small>` : ""}` : escapeHtml(v.raw);
+    const list = problems(row);
     const override = row.override ? `<p class="req-note">Aprovada com justificativa por <strong>${escapeHtml(row.override.by?.name)}</strong> em ${when(row.override.at)}: ${escapeHtml(row.override.reason)}</p>` : "";
-    const activity = row.activity ? `<p class="req-note">${row.activity.done ? `Atividade do turno marcada como feita (${escapeHtml(S.label(row.activity.shiftId))}), com o PDF anexado.` : `Atividade do turno não foi marcada: ${escapeHtml(row.activity.reason || "")}.`}</p>` : "";
-    const history = row.history?.length ? `<details class="req-history"><summary>Envios anteriores (${row.history.length})</summary><ul>${row.history.map(item => `<li>${when(item.at)} por ${escapeHtml(item.by?.name || "—")}: ${escapeHtml(RESULT[item.status]?.label || item.status)} · <a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}&versao=${encodeURIComponent(item.fileKey.split("/").pop().replace(".pdf", ""))}" target="_blank" rel="noopener">PDF</a></li>`).join("")}</ul></details>` : "";
-    return `<article class="req-card" data-id="${escapeHtml(row.id)}">
-      <details${state.open.has(row.id) || row.status === "reprovado" || row.status === "confirmar" ? " open" : ""} data-toggle="${escapeHtml(row.id)}">
-        <summary class="req-head"><span class="req-badge ${result.css}">${escapeHtml(result.label)}</span><span class="req-title"><strong>${escapeHtml(vessel)}</strong><small>Requisição ${escapeHtml(row.number)} · ${meta}</small></span></summary>
-        <div class="req-body">
-          <p class="req-sent">Enviada por ${escapeHtml(row.uploadedBy?.name || "—")} em ${when(row.uploadedAt)} · impressa em ${escapeHtml(localWhen(row.printedAt) || "—")}${row.requestedAt ? ` · pedido feito em ${escapeHtml(localWhen(row.requestedAt.at))} (informado por ${escapeHtml(row.requestedAt.by?.name || "—")})` : ""} · <a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a></p>
-          ${itemsHtml(row)}${override}${activity}${actionsHtml(row)}${ternosHtml(row)}${history}
-        </div>
-      </details>
-    </article>`;
+    const activity = row.activity?.done ? `<p class="req-note">Atividade do turno marcada como feita (${escapeHtml(S.label(row.activity.shiftId))}), com o PDF anexado.</p>` : "";
+    const canApprove = row.status === "reprovado" || row.status === "confirmar";
+    return `<details class="req-row is-${row.status}" data-toggle="${escapeHtml(row.id)}"${state.open.has(row.id) ? " open" : ""}>
+      <summary class="req-line"><span class="req-badge ${result.css}">${escapeHtml(result.label)}</span><span class="req-period">${period(row.period)}</span><span class="req-ship">${name}</span><span class="req-number">${escapeHtml(row.number.replace(/-1$/, ""))}</span><span class="req-chevron" aria-hidden="true"></span></summary>
+      <div class="req-open">
+        ${list.length ? `<ul class="req-problems">${list.map(item => `<li class="is-${item.level}">${escapeHtml(item.text)}</li>`).join("")}</ul>` : `<p class="req-allok">Tudo conforme a instrução de trabalho.</p>`}
+        ${override}${activity}
+        <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
+        ${canApprove ? `<form class="req-inline" data-form="aprovar" data-id="${escapeHtml(row.id)}" hidden><label>Motivo da aprovação<textarea name="reason" rows="2" maxlength="1000" required placeholder="CMG pedido pelo especialista para esta operação."></textarea></label><button type="submit" class="act-button is-primary">Aprovar</button></form>` : ""}
+        ${detailsHtml(row)}
+      </div>
+    </details>`;
   }
 
   function render() {
@@ -106,7 +110,8 @@
     const byDay = new Map();
     rows.forEach(row => { if (!byDay.has(row.date)) byDay.set(row.date, []); byDay.get(row.date).push(row); });
     $("requisitionsList").innerHTML = rows.length
-      ? [...byDay].map(([date, list]) => `<section class="req-day"><h3>${brDate(date)} · ${S.WEEKDAYS[S.weekday(date)]}</h3>${list.map(rowHtml).join("")}</section>`).join("")
+      ? `<div class="req-table"><div class="req-line req-header" aria-hidden="true"><span>Situação</span><span>Período</span><span>Navio</span><span class="req-number">Requisição</span><span></span></div>
+        ${[...byDay].map(([date, list]) => `<div class="req-day">${S.WEEKDAYS[S.weekday(date)]} ${brDate(date).slice(0, 5)}</div>${list.map(rowHtml).join("")}`).join("")}</div>`
       : `<p class="act-empty">${state.rows.length ? "Nenhuma requisição com esse resultado no período." : "Nenhuma requisição enviada no período."}</p>`;
     renderHolidays();
   }
@@ -152,7 +157,6 @@
     if (!form) return;
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
-    if (form.dataset.form === "hora") act(() => api("/hora", { id: form.dataset.id, at: data.at }), "Hora do pedido registrada e requisição conferida de novo.");
     if (form.dataset.form === "aprovar") act(() => api("/aprovar", { id: form.dataset.id, reason: data.reason }), "Requisição aprovada com justificativa.");
     if (form.dataset.form === "feriados") {
       const lines = String(data.list || "").split(/\n+/).map(line => line.trim()).filter(Boolean);
@@ -171,6 +175,7 @@
     if (!button) return;
     if (button.dataset.action === "edit-holidays") { state.editingHolidays = true; renderHolidays(); $("requisitionsHolidays").open = true; $("requisitionsHolidays").querySelector("textarea")?.focus(); }
     if (button.dataset.action === "cancel-holidays") { state.editingHolidays = false; renderHolidays(); }
+    if (button.dataset.action === "approve") { const form = $("requisitionsList").querySelector(`form[data-form="aprovar"][data-id="${CSS.escape(button.dataset.id)}"]`); if (form) { form.hidden = false; form.querySelector("textarea").focus(); } }
   }
 
   function setup() {

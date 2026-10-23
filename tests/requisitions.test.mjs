@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { parseRequisition, parseVesselName } from "../netlify/lib/requisition-pdf.mjs";
-import { checkRequisition, expectedCapatazia, defaultHolidays, deadlineCheck } from "../netlify/lib/requisition-rules.mjs";
+import { checkRequisition, expectedCapatazia, defaultHolidays, retroactiveCheck } from "../netlify/lib/requisition-rules.mjs";
 import * as R from "../netlify/lib/requisitions.mjs";
 import * as A from "../netlify/lib/activities.mjs";
 import { memoryStore } from "../netlify/lib/activities-store.mjs";
@@ -63,14 +63,9 @@ test("capatazia: 2 em dia útil, 4 em sábado, domingo e feriado", () => {
   assert.ok(errors(checkRequisition(friday, { lineup, holidays })).some(text => /capatazia \(PE\) 4 — o esperado é 2 por ser dia útil \(sexta\)/.test(text)));
 });
 
-test("prazo: impresso antes do limite vale; depois, o assistente informa a hora do pedido", () => {
-  const r = parseRequisition(pages(CMG)); // 07x13 de 17/10: limite 03:45 de 17/10
-  assert.equal(deadlineCheck({ ...r, printedAt: "2026-10-17T03:10:00" })[0].level, "ok");
-  const late = deadlineCheck(r)[0];
-  assert.deepEqual([late.level, late.action], ["confirmar", "informar-hora"]);
-  assert.equal(deadlineCheck(r, { requestedAt: { at: "2026-10-17T03:40:00", by: helio } })[0].level, "ok");
-  assert.match(deadlineCheck(r, { requestedAt: { at: "2026-10-17T04:10:00", by: helio } })[0].text, /depois do limite \(03:45 de 17\/10\)/);
-  assert.equal(deadlineCheck({ ...r, period: "13-19", printedAt: "2026-10-17T09:40:00" })[0].level, "ok", "13x19: limite 09:45");
+test("a hora da impressão não é conferida", () => {
+  const items = checkRequisition(parseRequisition(pages(CMG)), { lineup, holidays }).items;
+  assert.ok(!items.some(item => /impress|limite|prazo/i.test(item.text)), "o PDF impresso dias depois não gera aviso");
 });
 
 test("CMA no lugar do CMP é aceito (pedido do especialista); ao largo exige (AL) e a balsa com o mesmo número de ternos", () => {
@@ -155,15 +150,13 @@ test("big bag, amarras, dormentes (Tyvek) e containers (9.1 a 9.4)", () => {
   assert.deepEqual(errors(check(mk({ vessel: "LEOPOLD STAFF", faina: "6.1", ternos: [["DESCARGA DE CONTAINER CHEIO", { CMA: 1, GC: 1, ESI: 1, EE: 4, CFC: 1, CFP: 1, ENB: 1, BLP: 2, PE: 4 }]] }))), []);
 });
 
-test("retroativo (10) e 2ª reoferta (11)", () => {
+test("retroativo (10): mostra o dia do trabalho original e o do pedido", () => {
   const retro = mk({ vessel: "07 VEGA S (REF.31/07/2024)", local: "ARMAZEM 08", date: "2024-08-03", period: "13-19", faina: "5.9.3", ternos: [["EMBARQUE DE TUBOS SOLTOS - TERNO RETROATIVO", { CMA: 1, GC: 1, ESI: 1, EE: 4, CFC: 1, CFP: 1, BLE: 4, PE: 4 }]] });
-  assert.match(deadlineCheck(retro)[0].text, /trabalho de quarta 31\/07\/2024, lançado com data de sábado 03\/08\/2024, período 13x19/);
-  const late = mk({ vessel: "BBC ELISABETH", faina: "5.9.3", printedAt: "2026-10-21T08:00:00", ternos: [["EMBARQUE DE TUBO SOLTO.", {}]] });
-  assert.match(deadlineCheck(late, { requestedAt: { at: "2026-10-21T07:30:00", by: helio } })[0].text, /na 2ª reoferta \(07:00 às 08:30\)/);
-  assert.equal(deadlineCheck(late, { requestedAt: { at: "2026-10-21T09:00:00", by: helio } })[0].level, "erro");
+  assert.match(retroactiveCheck(retro)[0].text, /trabalho de quarta 31\/07\/2024, lançado com data de sábado 03\/08\/2024, período 13x19/);
+  assert.deepEqual(retroactiveCheck(mk({ vessel: "BBC ELISABETH", faina: "5.9.3", ternos: [["EMBARQUE DE TUBO SOLTO.", {}]] })), []);
 });
 
-test("envio, reenvio corrigido, hora informada e aprovação com justificativa marcando a atividade do turno", async () => {
+test("envio, reenvio corrigido e aprovação com justificativa marcando a atividade do turno", async () => {
   const store = memoryStore(), files = memoryAttachmentsStore();
   A.useTeamProvider(async () => null);
   const bytes = new TextEncoder().encode("%PDF-1.4 teste");
@@ -186,11 +179,7 @@ test("envio, reenvio corrigido, hora informada e aprovação com justificativa m
   const again = await R.submit(store, { bytes, name: "07x13-v2.pdf" }, helio, context(CMG, new Date("2026-10-17T03:30:00-03:00")));
   assert.deepEqual([again.replaced, again.history.length, again.history[0].status, again.override], [true, 1, "aprovado-justificado", null]);
 
-  // Impressa depois do limite: a hora informada entra na conferência.
-  const obs = await R.submit(store, { bytes, name: "01x07.pdf" }, helio, context(OBS, new Date("2026-10-23T10:30:00-03:00")));
-  assert.ok(obs.check.items.some(item => item.action === "informar-hora"));
-  const informed = await R.informRequestTime(store, { id: obs.id, at: "2026-10-17T18:30" }, helio, { lineup, files, now: new Date("2026-10-23T10:31:00-03:00") });
-  assert.ok(informed.check.items.some(item => item.ref === "11" && item.level === "ok" && /informada por Hélio/.test(item.text)));
+  await R.submit(store, { bytes, name: "01x07.pdf" }, helio, context(OBS, new Date("2026-10-23T10:30:00-03:00")));
   const list = await R.list(store, { from: "2026-10-17", to: "2026-10-17" });
   assert.deepEqual(list.map(row => row.period), ["01-07", "07-13"], "mais tarde primeiro");
   await assert.rejects(R.submit(store, { bytes: new TextEncoder().encode("não é pdf"), name: "x.pdf" }, helio, context(CMG)), /PDF da requisição/);

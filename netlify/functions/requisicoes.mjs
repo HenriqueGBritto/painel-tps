@@ -2,7 +2,6 @@
    GET  /api/requisicoes?de=&ate=     lista do período, feriados e permissões
    POST /api/requisicoes/enviar       corpo = PDF; nome do arquivo no cabeçalho X-Arquivo
    GET  /api/requisicoes/pdf?id=      PDF enviado (versao= para um envio anterior)
-   POST /api/requisicoes/hora         { id, at: "AAAA-MM-DDTHH:MM" } hora em que o pedido foi feito
    POST /api/requisicoes/aprovar      { id, reason } aprovar com justificativa
    POST /api/requisicoes/feriados     { holidays: [{ date, name }] }
    Toda rota passa por authorize(); regras em netlify/lib/requisitions.mjs e requisition-rules.mjs. */
@@ -54,7 +53,6 @@ const routes = {
     const { data, name } = await requisitions.readPdf(store, attachmentsStore(), { id: url.searchParams.get("id"), versao: url.searchParams.get("versao") });
     return new Response(data, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" } });
   } },
-  "POST /hora": { action: ACTIONS.sendRequisitions, run: async ({ store, request, access }) => requisitions.informRequestTime(store, await readJson(request), actorOf(access), { lineup: await lineup(), files: attachmentsStore() }) },
   "POST /aprovar": { action: ACTIONS.sendRequisitions, run: async ({ store, request, access }) => requisitions.approveWithReason(store, await readJson(request), actorOf(access), { files: attachmentsStore() }) },
   "POST /feriados": { action: ACTIONS.configureRequisitions, run: async ({ store, request, access }) => requisitions.saveHolidays(store, await readJson(request), actorOf(access)) }
 };
