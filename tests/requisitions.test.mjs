@@ -175,9 +175,13 @@ test("envio, reenvio corrigido e aprovação com justificativa marcando a ativid
   assert.match(task.note, /Requisição 25053242-1 conferida na aba Requisições: aprovada com justificativa/);
   assert.equal(task.attachments[0].type, "application/pdf");
 
-  // Reenvio da mesma requisição: nova conferência, anterior no histórico.
-  const again = await R.submit(store, { bytes, name: "07x13-v2.pdf" }, helio, context(CMG, new Date("2026-10-17T03:30:00-03:00")));
-  assert.deepEqual([again.replaced, again.history.length, again.history[0].status, again.override], [true, 1, "aprovado-justificado", null]);
+  // O mesmo PDF de novo (a verificação no OGMO baixa a cada rodada): nada muda, nem a aprovação justificada.
+  const same = await R.submit(store, { bytes, name: "07x13.pdf" }, helio, context(CMG, new Date("2026-10-17T03:28:00-03:00")));
+  assert.deepEqual([same.unchanged, same.status], [true, "aprovado-justificado"]);
+  // Requisição corrigida no OGMO (CMG trocado por CMP): nova conferência, a anterior vai para o histórico.
+  const fixed = () => pages(CMG).map(page => page.map(item => item.str === "CMG-CONTRA MESTRE GERAL" ? { ...item, str: "CMP-CONTRA MESTRE PORÃO" } : item));
+  const again = await R.submit(store, { bytes, name: "07x13-v2.pdf" }, helio, { lineup, files, now: new Date("2026-10-17T03:30:00-03:00"), read: async () => fixed() });
+  assert.deepEqual([again.replaced, again.history.length, again.history[0].status, again.override, again.status], [true, 1, "aprovado-justificado", null, "aprovado"]);
 
   await R.submit(store, { bytes, name: "01x07.pdf" }, helio, context(OBS, new Date("2026-10-23T10:30:00-03:00")));
   const list = await R.list(store, { from: "2026-10-17", to: "2026-10-17" });

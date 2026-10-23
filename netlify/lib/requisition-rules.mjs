@@ -239,6 +239,7 @@ export function retroactiveCheck(requisition) {
 
 const count = (terno, code) => terno.functions.filter(f => f.code === code && f.vagas > 0).reduce((sum, f) => sum + f.vagas, 0);
 const sameShift = (a, b) => a.number !== b.number && a.date === b.date && a.period === b.period;
+const CCT = "CCT CAPATAZIA";
 const shipOf = requisition => vesselKey(requisition.vessel.attachedTo || requisition.vessel.name);
 
 export function checkRequisition(requisition, { lineup = null, holidays = [], related = [] } = {}) {
@@ -248,7 +249,16 @@ export function checkRequisition(requisition, { lineup = null, holidays = [], re
   const spec = op.spec;
   const many = requisition.ternos.length > 1;
   const v = requisition.vessel;
-  const others = related.filter(other => sameShift(other, requisition));
+  const others = related.filter(other => sameShift(other, requisition) && !other.cancelled);
+
+  // CCT CAPATAZIA: criada pelo OGMO junto com toda requisição nossa com capatazia. Sem nenhuma frente nossa com
+  // capatazia ativa no mesmo período, ela precisa ser cancelada.
+  if (vesselKey(v.raw) === CCT) {
+    const withPe = others.filter(other => vesselKey(other.vessel.raw) !== CCT && other.ternos.some(terno => count(terno, "PE") > 0));
+    if (withPe.length) add("ok", `Acompanha a capatazia de ${withPe.map(other => `${other.vessel.raw} (${other.number})`).join(", ")}.`, "CCT");
+    else add("erro", "CCT CAPATAZIA ativa sem nenhuma frente nossa com capatazia neste período: ela deve ser cancelada.", "CCT");
+    return { result: items.some(item => item.level === "erro") ? "reprovado" : "aprovado", operation: { key: "cct-capatazia", title: "CCT capatazia (automática do OGMO)", ref: "CCT" }, items };
+  }
 
   // Cabeçalho (seção 2).
   normalize(requisition.port) === "RIO DE JANEIRO" ? add("ok", "Porto: Rio de Janeiro.", "1.6") : add("erro", `Porto "${requisition.port}": deveria ser Rio de Janeiro.`, "1.6");

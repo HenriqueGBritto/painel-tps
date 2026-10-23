@@ -45,21 +45,25 @@ export async function saveHolidays(store, input, actor, { now = new Date() } = {
 
 /* ---------- Conferência ---------- */
 
-const status = record => record.override ? "aprovado-justificado" : record.check.result;
+const status = record => record.cancelled ? "cancelada" : record.override ? "aprovado-justificado" : record.check.result;
 const publicRecord = record => ({ ...record, status: status(record) });
 
+/** Outras requisições ativas (não canceladas no OGMO) do mesmo dia e período. */
 async function sameShift(store, record) {
-  return (await store.list(COLLECTION, { from: `${record.date}_`, to: `${record.date}_~` })).filter(other => other.period === record.period && other.id !== record.id);
+  return (await store.list(COLLECTION, { from: `${record.date}_`, to: `${record.date}_~` })).filter(other => other.period === record.period && other.id !== record.id && !other.cancelled);
 }
 
 function recheck(record, context, related) {
   return checkRequisition(record, { lineup: context.lineup, holidays: context.holidays, related });
 }
 
-/** Ao largo: a balsa e o navio do mesmo período se conferem juntos; ao chegar um, os outros são reconferidos. */
+/**
+ * Requisições do mesmo período se conferem juntas (balsa e navio ao largo, navio sem capatazia e a balsa dele,
+ * dormentes e os outros ternos, CCT CAPATAZIA): ao chegar ou cancelar uma, as outras são reconferidas.
+ */
 async function recheckPartners(store, record, context) {
   const others = await sameShift(store, record);
-  for (const other of others.filter(item => /LARGO/i.test(item.local))) {
+  for (const other of others) {
     const check = recheck(other, context, [record, ...others.filter(item => item.id !== other.id)]);
     if (JSON.stringify(check) !== JSON.stringify(other.check)) await store.set(COLLECTION, other.id, { check }, { merge: true });
   }
@@ -84,13 +88,20 @@ export async function submit(store, input, actor, context) {
   if (!isDate(parsed.date) || !PERIODS.includes(parsed.period)) fail(422, "Não encontrei a data da operação e o período no PDF.");
   const id = idOf(parsed.date, parsed.number);
   const previous = await store.get(COLLECTION, id);
+  // Mesma requisição sem nenhuma mudança (a verificação no OGMO baixa o PDF de novo a cada rodada): não vira um novo envio.
+  const contentKey = JSON.stringify({ ...parsed, printedAt: null });
+  if (previous && previous.contentKey === contentKey && !previous.cancelled) {
+    const seen = { lastSeenAt: iso(now), ...(context.ogmo ? { ogmo: context.ogmo } : {}) };
+    await store.set(COLLECTION, id, seen, { merge: true });
+    return { ...publicRecord({ id, ...previous, ...seen }), unchanged: true };
+  }
   const fileKey = `requisicoes/${parsed.number}/${randomUUID().replace(/-/g, "").slice(0, 16)}.pdf`;
   const fileName = String(input.name || `${parsed.number}.pdf`).replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120);
   await context.files.put(fileKey, bytes, { name: fileName, type: "application/pdf", size: bytes.byteLength, by: actor, at: iso(now) });
 
   const holidays = (await getHolidays(store, now)).holidays;
   const ctx = { lineup: context.lineup, holidays };
-  const record = { id, ...parsed, fileKey, fileName, fileSize: bytes.byteLength, uploadedBy: actor, uploadedAt: iso(now), override: null, activity: null };
+  const record = { id, ...parsed, contentKey, fileKey, fileName, fileSize: bytes.byteLength, uploadedBy: actor, uploadedAt: iso(now), lastSeenAt: iso(now), source: context.source || "envio", ogmo: context.ogmo || null, cancelled: false, override: null, activity: null };
   const related = await sameShift(store, record);
   record.check = recheck(record, ctx, related);
   record.history = previous ? [{ at: previous.uploadedAt, by: previous.uploadedBy, status: status(previous), fileKey: previous.fileKey, fileName: previous.fileName, override: previous.override || null }, ...(previous.history || [])].slice(0, MAX_HISTORY) : [];
@@ -99,6 +110,16 @@ export async function submit(store, input, actor, context) {
   if (record.check.result === "aprovado") record.activity = await markActivity(store, record, actor, { files: context.files, now, bytes });
   if (record.activity) await store.set(COLLECTION, id, { activity: record.activity }, { merge: true });
   return { ...publicRecord(record), replaced: Boolean(previous) };
+}
+
+/** Reconfere todas as requisições ativas de um dia e período (depois de cancelamentos vindos do OGMO). */
+export async function recheckShift(store, date, period, context) {
+  const rows = (await store.list(COLLECTION, { from: `${date}_`, to: `${date}_~` })).filter(row => row.period === period && !row.cancelled);
+  const holidays = (await getHolidays(store, context.now)).holidays;
+  for (const row of rows) {
+    const check = recheck(row, { lineup: context.lineup, holidays }, rows.filter(other => other.id !== row.id));
+    if (JSON.stringify(check) !== JSON.stringify(row.check)) await store.set(COLLECTION, row.id, { check }, { merge: true });
+  }
 }
 
 async function load(store, id) {

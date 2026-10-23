@@ -16,6 +16,8 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   process.env.TPS_AUTH_MEMORY = "1";
   process.env.TPS_AUTH_TEST_USERS = JSON.stringify(devUsers);
   process.env.TPS_ADMIN_EMAILS ||= "admin@painel.test";
+  // Token do robô do OGMO só para testes locais (o de verdade fica no Netlify e no GitHub).
+  process.env.OGMO_SYNC_TOKEN ||= "teste-local-robo-ogmo-0000000000000000";
 }
 
 const { default: api } = await import("../netlify/functions/api.mjs");

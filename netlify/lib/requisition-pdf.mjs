@@ -78,11 +78,13 @@ export function parseVesselName(raw) {
   const text = String(raw || "").replace(/\s+/g, " ").trim().toUpperCase();
   const extras = [...text.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim());
   const base = text.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
-  const attached = extras.map(e => /^AT\.?\s*(.+)$/.exec(e)?.[1]?.trim()).find(Boolean) || null;
+  // Atrelada "(AT. NAVIO)" ou "(AT.NAVIO)"; ao largo como o OGMO grava: "NAVIO (AL)", "NAVIO (AL.)" e "BALSA X (AL. NAVIO)".
+  const attached = extras.map(e => /^(?:AT|AL)(?:\.\s*|\s+)(.+)$/.exec(e)?.[1]?.trim()).find(Boolean) || null;
+  const offshore = extras.some(e => /^AL(?:\.|\s|$)/.test(e));
   const retro = extras.map(e => /^REF\.?\s*(\d{2}\/\d{2}\/\d{4})$/.exec(e)?.[1]).find(Boolean) || null;
   return {
     raw: text, kind: /^BALSA\b/.test(base) ? "balsa" : "navio", name: base.replace(/^BALSA\s+/, ""),
-    attachedTo: attached, offshore: extras.includes("AL"), retroactive: retro ? brDate(retro) : null,
+    attachedTo: attached, offshore, retroactive: retro ? brDate(retro) : null,
     tarp: extras.some(e => /ENLONAMENTO/.test(e)), extras
   };
 }

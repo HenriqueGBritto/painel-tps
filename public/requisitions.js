@@ -4,10 +4,10 @@
   const $ = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const S = window.TpsShifts;
-  const state = { rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false };
+  const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false };
   const RESULT = {
     reprovado: { label: "Reprovada", css: "is-error" }, confirmar: { label: "Confirmar", css: "is-warn" },
-    aprovado: { label: "Aprovada", css: "is-ok" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
+    aprovado: { label: "Aprovada", css: "is-ok" }, cancelada: { label: "Cancelada", css: "is-off" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
   };
   const brDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
   const period = value => String(value || "").replace("-", "x");
@@ -88,11 +88,12 @@
     const override = row.override ? `<p class="req-note">Aprovada com justificativa por <strong>${escapeHtml(row.override.by?.name)}</strong> em ${when(row.override.at)}: ${escapeHtml(row.override.reason)}</p>` : "";
     const activity = row.activity?.done ? `<p class="req-note">Atividade do turno marcada como feita (${escapeHtml(S.label(row.activity.shiftId))}), com o PDF anexado.</p>` : "";
     const canApprove = row.status === "reprovado" || row.status === "confirmar";
+    const origin = row.source === "ogmo" ? `<p class="req-note">Lida automaticamente no OGMO${row.ogmo?.scaled ? " · já escalada" : ""}${row.cancelled ? ` · cancelada no OGMO em ${when(row.cancelledAt)}` : ""}.</p>` : row.cancelled ? `<p class="req-note">Cancelada no OGMO em ${when(row.cancelledAt)}.</p>` : "";
     return `<details class="req-row is-${row.status}" data-toggle="${escapeHtml(row.id)}"${state.open.has(row.id) ? " open" : ""}>
       <summary class="req-line"><span class="req-badge ${result.css}">${escapeHtml(result.label)}</span><span class="req-period">${period(row.period)}</span><span class="req-ship">${name}</span><span class="req-number">${escapeHtml(row.number.replace(/-1$/, ""))}</span><span class="req-chevron" aria-hidden="true"></span></summary>
       <div class="req-open">
         ${list.length ? `<ul class="req-problems">${list.map(item => `<li class="is-${item.level}">${escapeHtml(item.text)}</li>`).join("")}</ul>` : `<p class="req-allok">Tudo conforme a instrução de trabalho.</p>`}
-        ${override}${activity}
+        ${override}${activity}${origin}
         <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
         ${canApprove ? `<form class="req-inline" data-form="aprovar" data-id="${escapeHtml(row.id)}" hidden><label>Motivo da aprovação<textarea name="reason" rows="2" maxlength="1000" required placeholder="CMG pedido pelo especialista para esta operação."></textarea></label><button type="submit" class="act-button is-primary">Aprovar</button></form>` : ""}
         ${detailsHtml(row)}
@@ -100,9 +101,26 @@
     </details>`;
   }
 
+  /** Verificação automática no OGMO: última rodada, erro e o que falta pedir antes do limite. */
+  function renderSync() {
+    const box = $("requisitionsSync");
+    const sync = state.sync;
+    if (!sync) { box.hidden = true; return; }
+    const nowLocal = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()).replace(" ", "T");
+    const missing = (sync.missing || []).filter(item => item.deadline > nowLocal);
+    const failed = sync.error && Date.parse(sync.errorAt || 0) > Date.parse(sync.lastRunAt || 0);
+    const stale = sync.lastRunAt && Date.now() - Date.parse(sync.lastRunAt) > 150 * 60000;
+    box.hidden = false;
+    box.className = `req-sync${missing.length || failed ? " is-alert" : stale ? " is-warn" : ""}`;
+    box.innerHTML = `<p class="req-sync-line"><strong>Verificação automática no OGMO</strong> · ${sync.lastRunAt ? `última em ${when(sync.lastRunAt)}: ${sync.active} ${sync.active === 1 ? "ativa" : "ativas"}, ${sync.cancelled} ${sync.cancelled === 1 ? "cancelada" : "canceladas"}` : "ainda sem rodada completa"}${stale ? " · <span>parada há mais de 2 horas</span>" : ""}</p>
+      ${failed ? `<p class="req-sync-error">A última tentativa falhou (${when(sync.errorAt)}): ${escapeHtml(sync.error)}</p>` : ""}
+      ${missing.length ? `<ul class="req-missing">${missing.map(item => `<li><strong>${escapeHtml(item.vessel)}</strong>: falta a requisição do ${period(item.period)} de ${brDate(item.date).slice(0, 5)} · limite ${item.deadline.slice(11, 16)} <small>(${escapeHtml(item.reason)})</small></li>`).join("")}</ul>` : ""}`;
+  }
+
   function render() {
+    renderSync();
     const filter = $("requisitionsResult").value;
-    const rows = state.rows.filter(row => !filter || (filter === "aprovado" ? row.status.startsWith("aprovado") : row.status === filter));
+    const rows = state.rows.filter(row => !filter || (filter === "aprovado" ? row.status.startsWith("aprovado") : row.status === filter)).sort((a, b) => (a.status === "cancelada") - (b.status === "cancelada"));
     const counts = Object.fromEntries(["reprovado", "confirmar", "aprovado"].map(key => [key, state.rows.filter(row => key === "aprovado" ? row.status.startsWith("aprovado") : row.status === key).length]));
     $("requisitionsSummary").innerHTML = state.rows.length
       ? `<span class="req-badge is-error">${counts.reprovado} reprovada${counts.reprovado === 1 ? "" : "s"}</span><span class="req-badge is-warn">${counts.confirmar} para confirmar</span><span class="req-badge is-ok">${counts.aprovado} aprovada${counts.aprovado === 1 ? "" : "s"}</span>`
@@ -134,6 +152,7 @@
     try {
       const data = await api(`?de=${from}&ate=${to}`);
       state.rows = data.requisitions;
+      state.sync = data.sync || null;
       state.holidays = data.holidays;
       state.customHolidays = data.custom;
       state.canEditHolidays = data.canEditHolidays;

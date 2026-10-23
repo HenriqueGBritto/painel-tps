@@ -1,0 +1,17 @@
+{
+  "name": "painel-tps-robo-ogmo",
+  "private": true,
+  "type": "module",
+  "description": "Robô de consulta das requisições de estiva no sistema do OGMO-RJ (roda no GitHub Actions).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "verificar": "node ogmo.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "1.63.0",
+    "unpdf": "1.8.1"
+  }
+}

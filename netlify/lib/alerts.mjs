@@ -86,9 +86,21 @@ export async function requisitionAlerts(store, now = new Date()) {
   if (!store) return [];
   const today = brToday(now);
   const add = (iso, days) => new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10) + days)).toISOString().slice(0, 10);
-  const rows = (await store.list("requisitions", { from: `${add(today, -1)}_`, to: `${add(today, 1)}_~` })).filter(row => !row.override);
+  const rows = (await store.list("requisitions", { from: `${add(today, -1)}_`, to: `${add(today, 1)}_~` })).filter(row => !row.override && !row.cancelled);
   const label = row => `${row.number} (${row.period.replace("-", "x")} de ${brDay(row.date)})`;
   const alerts = [];
+  // Verificação automática no OGMO (robot/ogmo.mjs): o que falta pedir antes do limite, rodada com erro ou parada.
+  const sync = await store.get("requisitionSync", "status");
+  if (sync) {
+    const nowLocal = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(now).replace(" ", "T");
+    const missing = (sync.missing || []).filter(item => item.deadline > nowLocal);
+    if (missing.length) alerts.push({ id: `requisicoes-faltando-${missing.map(item => `${item.date}${item.period}${item.vessel}`).join(",")}`, level: "critical", area: "Requisições", view: "requisicoes",
+      title: `${missing.length === 1 ? "Falta 1 requisição de estiva" : `Faltam ${missing.length} requisições de estiva`} no OGMO`,
+      detail: `${missing.slice(0, 4).map(item => `${item.vessel}: ${item.period.replace("-", "x")} (limite ${item.deadline.slice(11, 16)})`).join("; ")}.` });
+    const lastRun = Date.parse(sync.lastRunAt || 0);
+    if (sync.error && Date.parse(sync.errorAt || 0) > lastRun) alerts.push({ id: `ogmo-erro-${sync.errorAt}`, level: "warning", area: "Requisições", view: "requisicoes", title: "A verificação no OGMO falhou", detail: sync.error });
+    else if (lastRun && now - lastRun > 150 * 60000) alerts.push({ id: `ogmo-parada-${sync.lastRunAt}`, level: "warning", area: "Requisições", view: "requisicoes", title: "A verificação no OGMO está parada", detail: `A última rodada foi em ${time(sync.lastRunAt)} de ${brDay(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(sync.lastRunAt)))}. Confira o GitHub Actions (Verificação OGMO).` });
+  }
   const rejected = rows.filter(row => row.check?.result === "reprovado");
   const pending = rows.filter(row => row.check?.result === "confirmar");
   if (rejected.length) alerts.push({ id: `requisicoes-reprovadas-${rejected.map(row => row.id).join(",")}`, level: "critical", area: "Requisições", view: "requisicoes", title: `${rejected.length} ${rejected.length === 1 ? "requisição de estiva reprovada" : "requisições de estiva reprovadas"}`, detail: `${rejected.slice(0, 4).map(label).join("; ")}. Corrija no OGMO antes do horário-limite ou aprove com justificativa.` });

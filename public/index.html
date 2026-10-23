@@ -268,6 +268,7 @@
           </div>
           <p class="base-status act-status-line" id="requisitionsStatus" role="status" aria-live="polite"></p>
           <form class="base-filters" id="requisitionsFilters" aria-label="Filtros das requisições"><label>De<input id="requisitionsFrom" type="date" required></label><label>Até<input id="requisitionsTo" type="date" required></label><label>Resultado<select id="requisitionsResult"><option value="">Todos</option><option value="reprovado">Reprovadas</option><option value="confirmar">Para confirmar</option><option value="aprovado">Aprovadas</option></select></label><button type="submit" class="act-button is-primary">Filtrar</button></form>
+          <div class="req-sync" id="requisitionsSync" role="status" hidden></div>
           <div class="req-summary" id="requisitionsSummary"></div>
           <div id="requisitionsList"></div>
           <details class="req-holidays-box" id="requisitionsHolidays"></details>

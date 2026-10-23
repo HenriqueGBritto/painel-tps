@@ -1,0 +1,64 @@
+# Verificação automática das requisições de estiva no sistema do OGMO (robot/ogmo.mjs).
+# Horários em UTC (Brasília = UTC−3):
+#   - de hora em hora, no minuto 7;
+#   - 1 hora antes de cada limite do OGMO: 02:45, 08:45, 14:45 e 17:45 em Brasília
+#     (o GitHub pode atrasar alguns minutos; assim o aviso de requisição faltando chega com folga).
+# Segredos (Settings → Secrets and variables → Actions): OGMO_EMPRESA, OGMO_USUARIO, OGMO_SENHA, OGMO_SYNC_TOKEN.
+# Para testar sem mandar nada ao painel: Actions → Verificação OGMO → Run workflow → modo "diagnostico".
+name: Verificação OGMO
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+    - cron: "45 5,11,17,20 * * *"
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "normal (manda ao painel) ou diagnostico (só lista e testa o PDF)"
+        type: choice
+        options: [normal, diagnostico]
+        default: normal
+
+# Uma rodada por vez: se uma atrasar, a próxima espera em vez de entrar junto no OGMO.
+concurrency:
+  group: ogmo
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: robot/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: robot
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('robot/package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+        working-directory: robot
+      - run: node ogmo.mjs
+        working-directory: robot
+        env:
+          TZ: America/Sao_Paulo
+          OGMO_MODO: ${{ inputs.modo || 'normal' }}
+          OGMO_EMPRESA: ${{ secrets.OGMO_EMPRESA }}
+          OGMO_USUARIO: ${{ secrets.OGMO_USUARIO }}
+          OGMO_SENHA: ${{ secrets.OGMO_SENHA }}
+          OGMO_SYNC_TOKEN: ${{ secrets.OGMO_SYNC_TOKEN }}
+          OGMO_BOTAO_PDF: ${{ vars.OGMO_BOTAO_PDF }}
+          PAINEL_URL: ${{ vars.PAINEL_URL || 'https://paineltps.netlify.app' }}
+      # Em caso de falha, a imagem da tela ajuda a ver onde parou (fica 3 dias).
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tela-da-falha
+          path: robot/falha.png
+          retention-days: 3
+          if-no-files-found: ignore

@@ -131,6 +131,26 @@ O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO
 - **Atividades:** requisição aprovada (direto ou com justificativa) marca como feita a atividade "Requisição de estiva · período" do turno e anexa o PDF à observação dela. Se o turno já foi encerrado, a requisição avisa e não mexe nele.
 - **Feriados:** lista inicial com feriados nacionais, do estado e da cidade do Rio, Carnaval e Corpus Christi. Quem tem "Configuração das Atividades" ou é administrador edita a lista na própria aba.
 - **Alertas:** requisições de ontem a amanhã reprovadas ou para confirmar aparecem no sino.
+- **CCT CAPATAZIA:** é criada pelo OGMO junto com toda requisição nossa com capatazia. Se, no mesmo período, não sobrar nenhuma frente nossa com capatazia ativa, a CCT CAPATAZIA ainda ativa é apontada como erro: ela deve ser cancelada.
+
+### Verificação automática no OGMO
+
+Um robô entra no sistema de requisições do OGMO com o login da empresa e confere as requisições sem ninguém precisar enviar PDF.
+
+- **Onde roda:** no GitHub Actions (`.github/workflows/ogmo.yml`; o robô fica em `robot/ogmo.mjs`).
+- **Quando:** de hora em hora, e também 1 hora antes de cada limite: 02:45, 08:45, 14:45 e 17:45.
+- **O que faz:**
+  1. Lê a lista de requisições de ontem, hoje e amanhã (Registro de Requisições, porto Rio de Janeiro, todos os períodos).
+  2. Baixa o PDF ("Visualiza") das requisições ativas. As já escaladas e já guardadas não são baixadas de novo.
+  3. Manda tudo para o painel, que confere cada PDF pela IT, marca as canceladas no OGMO e reconfere o período delas (por exemplo, a CCT CAPATAZIA).
+- **O que falta pedir:** a cada rodada o painel calcula o que falta nos períodos com limite nos próximos 80 minutos: navio ou balsa que teve requisição no período anterior e ainda não tem a do próximo, e navio em operação no Lineup sem nenhuma requisição no dia. Isso aparece no topo da aba e no sino.
+- **Só consulta:** o robô só pode disparar entrar, abrir o Registro de Requisições, escolher porto e período, pesquisar, selecionar e visualizar. Qualquer outro envio ao OGMO (Nova Requisição, Inclusão, Alteração, Exclusão, Modifica, Cancela, Duplica, Sair) é bloqueado antes de sair do navegador, e toda caixa de confirmação do OGMO é recusada. O PDF só é aceito se trouxer o número da requisição selecionada.
+- **Configuração:**
+  - Segredos no GitHub (Settings → Secrets and variables → Actions): `OGMO_EMPRESA`, `OGMO_USUARIO`, `OGMO_SENHA` e `OGMO_SYNC_TOKEN`.
+  - No Netlify, a variável `OGMO_SYNC_TOKEN` com o mesmo valor. É ela que deixa o robô entregar os dados ao painel; sem ela, as rotas do robô respondem 503.
+- **Testar:** Actions → Verificação OGMO → Run workflow → modo **diagnostico**. Ele lista as requisições de hoje e testa o PDF de uma, sem mandar nada ao painel.
+- **Se parar:** com a rodada falhando ou sem rodar há mais de 2 horas, aparece um aviso na aba e no sino. Quando o robô falha, ele guarda a imagem da tela por 3 dias, para ver onde parou.
+- **Cota do GitHub:** o repositório privado tem 2.000 minutos por mês; com cerca de 28 rodadas por dia, o uso fica em torno de 1.700.
 - **Onde fica:** Firestore `requisitions` (feriados em `requisitionConfig`); o PDF fica no Netlify Blobs, junto dos anexos. A leitura do PDF usa a biblioteca `unpdf`. As regras ficam em `netlify/lib/requisition-rules.mjs`, e os testes usam o texto de dois PDFs reais (`tests/fixtures/requisicoes`).
 
 ## Aba Equipe (quadro de pessoal)
