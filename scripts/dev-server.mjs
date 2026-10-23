@@ -21,6 +21,7 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
 const { default: api } = await import("../netlify/functions/api.mjs");
 const { default: activities } = await import("../netlify/functions/atividades.mjs");
 const { default: authApi } = await import("../netlify/functions/auth.mjs");
+const { default: requisitionsApi } = await import("../netlify/functions/requisicoes.mjs");
 if (process.env.TPS_AUTH_MEMORY === "1") {
   const { activitiesStore } = await import("../netlify/lib/activities-store.mjs");
   const { USERS } = await import("../netlify/lib/auth.mjs");
@@ -48,6 +49,7 @@ createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   try {
     if (path.startsWith("/api/atividades/")) return send(res, await activities(await toRequest(req), {}));
+    if (path === "/api/requisicoes" || path.startsWith("/api/requisicoes/")) return send(res, await requisitionsApi(await toRequest(req), {}));
     if (path.startsWith("/api/auth/") || path === "/api/acessos" || path.startsWith("/api/acessos/")) return send(res, await authApi(await toRequest(req), {}));
     if (path.startsWith("/api/")) return send(res, await api(await toRequest(req), {}));
     const file = normalize(join(PUBLIC, path === "/" ? "index.html" : decodeURIComponent(path)));

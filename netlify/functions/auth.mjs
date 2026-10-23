@@ -17,7 +17,7 @@ async function readBody(request) {
 
 /** O que a página precisa saber de quem está logado (sem nada sensível). */
 function me(user) {
-  const screens = Object.fromEntries(["indicadores", "lineup", "producao", "atividades", "atividades-config", "equipe", "admin"].map(key => [key, user.permissions.includes(key)]));
+  const screens = Object.fromEntries(Object.keys(auth.PERMISSIONS).map(key => [key, user.permissions.includes(key)]));
   return {
     user: { uid: user.uid, email: user.email, name: user.name, assistantId: user.assistantId, mustChangePassword: user.mustChangePassword, permissions: user.permissions },
     can: { ...screens, operations: can(user, ACTIONS.readOperations), discharge: can(user, ACTIONS.readDischarge), refresh: can(user, ACTIONS.refreshData) }

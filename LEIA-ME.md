@@ -80,6 +80,68 @@ Coleções no Firestore: `shiftAssistants`, `shiftConfig`, `shiftOverrides`, `ta
 
 Para conferir se o Firestore está ligado, abra `https://SEU-SITE.netlify.app/api/atividades/status`. A resposta deve trazer `"storage":"firestore"`. Se vier erro 503, falta configurar `FIREBASE_SERVICE_ACCOUNT_JSON`.
 
+## Aba Requisições (estiva do OGMO)
+
+O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO, um arquivo por requisição com todos os ternos. Dá para arrastar vários de uma vez. O painel lê o PDF e confere pela instrução de trabalho (IT "Requisição de estiva").
+
+- **Resultado:**
+  - **Reprovada:** tem algum erro.
+  - **Confirmar:** só tem pontos a verificar.
+  - **Aprovada:** nada a apontar.
+
+  Cada item mostra o motivo e a seção da IT. Qualquer pessoa com acesso pode **aprovar com justificativa** uma reprovada ou uma para confirmar; fica registrado quem aprovou, quando e o motivo.
+- **O que é conferido:**
+  - porto Rio de Janeiro e Longo Curso;
+  - frase do EPI, aceitando variações;
+  - Atracado/Ao Largo coerente com o local;
+  - padrão do nome: `BALSA XX (AT. NAVIO)`, `NAVIO (AL)`, `(REF.dd/mm/aaaa)`;
+  - faina;
+  - observação de cada terno com a operação e o produto;
+  - funções que só vão no 1º terno (CFC, CSC, ENB, BLM).
+- **Composição de ferro gusa** (seções 5.2 a 5.7), terno a terno:
+  - **CMP** é o padrão; **CMA** é aceito no lugar dele (pedido do especialista).
+  - Navio de gusa **não leva EE**.
+  - A balsa ao largo leva só **CFC**, sem CFP.
+  - **Capatazia (PE):** 2 em dia útil (2 nossos + 2 do OGMO); 4 em sábado, domingo e feriado, contados pela data da operação. Operação ao largo não leva capatazia.
+  - EEM com 0 vagas (reoferta) não conta.
+- **Composição das outras cargas**, pelos exemplos da IT. Nelas o contra mestre pode ser CMA ou CMP, e a capatazia é 4.
+
+  | Carga | Composição | Seção |
+  |---|---|---|
+  | Tubos soltos (embarque) | GC, ESI, EE 4 (6 com alavanca), CFC, CFP, BLE 4, PE 4, sem consertador | 6.1 |
+  | Tubos amarrados ou mistos (embarque) | tubos soltos + CSC e CBD | 6.2 e 6.3 |
+  | Tubos (desembarque) | no bloco, ENB, BLM e BLC no lugar do BLE (BLP 2 se precisar) | 6.2 |
+  | Carga geral (navio) | GC, ESI, EE 4, CFC, CFP, CSC, CBD, ENB, BLP 2 e PE 4. Carretel vazio vai sem consertador. Com balsa, sem capatazia. | 7.1 a 7.4 |
+  | Balsa de carga geral ou de amarras | contra mestre e EE 4 | 7.3 e 7.4 |
+  | Granéis (potássio, gesso, espodumênio, magnetita…) | GC, ESI, EE 1 (4 com varredura escrita na observação), CFC e CFP; tratorista a partir do 2º período. A capatazia vai numa requisição separada, `NAVIO (ENLONAMENTO)`, só com PE. | 8.1 |
+  | Big bag | como a carga geral | 9.1 |
+  | Amarras | como a carga geral; PE 4 só se descarregar no chão | 9.2 |
+  | Dormentes | carga geral + EEM 1. A observação precisa citar o macacão Tyvek, e os outros ternos do mesmo navio e período também. | 9.3 |
+  | Container | GC, ESI, EE 4, CFC, CFP, ENB, BLP 2 e PE 4 | 9.4 |
+
+  - Estivador guia (EGU 2) e empilhador são aceitos e aparecem como observação: a IT manda perguntar ao responsável.
+  - Terno só de bloco (6.1 Nota 3) é aceito.
+  - Operação que não está na IT (por exemplo, carga geral ao largo) fica para confirmar.
+- **Retroativo:** mostra o dia e o período do trabalho original e os do pedido, para conferir se o custo é o mesmo (seção 10).
+- **Reoferta:** hora informada dentro da 2ª reoferta do edital fica para confirmar; depois dela, é erro (seção 11).
+- **Ao largo:** a balsa e o navio do mesmo período são conferidos juntos (mesmo número de ternos; com mais de uma balsa, CFC em só uma). Até chegar a segunda requisição, a primeira fica "confirmar".
+- **Lineup:** o navio (o de "(AT. …)", no caso da balsa) precisa estar no Lineup e o local precisa combinar com o berço. Nome parecido mas diferente (ex.: SMOKER × SKOMER) ou local diferente ficam para confirmar.
+- **Prazo:** limite do OGMO no dia da operação. O 01x07 leva a data do dia anterior à madrugada.
+
+  | Período | Limite |
+  |---|---|
+  | 07x13 | 03:45 |
+  | 13x19 | 09:45 |
+  | 19x01 | 15:45 |
+  | 01x07 | 18:45 |
+
+  O PDF só traz a hora da **impressão**. Impresso até o limite, está no prazo. Impresso depois, o assistente informa a hora em que fez o pedido. Por isso, salve o PDF logo depois de fazer o pedido.
+- **Reenvio:** a mesma requisição corrigida no OGMO e enviada de novo substitui a conferência; os envios anteriores ficam no histórico, com o PDF.
+- **Atividades:** requisição aprovada (direto ou com justificativa) marca como feita a atividade "Requisição de estiva · período" do turno e anexa o PDF à observação dela. Se o turno já foi encerrado, a requisição avisa e não mexe nele.
+- **Feriados:** lista inicial com feriados nacionais, do estado e da cidade do Rio, Carnaval e Corpus Christi. Quem tem "Configuração das Atividades" ou é administrador edita a lista na própria aba.
+- **Alertas:** requisições de ontem a amanhã reprovadas ou para confirmar aparecem no sino.
+- **Onde fica:** Firestore `requisitions` (feriados em `requisitionConfig`); o PDF fica no Netlify Blobs, junto dos anexos. A leitura do PDF usa a biblioteca `unpdf`. As regras ficam em `netlify/lib/requisition-rules.mjs`, e os testes usam o texto de dois PDFs reais (`tests/fixtures/requisicoes`).
+
 ## Aba Equipe (quadro de pessoal)
 
 Somente leitura: a planilha da equipe é a fonte da verdade e o painel só lê dela, pela rota `/api/equipe` (com ponto único de permissão em `netlify/lib/access.mjs`, hoje liberado).
@@ -113,7 +175,7 @@ Somente leitura: a planilha da equipe é a fonte da verdade e o painel só lê d
 - **Quem entra:** só quem o administrador cadastrou na tela **Administração → Acessos**, com e-mail, nome e senha provisória. Não existe cadastro pelo próprio site.
 - **Primeiro acesso:** a pessoa entra com a senha provisória e é obrigada a criar uma senha própria (pelo menos 8 caracteres, com letras e números, diferente da provisória). Até trocar, o servidor não entrega nenhum dado.
 - **Manter conectado:** marcado, a sessão dura 14 dias naquele navegador. Sem marcar, termina ao fechar o navegador (e em no máximo 12 horas).
-- **O que cada pessoa vê:** o administrador marca as telas de cada pessoa: Indicadores, Lineup, Produção, Atividades (registrar no turno), Configuração das Atividades, Equipe (RH) e Administrador. Atalhos: **Assistente** (Indicadores, Lineup, Produção e Atividades) e **Gestão** (tudo, menos Administrador). Menus sem acesso somem, e o servidor recusa os dados também (não basta esconder o botão). Mudanças valem em até 30 segundos.
+- **O que cada pessoa vê:** o administrador marca as telas de cada pessoa: Indicadores, Lineup, Produção, Atividades (registrar no turno), Requisições de estiva, Configuração das Atividades, Equipe (RH) e Administrador. Atalhos: **Assistente** (Indicadores, Lineup, Produção, Atividades e Requisições) e **Gestão** (tudo, menos Administrador). Menus sem acesso somem, e o servidor recusa os dados também (não basta esconder o botão). Mudanças valem em até 30 segundos.
 - **Esqueceu a senha:** o administrador define uma senha provisória nova em Acessos → Editar. As sessões abertas da pessoa terminam e ela troca a senha no próximo acesso.
 - **Bloquear:** Acessos → Editar → Bloquear acesso. As sessões abertas terminam na hora.
 - **Histórico:** criações, mudanças de acesso, bloqueios e senhas redefinidas ficam registrados (quem e quando), sem guardar senhas.

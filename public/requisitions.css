@@ -1,0 +1,48 @@
+/* Aba Requisições (requisitions.js). Cores só dos tokens de brand.css. */
+.req-upload{display:grid;gap:12px;background:var(--trl-branco);border:1px solid var(--trl-border);border-radius:10px;padding:18px;margin-bottom:16px}
+.req-drop{position:relative;display:grid;place-items:center;gap:8px;min-height:120px;padding:18px;border:2px dashed var(--trl-cinza-300);border-radius:10px;text-align:center;color:var(--trl-fg-muted);cursor:pointer}
+.req-drop.is-over,.req-drop:hover,.req-drop:focus-within{border-color:var(--trl-vermelho);background:var(--trl-vermelho-15)}
+.req-drop strong{color:var(--trl-texto)}
+.req-drop input{position:absolute;width:1px;height:1px;opacity:0}
+.req-summary{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.req-badge{display:inline-flex;align-items:center;border-radius:999px;padding:3px 10px;font-size:.72rem;font-weight:800;white-space:nowrap}
+.req-badge.is-error{background:var(--trl-vermelho);color:var(--trl-branco)}
+.req-badge.is-warn{background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.req-badge.is-ok{background:var(--trl-status-ok-15);color:var(--trl-status-ok)}
+.req-day{margin-bottom:18px}
+.req-day h3{margin:0 0 8px;font-size:.9rem;color:var(--trl-fg-muted)}
+.req-card{background:var(--trl-branco);border:1px solid var(--trl-border);border-radius:10px;margin-bottom:10px}
+.req-head{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none}
+.req-head::-webkit-details-marker{display:none}
+.req-head:focus-visible{outline:2px solid var(--trl-vermelho);outline-offset:-2px}
+.req-title{display:grid;gap:2px;min-width:0}
+.req-title strong{overflow-wrap:anywhere}
+.req-title small{color:var(--trl-fg-muted);overflow-wrap:anywhere}
+.req-body{padding:0 14px 14px;display:grid;gap:10px;font-size:.86rem}
+.req-sent{margin:0;color:var(--trl-fg-muted);font-size:.8rem}
+.req-items{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.req-item{display:grid;grid-template-columns:20px minmax(0,1fr);gap:6px;align-items:start;line-height:1.4}
+.req-item small{color:var(--trl-fg-muted);white-space:nowrap}
+.req-mark{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-size:.65rem;font-weight:900}
+.req-item.is-erro .req-mark{background:var(--trl-vermelho);color:var(--trl-branco)}
+.req-item.is-confirmar .req-mark{background:var(--trl-status-atencao-15);color:var(--trl-status-atencao)}
+.req-item.is-ok .req-mark{background:var(--trl-status-ok-15);color:var(--trl-status-ok)}
+.req-item.is-erro{font-weight:600}
+.req-allok{margin:0;color:var(--trl-status-ok);font-weight:700}
+.req-ok summary,.req-ternos summary,.req-history summary{cursor:pointer;color:var(--trl-fg-muted);font-size:.8rem;font-weight:700}
+.req-ok .req-items{margin-top:8px}
+.req-note{margin:0;padding:8px 10px;border-radius:7px;background:var(--trl-bg-alt);font-size:.82rem}
+.req-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.req-inline{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px}
+.req-inline label{display:grid;gap:4px;font-size:.78rem;font-weight:700;min-width:min(260px,100%)}
+.req-inline input,.req-inline textarea{border:1px solid var(--trl-cinza-300);border-radius:6px;padding:8px;font:inherit;font-size:.86rem;width:100%;box-sizing:border-box}
+.req-approve>summary{list-style:none;display:inline-flex;align-items:center}
+.req-approve>summary::-webkit-details-marker{display:none}
+.req-approve[open]>summary{border-color:var(--trl-texto)}
+.req-history ul{margin:6px 0 0;padding-left:18px;font-size:.8rem}
+.req-ternos table{margin-top:8px;font-size:.8rem}
+.req-holidays-box{margin-top:18px;background:var(--trl-branco);border:1px solid var(--trl-border);border-radius:10px;padding:14px 16px}
+.req-holidays-box>summary{cursor:pointer;font-weight:800}
+.req-holidays{list-style:none;margin:8px 0 12px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 16px;font-size:.82rem}
+.req-holiday-form textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.85rem;border:1px solid var(--trl-cinza-300);border-radius:6px;padding:8px}
+@media(max-width:720px){.req-head{align-items:flex-start;flex-direction:column;gap:6px}}

@@ -331,7 +331,7 @@ function activateNavigation(){
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-team]").forEach(button=>{const active=button.dataset.team===state.teamView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="acessos"?"acessos":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="acessos"?"acessos":state.menu==="requisicoes"?"requisicoes":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
@@ -343,6 +343,7 @@ function activateNavigation(){
   window.activitiesPanel?.show(state.menu==="atividades"?state.activityView:null);
   window.teamPanel?.show(state.menu==="equipe"?state.teamView:null);
   window.accessPanel?.show(state.menu==="acessos");
+  window.requisitionsPanel?.show(state.menu==="requisicoes");
   renderDataSeal();
   syncUrl();
 }
@@ -586,6 +587,7 @@ function registerWebMCP(){
 const urlState={applying:false,pending:null};
 function currentView(){
   if(state.menu==="acessos")return "acessos";
+  if(state.menu==="requisicoes")return "requisicoes";
   if(state.menu==="producao")return "producao";
   if(state.menu==="atividades")return state.activityView==="turno"?"atividades":state.activityView;
   if(state.menu==="equipe")return state.teamView==="resumo"?"equipe":`equipe-${state.teamView}`;
@@ -614,6 +616,7 @@ function applyUrl(search){
   urlState.applying=true;
   try{
     if(target.view==="acessos")state.menu="acessos";
+    else if(target.view==="requisicoes")state.menu="requisicoes";
     else if(target.view==="producao")state.menu="producao";
     else if(["atividades","acompanhamento","configuracao"].includes(target.view)){state.menu="atividades";state.activityView=target.view==="atividades"?"turno":target.view}
     else if(target.view==="equipe"||target.view.startsWith("equipe-")){state.menu="equipe";state.teamView=target.view==="equipe"?"resumo":target.view.slice(7)}
@@ -720,8 +723,8 @@ function renderDataSeal(){
   const seal=$("updatedAt");if(!seal)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
   const wrap=$("dataSealWrap");
-  $("refreshData").hidden=state.menu==="acessos"||(state.menu!=="equipe"&&!state.access.refresh);
-  if(state.menu==="producao"||state.menu==="atividades"||state.menu==="acessos"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
+  $("refreshData").hidden=state.menu==="acessos"||state.menu==="requisicoes"||(state.menu!=="equipe"&&!state.access.refresh);
+  if(state.menu==="producao"||state.menu==="atividades"||state.menu==="acessos"||state.menu==="requisicoes"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
   wrap.hidden=false;
   renderChanges();
   if(state.menu==="equipe"){
@@ -791,7 +794,7 @@ function showNoAccess(){
 /** Abre uma tela pelo nome da aba (alertas e atalhos). */
 window.openView=view=>{if(!canView(view))return;applyUrl(`?aba=${view}`);syncUrl()};
 /* Telas de cada menu e o acesso que libera cada uma (o servidor confere de novo em cada pedido). */
-const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin"};
+const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin",requisicoes:"requisicoes"};
 const canView=view=>{if(view.startsWith("equipe"))return Boolean(state.access.equipe);const need=[].concat(VIEW_ACCESS[view]||[]);return need.some(key=>state.access[key])};
 /** Esconde menus, grupos e subabas sem acesso. */
 function applyAccess(){
@@ -809,6 +812,7 @@ function allowedView(){
   if(!first){state.menu=null;return}
   const target=TpsUrlState.parse(`?aba=${first}`).view;
   if(target==="acessos")state.menu="acessos";
+  else if(target==="requisicoes")state.menu="requisicoes";
   else if(target==="producao")state.menu="producao";
   else if(["atividades","acompanhamento","configuracao"].includes(target)){state.menu="atividades";state.activityView=target==="atividades"?"turno":target}
   else if(target.startsWith("equipe")){state.menu="equipe";state.teamView="resumo"}

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="team.css">
   <link rel="stylesheet" href="auth.css">
   <link rel="stylesheet" href="alerts.css">
+  <link rel="stylesheet" href="requisitions.css">
 </head>
 <body class="auth-locked">
   <div class="app-shell">
@@ -30,6 +31,7 @@
             <button type="button" class="side-link" data-menu="lineup"><span aria-hidden="true">▤</span> Lineup</button>
             <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
             <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
+            <button type="button" class="side-link" data-menu="requisicoes"><span aria-hidden="true">▤</span> Requisições</button>
           </div>
         </div>
         <div class="side-group" data-group="rh">
@@ -258,6 +260,19 @@
         <p class="base-status act-status-line" id="activitiesSettingsStatus" role="status" aria-live="polite"></p>
         <div id="activitiesSettings"></div>
       </section>
+      <section id="requisicoes" class="tab-panel activities-panel">
+        <div class="base-heading"><div><p class="eyebrow">ESTIVA · OGMO</p><h2>Requisições de estiva</h2><p>Envie o PDF impresso pelo sistema do OGMO. O painel confere pela instrução de trabalho.</p></div></div>
+        <div id="requisitionsPanel">
+          <div class="req-upload">
+            <label class="req-drop" id="requisitionsDrop"><input type="file" id="requisitionsFile" accept="application/pdf,.pdf" multiple><strong>Arraste o PDF da requisição aqui ou clique para escolher</strong><span>Um arquivo por requisição, com todos os ternos. Pode enviar vários de uma vez.</span></label>
+          </div>
+          <p class="base-status act-status-line" id="requisitionsStatus" role="status" aria-live="polite"></p>
+          <form class="base-filters" id="requisitionsFilters" aria-label="Filtros das requisições"><label>De<input id="requisitionsFrom" type="date" required></label><label>Até<input id="requisitionsTo" type="date" required></label><label>Resultado<select id="requisitionsResult"><option value="">Todos</option><option value="reprovado">Reprovadas</option><option value="confirmar">Para confirmar</option><option value="aprovado">Aprovadas</option></select></label><button type="submit" class="act-button is-primary">Filtrar</button></form>
+          <div class="req-summary" id="requisitionsSummary"></div>
+          <div id="requisitionsList"></div>
+          <details class="req-holidays-box" id="requisitionsHolidays"></details>
+        </div>
+      </section>
       <section id="acessos" class="tab-panel activities-panel">
         <div class="base-heading"><div><p class="eyebrow">ADMINISTRAÇÃO</p><h2>Acessos</h2><p>Quem entra no painel e o que cada pessoa pode ver e fazer.</p></div></div>
         <p class="base-status act-status-line" id="accessStatus" role="status" aria-live="polite"></p>
@@ -288,6 +303,7 @@
   <script src="production.js"></script>
   <script src="discharge.js"></script>
   <script src="access-admin.js"></script>
+  <script src="requisitions.js"></script>
   <script src="alerts.js"></script>
   <script src="app.js"></script>
   <script src="export.js"></script>

@@ -17,7 +17,10 @@ export const ACTIONS = {
   refreshData: "dados:atualizar",
   manageAccess: "acessos:gerenciar",
   ownAccount: "conta:propria",
-  readAlerts: "alertas:ver"
+  readAlerts: "alertas:ver",
+  readRequisitions: "requisicoes:ver",
+  sendRequisitions: "requisicoes:enviar",
+  configureRequisitions: "requisicoes:configurar"
 };
 
 /** Acessos que liberam cada ação (basta ter um). Lista vazia = qualquer pessoa logada. */
@@ -35,7 +38,11 @@ export const REQUIRED = {
   [ACTIONS.manageAccess]: ["admin"],
   [ACTIONS.ownAccount]: [],
   // Cada pessoa recebe só os alertas das telas dela (filtro em alerts.mjs).
-  [ACTIONS.readAlerts]: []
+  [ACTIONS.readAlerts]: [],
+  [ACTIONS.readRequisitions]: ["requisicoes"],
+  [ACTIONS.sendRequisitions]: ["requisicoes"],
+  // Feriados mudam a capatazia esperada de todos: só quem configura as Atividades ou administra.
+  [ACTIONS.configureRequisitions]: ["atividades-config", "admin"]
 };
 
 export function can(user, action) {

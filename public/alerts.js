@@ -58,8 +58,8 @@
 
   async function start() {
     const { user } = await window.TpsAuth.ready;
-    // Só há alertas de Indicadores, Lineup e Atividades: sem nenhuma dessas telas, o sino nem aparece.
-    if (!["indicadores", "lineup", "atividades", "atividades-config"].some(key => user.permissions.includes(key))) return;
+    // Só há alertas de Indicadores, Lineup, Atividades e Requisições: sem nenhuma dessas telas, o sino nem aparece.
+    if (!["indicadores", "lineup", "atividades", "atividades-config", "requisicoes"].some(key => user.permissions.includes(key))) return;
     $("alertsWrap").hidden = false;
     $("alertsButton").addEventListener("click", () => toggle($("alertsPanel").hidden));
     $("alertsClose").addEventListener("click", () => { toggle(false); $("alertsButton").focus(); });

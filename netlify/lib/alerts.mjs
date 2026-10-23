@@ -81,6 +81,21 @@ export async function activityAlerts(store, now = new Date()) {
   return alerts;
 }
 
+/** Requisições de estiva de ontem a amanhã ainda reprovadas ou com pontos a confirmar (sem aprovação justificada). */
+export async function requisitionAlerts(store, now = new Date()) {
+  if (!store) return [];
+  const today = brToday(now);
+  const add = (iso, days) => new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10) + days)).toISOString().slice(0, 10);
+  const rows = (await store.list("requisitions", { from: `${add(today, -1)}_`, to: `${add(today, 1)}_~` })).filter(row => !row.override);
+  const label = row => `${row.number} (${row.period.replace("-", "x")} de ${brDay(row.date)})`;
+  const alerts = [];
+  const rejected = rows.filter(row => row.check?.result === "reprovado");
+  const pending = rows.filter(row => row.check?.result === "confirmar");
+  if (rejected.length) alerts.push({ id: `requisicoes-reprovadas-${rejected.map(row => row.id).join(",")}`, level: "critical", area: "Requisições", view: "requisicoes", title: `${rejected.length} ${rejected.length === 1 ? "requisição de estiva reprovada" : "requisições de estiva reprovadas"}`, detail: `${rejected.slice(0, 4).map(label).join("; ")}. Corrija no OGMO antes do horário-limite ou aprove com justificativa.` });
+  if (pending.length) alerts.push({ id: `requisicoes-confirmar-${pending.map(row => row.id).join(",")}`, level: "warning", area: "Requisições", view: "requisicoes", title: `${pending.length} ${pending.length === 1 ? "requisição de estiva" : "requisições de estiva"} com pontos a confirmar`, detail: `${pending.slice(0, 4).map(label).join("; ")}.` });
+  return alerts;
+}
+
 const ORDER = { critical: 0, warning: 1, info: 2 };
 
 /**
@@ -93,6 +108,7 @@ export async function alertsFor(user, { now = new Date(), readOperations, readDi
   if (has("indicadores") || has("lineup")) jobs.push(readOperations().then(data => operationsAlerts(data, now)));
   if (has("indicadores")) jobs.push(readDischarge().then(data => dischargeAlerts(data, now)));
   if (has("atividades") || has("atividades-config")) jobs.push(activityAlerts(store, now));
+  if (has("requisicoes")) jobs.push(requisitionAlerts(store, now));
   const results = await Promise.allSettled(jobs);
   results.filter(result => result.status === "rejected").forEach(result => console.error("Falha ao calcular alertas:", result.reason));
   return results.flatMap(result => result.status === "fulfilled" ? result.value : []).sort((a, b) => ORDER[a.level] - ORDER[b.level]);

@@ -27,13 +27,14 @@ export const PERMISSIONS = {
   lineup: "Lineup",
   producao: "Produção",
   atividades: "Atividades (registrar no turno)",
+  requisicoes: "Requisições de estiva",
   "atividades-config": "Configuração das Atividades",
   equipe: "Equipe (RH)",
   admin: "Administrador (gerencia os acessos)"
 };
 export const PRESETS = {
-  Assistente: ["indicadores", "lineup", "producao", "atividades"],
-  "Gestão": ["indicadores", "lineup", "producao", "atividades", "atividades-config", "equipe"]
+  Assistente: ["indicadores", "lineup", "producao", "atividades", "requisicoes"],
+  "Gestão": ["indicadores", "lineup", "producao", "atividades", "requisicoes", "atividades-config", "equipe"]
 };
 
 export class AuthError extends Error {
@@ -169,10 +170,24 @@ const publicUser = (uid, profile) => ({
   assistantId: profile.assistantId || null, mustChangePassword: Boolean(profile.mustChangePassword)
 });
 
+/**
+ * Acessos novos entram nos perfis antigos uma vez só (versão do perfil):
+ * v2 = "Requisições de estiva" liberado para quem já tinha Atividades.
+ */
+export const PROFILE_VERSION = 2;
+export function upgradeProfile(profile) {
+  if (!profile || (profile.profileVersion || 1) >= PROFILE_VERSION) return null;
+  const permissions = [...(profile.permissions || [])];
+  if (permissions.includes("atividades") && !permissions.includes("requisicoes")) permissions.push("requisicoes");
+  return { ...profile, permissions, profileVersion: PROFILE_VERSION };
+}
+
 async function readProfile(store, uid, { fresh = false } = {}) {
   const cached = profileCache.get(uid);
   if (!fresh && cached && Date.now() - cached.at < PROFILE_TTL_MS) return cached.profile;
-  const profile = await store.get(USERS, uid);
+  let profile = await store.get(USERS, uid);
+  const upgraded = upgradeProfile(profile);
+  if (upgraded) { await store.set(USERS, uid, upgraded); profile = upgraded; }
   profileCache.set(uid, { profile, at: Date.now() });
   return profile;
 }
@@ -204,7 +219,7 @@ export async function sessionUser(request) {
   catch { return { status: 401, error: "Sua sessão terminou. Entre de novo.", code: "sessao-expirada" }; }
   let profile = await readProfile(store, session.uid);
   if (!profile && adminEmails().includes(session.email)) {
-    profile = { email: session.email, name: session.email.split("@")[0], permissions: Object.keys(PERMISSIONS), mustChangePassword: false, disabled: false, createdAt: new Date().toISOString(), createdBy: { name: "Administrador inicial" } };
+    profile = { email: session.email, name: session.email.split("@")[0], permissions: Object.keys(PERMISSIONS), mustChangePassword: false, disabled: false, profileVersion: PROFILE_VERSION, createdAt: new Date().toISOString(), createdBy: { name: "Administrador inicial" } };
     await writeProfile(store, session.uid, profile);
     await log(store, { name: "Sistema" }, "perfil de administrador inicial criado", session.email);
   }
@@ -259,7 +274,12 @@ export async function changePassword(user, input, { secure = true } = {}) {
 export async function listUsers() {
   const { store } = context();
   const since = new Date(Date.now() - LOGIN_LOG_DAYS * 86400000).toISOString();
-  const [users, history, logins] = await Promise.all([store.list(USERS), store.list(ACCESS_LOG), store.list(LOGIN_LOG, { from: since })]);
+  const [stored, history, logins] = await Promise.all([store.list(USERS), store.list(ACCESS_LOG), store.list(LOGIN_LOG, { from: since })]);
+  const users = await Promise.all(stored.map(async ({ id, ...profile }) => {
+    const upgraded = upgradeProfile(profile);
+    if (upgraded) await store.set(USERS, id, upgraded);
+    return { id, ...(upgraded || profile) };
+  }));
   return {
     users: users.map(({ id, ...profile }) => ({ ...publicUser(id, { ...profile, permissions: normalizePermissions(profile.permissions) }), disabled: Boolean(profile.disabled), createdAt: profile.createdAt, lastLoginAt: profile.lastLoginAt || null, bootstrap: adminEmails().includes(profile.email) }))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
@@ -285,7 +305,7 @@ export async function createUser(admin, input) {
   const now = new Date().toISOString();
   await writeProfile(store, uid, {
     email, name, permissions, assistantId: input?.assistantId ? String(input.assistantId) : null,
-    mustChangePassword: true, disabled: false, createdAt: now, createdBy: { id: admin.uid, name: admin.name }
+    mustChangePassword: true, disabled: false, profileVersion: PROFILE_VERSION, createdAt: now, createdBy: { id: admin.uid, name: admin.name }
   });
   await log(store, { id: admin.uid, name: admin.name }, "criou o acesso", email, `acessos: ${describe(permissions)}`);
   return { uid };
