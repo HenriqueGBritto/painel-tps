@@ -23,6 +23,7 @@
 .req-search.is-busy{border-color:var(--trl-status-atencao-40);background:var(--trl-status-atencao-15)}
 .req-search.is-ok{border-color:var(--trl-status-ok);background:var(--trl-status-ok-15)}
 .req-search.is-error{border-color:var(--trl-vermelho);background:var(--trl-vermelho-15);color:var(--trl-vermelho);font-weight:700}
+.req-da9-missing{margin:0;padding:8px 12px;border-radius:8px;border:1px solid var(--trl-status-atencao-40);background:var(--trl-status-atencao-15);color:var(--trl-cinza-800);font-size:.84rem}
 #requisitionsSearch:disabled{opacity:.55;cursor:progress}
 
 .req-table{background:var(--trl-branco);border:1px solid var(--trl-border);border-radius:10px;overflow:hidden}

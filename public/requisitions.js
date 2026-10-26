@@ -81,6 +81,14 @@
     </details>`;
   }
 
+  /** Por que o DA9 (trabalhadores escalados) ainda não está no painel. */
+  function da9Missing(row) {
+    if (row.cancelled) return "Requisição cancelada no OGMO: não tem DA9.";
+    if (row.ogmo?.scaled) return "DA9 ainda não disponível. A requisição já foi escalada; o robô baixa o DA9 na próxima rodada (de hora em hora) ou em uma busca no OGMO deste dia.";
+    if (row.source !== "ogmo") return "DA9 ainda não disponível. Ele é baixado pelo robô do OGMO depois que o OGMO escala a requisição.";
+    return "DA9 ainda não disponível. O OGMO só gera o DA9 depois de escalar os trabalhadores; o robô baixa sozinho na rodada seguinte à escala.";
+  }
+
   function rowHtml(row) {
     const result = RESULT[row.status];
     const v = row.vessel;
@@ -89,13 +97,14 @@
     const override = row.override ? `<p class="req-note">Aprovada com justificativa por <strong>${escapeHtml(row.override.by?.name)}</strong> em ${when(row.override.at)}: ${escapeHtml(row.override.reason)}</p>` : "";
     const activity = row.activity?.done ? `<p class="req-note">Atividade do turno marcada como feita (${escapeHtml(S.label(row.activity.shiftId))}), com o PDF anexado.</p>` : "";
     const canApprove = row.status === "reprovado" || row.status === "confirmar";
-    const origin = row.source === "ogmo" ? `<p class="req-note">Lida automaticamente no OGMO${row.ogmo?.scaled ? ` · já escalada${row.da9 ? "" : " (DA9 ainda não baixado)"}` : ""}${row.cancelled ? ` · cancelada no OGMO em ${when(row.cancelledAt)}` : ""}.</p>` : row.cancelled ? `<p class="req-note">Cancelada no OGMO em ${when(row.cancelledAt)}.</p>` : "";
+    const origin = row.source === "ogmo" ? `<p class="req-note">Lida automaticamente no OGMO${row.ogmo?.scaled ? " · já escalada" : ""}${row.cancelled ? ` · cancelada no OGMO em ${when(row.cancelledAt)}` : ""}.</p>` : row.cancelled ? `<p class="req-note">Cancelada no OGMO em ${when(row.cancelledAt)}.</p>` : "";
     return `<details class="req-row is-${row.status}" data-toggle="${escapeHtml(row.id)}"${state.open.has(row.id) ? " open" : ""}>
       <summary class="req-line"><span class="req-badge ${result.css}">${escapeHtml(result.label)}</span><span class="req-period">${period(row.period)}</span><span class="req-ship">${name}</span><span class="req-number">${escapeHtml(row.number.replace(/-1$/, ""))}</span><span class="req-chevron" aria-hidden="true"></span></summary>
       <div class="req-open">
         ${list.length ? `<ul class="req-problems">${list.map(item => `<li class="is-${item.level}">${escapeHtml(item.text)}</li>`).join("")}</ul>` : `<p class="req-allok">Tudo conforme a instrução de trabalho.</p>`}
         ${override}${activity}${origin}
-        <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${row.da9 ? `<a href="/api/requisicoes/da9?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir DA9</a>` : ""}${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
+        <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${row.da9 ? `<a href="/api/requisicoes/da9?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir DA9</a>` : `<button type="button" class="act-link" data-action="da9-missing" data-id="${escapeHtml(row.id)}">Abrir DA9</button>`}${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
+        ${row.da9 ? "" : `<p class="req-da9-missing" data-da9-note="${escapeHtml(row.id)}" role="status" hidden>${da9Missing(row)}</p>`}
         ${canApprove ? `<form class="req-inline" data-form="aprovar" data-id="${escapeHtml(row.id)}" hidden><label>Motivo da aprovação<textarea name="reason" rows="2" maxlength="1000" required placeholder="CMG pedido pelo especialista para esta operação."></textarea></label><button type="submit" class="act-button is-primary">Aprovar</button></form>` : ""}
         ${detailsHtml(row)}
       </div>
@@ -250,6 +259,7 @@
     if (!button) return;
     if (button.dataset.action === "edit-holidays") { state.editingHolidays = true; renderHolidays(); $("requisitionsHolidays").open = true; $("requisitionsHolidays").querySelector("textarea")?.focus(); }
     if (button.dataset.action === "cancel-holidays") { state.editingHolidays = false; renderHolidays(); }
+    if (button.dataset.action === "da9-missing") { const note = $("requisitionsList").querySelector(`[data-da9-note="${CSS.escape(button.dataset.id)}"]`); if (note) note.hidden = false; }
     if (button.dataset.action === "approve") { const form = $("requisitionsList").querySelector(`form[data-form="aprovar"][data-id="${CSS.escape(button.dataset.id)}"]`); if (form) { form.hidden = false; form.querySelector("textarea").focus(); } }
   }
 
