@@ -7,7 +7,9 @@
  */
 export const ALLOWED_ACTIONS = new Set(["BTENTRAR", "IWMENU1", "DBLPORTO", "DBLPESQPERIODO", "IWBUSCAR", "IWDBGRID1", "IWDBGRID2", "IWIMAGE5", "IWRELATORIO"]);
 /** Botões que podem gerar o PDF ("Visualiza"/impressora). No diagnóstico de 26/10/2026 foi o IWRELATORIO; o robô confere o número no PDF. */
-export const PDF_BUTTONS = ["IWRELATORIO", "IWIMAGE5"];
+export const PDF_BUTTONS = ["IWRELATORIO"];
+/** Botão verde "DA9": relatório dos trabalhadores escalados (só existe depois que o OGMO escala a requisição). */
+export const DA9_BUTTON = "IWIMAGE5";
 export const MENU_REGISTRO = ["IWMENU1", "IWMENU1_submenu5"];
 
 /** Ação de um envio de formulário do IntraWeb (corpo application/x-www-form-urlencoded). */
@@ -22,6 +24,18 @@ export function datesAround(now = new Date()) {
   const shift = days => new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10) + days)).toISOString().slice(0, 10);
   return [shift(-1), today, shift(1)];
 }
+/** Busca sob demanda: "AAAA-MM-DD:AAAA-MM-DD" → os dias do período (no máximo max). */
+export function datesBetween(range, max = 8) {
+  const [from, to = from] = String(range || "").split(":");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return [];
+  const dates = [];
+  for (let day = new Date(`${from}T00:00:00Z`); dates.length < max; day.setUTCDate(day.getUTCDate() + 1)) {
+    const iso = day.toISOString().slice(0, 10);
+    if (iso > to) break;
+    dates.push(iso);
+  }
+  return dates;
+}
 export const brDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 /** Linhas da grade de requisições (texto das células e o parâmetro do clique de cada linha). */
@@ -32,5 +46,7 @@ export function parseGrid(rows, date) {
   }));
 }
 
-/** O PDF é da requisição selecionada? (texto do "Visualiza": "Requisição: 25053301-1"). */
-export const pdfMatches = (text, number) => new RegExp(`Requisi\\S*\\s*:?\\s*${number.replace(/[-]/g, "\\-")}\\b`).test(text || "");
+/** O PDF é da requisição selecionada? ("Visualiza": "Requisição: 25053301-1"; DA9: "REQUISIÇÃO: 25053313-1"). */
+export const pdfMatches = (text, number) => new RegExp(`Requisi\\S*\\s*:?\\s*${number.replace(/[-]/g, "\\-")}\\b`, "i").test(text || "");
+/** É o DA9 e não o "Visualiza"? (o DA9 traz a lista de escalados com "Matrícula Nome"). */
+export const isDa9 = text => /Matr[ií]cula\s+Nome/i.test(text || "");

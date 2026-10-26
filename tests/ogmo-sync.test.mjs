@@ -5,7 +5,8 @@ import { parseVesselName } from "../netlify/lib/requisition-pdf.mjs";
 import { checkRequisition } from "../netlify/lib/requisition-rules.mjs";
 import * as R from "../netlify/lib/requisitions.mjs";
 import * as O from "../netlify/lib/ogmo-sync.mjs";
-import { isAllowed, parseGrid, pdfMatches, datesAround } from "../robot/ogmo-lib.mjs";
+import { memoryAttachmentsStore } from "../netlify/lib/attachments-store.mjs";
+import { isAllowed, parseGrid, pdfMatches, datesAround, datesBetween, isDa9 } from "../robot/ogmo-lib.mjs";
 
 const at = text => new Date(`${text}-03:00`);
 const terno = (equipe, observation, fns) => ({ equipe, generalNote: "É OBRIGATÓRIO O USO DE EPI.", fainas: [{ code: "3.8.4", text: "" }], observation, functions: Object.entries(fns).map(([code, vagas]) => ({ code, name: code, vagas })) });
@@ -69,7 +70,7 @@ test("rodada do robô: PDF conferido, cancelada vinda do OGMO reconfere a CCT CA
   assert.equal((await store.get(R.COLLECTION, "2026-10-21_907-1")).check.result, "reprovado", "sem a balsa, a CCT CAPATAZIA deve ser cancelada");
   const list = await R.list(store, { from: "2026-10-21", to: "2026-10-21" });
   assert.equal(list.find(row => row.number === "25053242-1").status, "cancelada");
-  assert.deepEqual(await O.known(store, ["2026-10-21"]), { "25053242-1": { date: "2026-10-21", scaled: false, cancelled: true }, "907-1": { date: "2026-10-21", scaled: false, cancelled: false } });
+  assert.deepEqual(await O.known(store, ["2026-10-21"]), { "25053242-1": { date: "2026-10-21", scaled: false, cancelled: true, da9: false }, "907-1": { date: "2026-10-21", scaled: false, cancelled: false, da9: false } });
   await O.receiveError(store, { message: "Não entrou no OGMO." }, { now: at("2026-10-21T06:00:00") });
   assert.deepEqual([(await O.syncStatus(store)).ok, (await O.syncStatus(store)).error, (await O.syncStatus(store)).active], [false, "Não entrou no OGMO.", 2]);
 });
@@ -103,10 +104,10 @@ test("largada pelo Netlify: de hora em hora e 1 hora antes de cada limite; erro 
   assert.equal(shouldRun(new Date("2026-10-26T11:45:00Z")), true, "08:45 em Brasília: 1 hora antes do limite do 13x19");
   assert.equal(shouldRun(new Date("2026-10-26T13:45:00Z")), false, "10:45 em Brasília: sem limite perto");
   const calls = [];
-  await dispatch({ token: "t", fetcher: async (url, options) => { calls.push([url, JSON.parse(options.body)]); return new Response(null, { status: 204 }); } });
+  await dispatch({ modo: "normal" }, { token: "t", fetcher: async (url, options) => { calls.push([url, JSON.parse(options.body)]); return new Response(null, { status: 204 }); } });
   assert.deepEqual(calls, [["https://api.github.com/repos/HenriqueGBritto/painel-tps/actions/workflows/ogmo.yml/dispatches", { ref: "main", inputs: { modo: "normal" } }]]);
-  await assert.rejects(dispatch({ token: "t", fetcher: async () => new Response("Bad credentials", { status: 401 }) }), /token inválido, vencido ou sem permissão/);
-  await assert.rejects(dispatch({ token: "" }), /GITHUB_DISPATCH_TOKEN/);
+  await assert.rejects(dispatch({ modo: "normal" }, { token: "t", fetcher: async () => new Response("Bad credentials", { status: 401 }) }), /token inválido, vencido ou sem permissão/);
+  await assert.rejects(dispatch({ modo: "normal" }, { token: "" }), /GITHUB_DISPATCH_TOKEN/);
 });
 
 test("vigia (VPL – Vigia de Portaló): não é nossa; aparece só para informação e não entra no que falta", () => {
@@ -127,4 +128,60 @@ test("rodada reconfere com as regras atuais as requisições já guardadas (incl
   await store.set(R.COLLECTION, "2026-10-26_25053313-1", { id: "2026-10-26_25053313-1", ...vigia, check: { result: "reprovado", operation: { key: null, title: "" }, items: [] }, ogmo: { scaled: true } });
   await O.receiveList(store, { dates: ["2026-10-26"], rows: [{ date: "2026-10-26", number: "25053313-1", vessel: "BBC KHERSON", period: "07-13", local: "ARMAZEM 11", cancelled: false, scaled: true }] }, { now: at("2026-10-26T10:00:00"), lineup: null });
   assert.equal((await store.get(R.COLLECTION, "2026-10-26_25053313-1")).check.result, "informativo");
+});
+
+test("busca sob demanda: valida o período, aciona o robô com os dias e só deixa uma busca por vez", async () => {
+  const store = memoryStore();
+  const actor = { id: "u1", name: "Henrique" };
+  const now = at("2026-10-26T15:00:00");
+  const calls = [];
+  const dispatcher = async inputs => { calls.push(inputs); };
+  await assert.rejects(O.requestSearch(store, { de: "2026-10-27", ate: "2026-10-28" }, actor, { now, dispatcher }), /até amanhã/);
+  await assert.rejects(O.requestSearch(store, { de: "2026-10-10", ate: "2026-10-20" }, actor, { now, dispatcher }), /até 8 dias/);
+  await assert.rejects(O.requestSearch(store, { de: "2026-10-26", ate: "2026-10-25" }, actor, { now, dispatcher }), /válido/);
+  assert.equal(calls.length, 0);
+  const search = await O.requestSearch(store, { de: "2026-10-26" }, actor, { now, dispatcher });
+  assert.deepEqual(calls, [{ modo: "normal", datas: "2026-10-26:2026-10-26", pedido: search.id }], "um dia só: de = até");
+  assert.equal((await O.currentSearch(store, { now })).status, "enviada");
+  await assert.rejects(O.requestSearch(store, { de: "2026-10-25" }, actor, { now, dispatcher }), /em andamento/);
+  // Robô parado: depois do tempo limite a busca conta como falha e libera outra.
+  const later = at("2026-10-26T16:00:00");
+  assert.equal((await O.searchStatus(store, search.id, { now: later })).status, "falhou");
+  await assert.rejects(O.requestSearch(store, { de: "2026-10-25" }, actor, { now: later, dispatcher: async () => { throw new Error("GitHub fora"); } }), /GitHub fora/);
+  assert.equal((await O.currentSearch(store, { now: later })).status, "falhou");
+});
+
+test("busca sob demanda: o robô manda dia a dia, o andamento soma e não mexe na rodada automática", async () => {
+  const store = memoryStore();
+  const now = at("2026-10-26T15:00:00");
+  const search = await O.requestSearch(store, { de: "2026-10-25", ate: "2026-10-26" }, { id: "u1", name: "H" }, { now, dispatcher: async () => {} });
+  const day = (date, number, cancelled = false) => ({ date, number, vessel: "ASALET", period: "07-13", local: "ARMAZEM 10", cancelled, scaled: true });
+  const first = await O.receiveList(store, { dates: ["2026-10-25"], rows: [day("2026-10-25", "1-1"), day("2026-10-25", "2-1", true)], pedido: search.id, dia: 1, dias: 2 }, { now, lineup: null });
+  assert.deepEqual([first.status, first.days, first.active, first.cancelled], ["lendo", 1, 1, 1]);
+  const done = await O.receiveList(store, { dates: ["2026-10-26"], rows: [day("2026-10-26", "3-1")], pedido: search.id, dia: 2, dias: 2 }, { now, lineup: null });
+  assert.deepEqual([done.status, done.days, done.active, done.cancelled, done.notDownloaded], ["concluida", 2, 2, 1, 2]);
+  assert.equal(await O.syncStatus(store), null, "a busca não substitui o resumo da rodada automática");
+  await O.receiveError(store, { message: "Falhou no dia 2.", pedido: search.id }, { now });
+  assert.deepEqual([(await O.searchStatus(store, search.id, { now })).status, await O.syncStatus(store)], ["falhou", null]);
+});
+
+test("DA9: guardado só para requisição recebida, em PDF, e servido pela aba", async () => {
+  const store = memoryStore(), files = memoryAttachmentsStore();
+  const pdf = new TextEncoder().encode("%PDF-1.2 DA9 de teste");
+  await assert.rejects(O.receiveDa9(store, files, { bytes: pdf, number: "25053313-1", date: "2026-10-26" }), /ainda não foi recebida/);
+  await store.set(R.COLLECTION, "2026-10-26_25053313-1", { id: "2026-10-26_25053313-1", number: "25053313-1", date: "2026-10-26", period: "07-13", ogmo: { scaled: true } });
+  await assert.rejects(O.receiveDa9(store, files, { bytes: new TextEncoder().encode("<html>"), number: "25053313-1", date: "2026-10-26" }), /PDF/);
+  await assert.rejects(O.readDa9(store, files, "2026-10-26_25053313-1"), /só existe depois que o OGMO escala/);
+  await O.receiveDa9(store, files, { bytes: pdf, number: "25053313-1", date: "2026-10-26" });
+  const file = await O.readDa9(store, files, "2026-10-26_25053313-1");
+  assert.deepEqual([new TextDecoder().decode(file.data), file.name], ["%PDF-1.2 DA9 de teste", "DA9 25053313-1.pdf"]);
+  assert.equal((await O.known(store, ["2026-10-26"]))["25053313-1"].da9, true, "o robô não baixa o DA9 de novo");
+});
+
+test("robô: dias da busca, DA9 reconhecido pelo texto e número em maiúsculas", () => {
+  assert.deepEqual(datesBetween("2026-10-30:2026-11-02"), ["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"]);
+  assert.deepEqual(datesBetween("2026-10-26"), ["2026-10-26"]);
+  assert.deepEqual([datesBetween("2026-10-27:2026-10-26"), datesBetween("lixo"), datesBetween("2026-10-01:2026-10-31").length], [[], [], 8]);
+  const da9 = "DATA OPERAÇÃO: 26/10/2026 NAVIO: BBC KHERSON REQUISIÇÃO: 25053313-1 PERÍODO: 07-13 Matrícula Nome R/C Seção";
+  assert.deepEqual([pdfMatches(da9, "25053313-1"), isDa9(da9), isDa9("Requisição: 25053313-1 Navio: BBC KHERSON")], [true, true, false]);
 });

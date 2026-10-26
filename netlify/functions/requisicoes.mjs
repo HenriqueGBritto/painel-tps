@@ -4,8 +4,11 @@
    GET  /api/requisicoes/pdf?id=      PDF enviado (versao= para um envio anterior)
    POST /api/requisicoes/aprovar      { id, reason } aprovar com justificativa
    POST /api/requisicoes/feriados     { holidays: [{ date, name }] }
+   GET  /api/requisicoes/da9?id=      DA9 (trabalhadores escalados) baixado pelo robô
+   POST /api/requisicoes/buscar       { de, ate } aciona o robô para ler esses dias no OGMO; GET /buscar?id= acompanha
    Robô do OGMO (robot/ogmo.mjs), com o token OGMO_SYNC_TOKEN em vez de login:
    GET  /api/requisicoes/ogmo/conhecidas?datas=   POST /api/requisicoes/ogmo/pdf   POST /api/requisicoes/ogmo/lista   POST /api/requisicoes/ogmo/erro
+   POST /api/requisicoes/ogmo/da9 (cabeçalhos X-Requisicao e X-Data)
    As rotas da equipe passam por authorize(); regras em netlify/lib/requisitions.mjs, requisition-rules.mjs e ogmo-sync.mjs. */
 import { authorize, actorOf, denied, can, ACTIONS } from "../lib/access.mjs";
 import { activitiesStore } from "../lib/activities-store.mjs";
@@ -13,6 +16,7 @@ import { attachmentsStore } from "../lib/attachments-store.mjs";
 import { loadForServing } from "../lib/snapshots.mjs";
 import * as requisitions from "../lib/requisitions.mjs";
 import * as ogmo from "../lib/ogmo-sync.mjs";
+import { dispatch } from "../lib/github-dispatch.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Type": "application/json; charset=utf-8" };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers });
@@ -59,7 +63,8 @@ const routes = {
     requisitions: await requisitions.list(store, { from: url.searchParams.get("de"), to: url.searchParams.get("ate") }),
     ...(await requisitions.getHolidays(store)),
     canEditHolidays: can(access.user, ACTIONS.configureRequisitions),
-    sync: await ogmo.syncStatus(store)
+    sync: await ogmo.syncStatus(store),
+    search: await ogmo.currentSearch(store)
   }) },
   "POST /enviar": { action: ACTIONS.sendRequisitions, raw: true, run: async ({ store, request, access }) => requisitions.submit(store, await readPdfBody(request), actorOf(access), { lineup: await lineup(), files: attachmentsStore() }) },
   "GET /pdf": { action: ACTIONS.readRequisitions, run: async ({ store, url }) => {
@@ -68,6 +73,12 @@ const routes = {
   } },
   "POST /aprovar": { action: ACTIONS.sendRequisitions, run: async ({ store, request, access }) => requisitions.approveWithReason(store, await readJson(request), actorOf(access), { files: attachmentsStore() }) },
   "POST /feriados": { action: ACTIONS.configureRequisitions, run: async ({ store, request, access }) => requisitions.saveHolidays(store, await readJson(request), actorOf(access)) },
+  "GET /da9": { action: ACTIONS.readRequisitions, run: async ({ store, url }) => {
+    const { data, name } = await ogmo.readDa9(store, attachmentsStore(), url.searchParams.get("id"));
+    return new Response(data, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" } });
+  } },
+  "POST /buscar": { action: ACTIONS.sendRequisitions, run: async ({ store, request, access }) => ogmo.requestSearch(store, await readJson(request), actorOf(access), { dispatcher: dispatch }) },
+  "GET /buscar": { action: ACTIONS.readRequisitions, run: async ({ store, url }) => ogmo.searchStatus(store, url.searchParams.get("id")) },
   // Robô do OGMO.
   "GET /ogmo/conhecidas": { robot: true, run: async ({ store, url }) => ({ known: await ogmo.known(store, String(url.searchParams.get("datas") || "").split(",")) }) },
   "POST /ogmo/pdf": { robot: true, raw: true, run: async ({ store, request }) => {
@@ -75,7 +86,11 @@ const routes = {
     return ogmo.receivePdf(store, { ...body, scaled: request.headers.get("x-escalada") === "1" }, { lineup: await lineup(), files: attachmentsStore() });
   } },
   "POST /ogmo/lista": { robot: true, run: async ({ store, request }) => ogmo.receiveList(store, await readJson(request, 200_000), { lineup: await lineup(), operating: await operating() }) },
-  "POST /ogmo/erro": { robot: true, run: async ({ store, request }) => ogmo.receiveError(store, await readJson(request)) }
+  "POST /ogmo/erro": { robot: true, run: async ({ store, request }) => ogmo.receiveError(store, await readJson(request)) },
+  "POST /ogmo/da9": { robot: true, raw: true, run: async ({ store, request }) => {
+    const { bytes } = await readPdfBody(request);
+    return ogmo.receiveDa9(store, attachmentsStore(), { bytes, number: request.headers.get("x-requisicao"), date: request.headers.get("x-data") });
+  } }
 };
 
 export default async function handler(request) {

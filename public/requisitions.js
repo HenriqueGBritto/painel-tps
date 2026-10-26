@@ -1,10 +1,11 @@
 /* Aba Requisições: envio dos PDFs de requisição de estiva do OGMO e a conferência pela instrução de trabalho.
+   "Buscar no OGMO" aciona o robô para ler o dia ou período escolhido; o DA9 aparece nas requisições já escaladas.
    Dados de /api/requisicoes (netlify/functions/requisicoes.mjs). Expõe window.requisitionsPanel = { show(open) }. */
 (function () {
   const $ = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const S = window.TpsShifts;
-  const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false };
+  const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false, search: null, polling: null };
   const RESULT = {
     reprovado: { label: "Reprovada", css: "is-error" }, confirmar: { label: "Confirmar", css: "is-warn" },
     aprovado: { label: "Aprovada", css: "is-ok" }, cancelada: { label: "Cancelada", css: "is-off" }, informativo: { label: "Vigia", css: "is-off" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
@@ -88,13 +89,13 @@
     const override = row.override ? `<p class="req-note">Aprovada com justificativa por <strong>${escapeHtml(row.override.by?.name)}</strong> em ${when(row.override.at)}: ${escapeHtml(row.override.reason)}</p>` : "";
     const activity = row.activity?.done ? `<p class="req-note">Atividade do turno marcada como feita (${escapeHtml(S.label(row.activity.shiftId))}), com o PDF anexado.</p>` : "";
     const canApprove = row.status === "reprovado" || row.status === "confirmar";
-    const origin = row.source === "ogmo" ? `<p class="req-note">Lida automaticamente no OGMO${row.ogmo?.scaled ? " · já escalada" : ""}${row.cancelled ? ` · cancelada no OGMO em ${when(row.cancelledAt)}` : ""}.</p>` : row.cancelled ? `<p class="req-note">Cancelada no OGMO em ${when(row.cancelledAt)}.</p>` : "";
+    const origin = row.source === "ogmo" ? `<p class="req-note">Lida automaticamente no OGMO${row.ogmo?.scaled ? ` · já escalada${row.da9 ? "" : " (DA9 ainda não baixado)"}` : ""}${row.cancelled ? ` · cancelada no OGMO em ${when(row.cancelledAt)}` : ""}.</p>` : row.cancelled ? `<p class="req-note">Cancelada no OGMO em ${when(row.cancelledAt)}.</p>` : "";
     return `<details class="req-row is-${row.status}" data-toggle="${escapeHtml(row.id)}"${state.open.has(row.id) ? " open" : ""}>
       <summary class="req-line"><span class="req-badge ${result.css}">${escapeHtml(result.label)}</span><span class="req-period">${period(row.period)}</span><span class="req-ship">${name}</span><span class="req-number">${escapeHtml(row.number.replace(/-1$/, ""))}</span><span class="req-chevron" aria-hidden="true"></span></summary>
       <div class="req-open">
         ${list.length ? `<ul class="req-problems">${list.map(item => `<li class="is-${item.level}">${escapeHtml(item.text)}</li>`).join("")}</ul>` : `<p class="req-allok">Tudo conforme a instrução de trabalho.</p>`}
         ${override}${activity}${origin}
-        <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
+        <div class="req-links"><a href="/api/requisicoes/pdf?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir PDF</a>${row.da9 ? `<a href="/api/requisicoes/da9?id=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">Abrir DA9</a>` : ""}${canApprove ? `<button type="button" class="act-link" data-action="approve" data-id="${escapeHtml(row.id)}">Aprovar com justificativa</button>` : ""}</div>
         ${canApprove ? `<form class="req-inline" data-form="aprovar" data-id="${escapeHtml(row.id)}" hidden><label>Motivo da aprovação<textarea name="reason" rows="2" maxlength="1000" required placeholder="CMG pedido pelo especialista para esta operação."></textarea></label><button type="submit" class="act-button is-primary">Aprovar</button></form>` : ""}
         ${detailsHtml(row)}
       </div>
@@ -146,8 +147,62 @@
         : `<ul class="req-holidays">${list.map(item => `<li><strong>${brDate(item.date).slice(0, 5)}</strong> ${S.WEEKDAYS[S.weekday(item.date)]} · ${escapeHtml(item.name)}</li>`).join("")}</ul>${state.canEditHolidays ? `<button type="button" class="act-button" data-action="edit-holidays">Editar feriados</button>` : ""}`}`;
   }
 
-  async function load({ quiet = false } = {}) {
-    const from = $("requisitionsFrom").value, to = $("requisitionsTo").value;
+  /** Período na tela: em "Um dia", De e Até são o mesmo dia. */
+  function range() {
+    const from = $("requisitionsFrom").value;
+    return { from, to: $("requisitionsMode").value === "dia" ? from : $("requisitionsTo").value };
+  }
+
+  function setMode() {
+    const day = $("requisitionsMode").value === "dia";
+    if (day) $("requisitionsFrom").value = S.zonedParts(new Date()).date; // começa em hoje
+    $("requisitionsToLabel").style.display = day ? "none" : "";
+    $("requisitionsTo").required = !day;
+    $("requisitionsFromText").textContent = day ? "Dia" : "De";
+  }
+
+  /* ---------- Busca no OGMO sob demanda ---------- */
+
+  function renderSearch() {
+    const box = $("requisitionsSearchStatus"), search = state.search;
+    const running = search && ["enviada", "lendo"].includes(search.status);
+    $("requisitionsSearch").disabled = Boolean(running);
+    if (!search) { box.hidden = true; return; }
+    const days = search.de === search.ate ? brDate(search.de) : `${brDate(search.de).slice(0, 5)} a ${brDate(search.ate)}`;
+    box.hidden = false;
+    box.className = `req-search${search.status === "falhou" ? " is-error" : running ? " is-busy" : " is-ok"}`;
+    box.textContent = search.status === "enviada" ? `Robô do OGMO acionado para ${days}. Ele leva de 1 a 3 minutos para começar; a lista se atualiza sozinha.`
+      : search.status === "lendo" ? `Lendo o OGMO (${days})…${search.totalDays > 1 ? ` ${search.days} de ${search.totalDays} dias prontos, ${search.active} requisições ativas até agora.` : ""}`
+      : search.status === "concluida" ? `Busca no OGMO concluída (${days}) em ${when(search.finishedAt)}: ${search.active} ativas, ${search.cancelled} canceladas.`
+      : `A busca no OGMO (${days}) falhou: ${search.error || "sem detalhe"}`;
+  }
+
+  function follow(search) {
+    state.search = search;
+    renderSearch();
+    clearTimeout(state.polling);
+    if (!search || !["enviada", "lendo"].includes(search.status)) return;
+    state.polling = setTimeout(async () => {
+      try {
+        const next = await api(`/buscar?id=${encodeURIComponent(search.id)}`);
+        const progressed = next.status !== search.status || next.days !== search.days;
+        follow({ ...search, ...next });
+        // Cada dia lido já aparece na lista, se estiver no período da tela.
+        if (progressed && next.status !== "falhou" && !(next.ate < range().from || next.de > range().to)) await load({ quiet: true, keepSearch: true });
+      } catch { follow(search); }
+    }, 15000);
+  }
+
+  async function requestSearch() {
+    const { from, to } = range();
+    if (!from || !to) { announce("Escolha o dia ou o período para buscar no OGMO.", true); return; }
+    $("requisitionsSearch").disabled = true;
+    try { follow(await api("/buscar", { de: from, ate: to })); announce(""); }
+    catch (error) { announce(error.message, true); renderSearch(); }
+  }
+
+  async function load({ quiet = false, keepSearch = false } = {}) {
+    const { from, to } = range();
     if (!quiet) announce("Carregando…");
     try {
       const data = await api(`?de=${from}&ate=${to}`);
@@ -156,6 +211,7 @@
       state.holidays = data.holidays;
       state.customHolidays = data.custom;
       state.canEditHolidays = data.canEditHolidays;
+      if (!keepSearch && data.search && (!state.search || state.search.id !== data.search.id || !state.polling)) follow(data.search);
       render();
       if (!quiet) announce("");
     } catch (error) {
@@ -202,6 +258,8 @@
     $("requisitionsFrom").value = S.addDays(today, -6);
     $("requisitionsTo").value = S.addDays(today, 1);
     $("requisitionsFilters").addEventListener("submit", event => { event.preventDefault(); load(); });
+    $("requisitionsMode").addEventListener("change", () => { setMode(); load(); });
+    $("requisitionsSearch").addEventListener("click", requestSearch);
     $("requisitionsResult").addEventListener("change", render);
     $("requisitionsFile").addEventListener("change", event => { upload(event.target.files); event.target.value = ""; });
     const drop = $("requisitionsDrop");
@@ -214,7 +272,7 @@
   }
 
   function show(open) {
-    if (!open) return;
+    if (!open) { clearTimeout(state.polling); state.polling = null; return; }
     if (!state.started) { state.started = true; setup(); }
     load();
   }

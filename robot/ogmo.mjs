@@ -1,17 +1,21 @@
 /* Robô de consulta do OGMO-RJ (GitHub Actions: .github/workflows/ogmo.yml).
    Entra no sistema de requisições do OGMO com o login da empresa (segredos do GitHub), lê a lista de requisições
-   de ontem, hoje e amanhã, baixa o PDF ("Visualiza") das ativas e manda para o painel conferir.
+   de ontem, hoje e amanhã, baixa o PDF ("Visualiza") das ativas e manda para o painel conferir. Das já escaladas,
+   baixa também o DA9 (trabalhadores escalados).
+   Busca sob demanda (aba Requisições → "Buscar no OGMO"): OGMO_PEDIDO e OGMO_DATAS trocam os dias lidos.
    SÓ CONSULTA: as ações permitidas estão em ogmo-lib.mjs; qualquer outro envio ao OGMO é bloqueado antes de sair,
    e toda caixa de confirmação do OGMO é recusada.
    Modo diagnóstico (OGMO_MODO=diagnostico): só lista as requisições de hoje e testa o botão do PDF, sem mandar nada ao painel. */
 import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
 import { extractText, getDocumentProxy } from "unpdf";
-import { isAllowed, actionOf, MENU_REGISTRO, PDF_BUTTONS, datesAround, brDate, parseGrid, pdfMatches } from "./ogmo-lib.mjs";
+import { isAllowed, actionOf, MENU_REGISTRO, PDF_BUTTONS, DA9_BUTTON, datesAround, datesBetween, brDate, parseGrid, pdfMatches, isDa9 } from "./ogmo-lib.mjs";
 
 const OGMO = "https://www.ogmorj.com.br/weboperador/WEBOPERADOR12081830.dll";
 const env = process.env;
 const DIAGNOSTIC = env.OGMO_MODO === "diagnostico";
+/** Busca pedida na aba Requisições: id do pedido e os dias (OGMO_DATAS = "AAAA-MM-DD:AAAA-MM-DD"). */
+const REQUEST = !DIAGNOSTIC && env.OGMO_PEDIDO ? env.OGMO_PEDIDO : null;
 const PANEL = (env.PAINEL_URL || "https://paineltps.netlify.app").replace(/\/$/, "");
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const log = (...parts) => console.log(new Date().toISOString().slice(11, 19), ...parts);
@@ -121,9 +125,8 @@ const unlock = () => page.evaluate(() => {
   if (typeof window.SetBusy === "function") try { window.SetBusy(false); } catch { /* sem o cursor de espera */ }
 }).catch(() => {});
 
-let pdfButton = env.OGMO_BOTAO_PDF || null;
-/** Seleciona a requisição e baixa o "Visualiza". Descobre (e lembra) qual botão gera o PDF da requisição. */
-async function downloadPdf(row) {
+/** Seleciona a requisição na grade (os botões de PDF valem para a linha selecionada). */
+async function select(row) {
   if (!row.param) throw new Error(`Requisição ${row.number} sem parâmetro de seleção na grade.`);
   try {
     await act(() => submit("IWDBGRID1", row.param));
@@ -135,50 +138,87 @@ async function downloadPdf(row) {
     await search(row.date);
     await act(() => submit("IWDBGRID1", row.param));
   }
+}
+
+/** Clica no botão e devolve o PDF baixado, se for da requisição e do tipo esperado (DA9 ou "Visualiza"); senão null. */
+async function pdfFrom(button, row, { da9 = false } = {}) {
+  try {
+    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 25000 }), submit(button)]);
+    const bytes = await readFile(await download.path());
+    await unlock();
+    if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") return null;
+    const text = await pdfText(bytes);
+    if (!pdfMatches(text, row.number) || isDa9(text) !== da9) { log(`Botão ${button}: o PDF não é ${da9 ? "o DA9" : "o Visualiza"} da requisição ${row.number}.`); return null; }
+    return bytes;
+  } catch (error) {
+    if (blocked) throw error;
+    await unlock();
+    log(`Botão ${button}: sem PDF (${error.message.split("\n")[0]}).`);
+    return null;
+  }
+}
+
+let pdfButton = env.OGMO_BOTAO_PDF || null;
+/** Baixa o "Visualiza" da requisição selecionada. Descobre (e lembra) qual botão gera o PDF da requisição. */
+async function downloadPdf(row) {
   for (const button of pdfButton ? [pdfButton] : PDF_BUTTONS) {
-    try {
-      const [download] = await Promise.all([page.waitForEvent("download", { timeout: 25000 }), submit(button)]);
-      const bytes = await readFile(await download.path());
-      await unlock();
-      if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") continue;
-      if (!pdfMatches(await pdfText(bytes), row.number)) { log(`Botão ${button}: PDF não é da requisição ${row.number}.`); continue; }
-      if (!pdfButton) log(`Botão do PDF: ${button}.`);
-      pdfButton = button;
-      return bytes;
-    } catch (error) {
-      if (blocked) throw error;
-      log(`Botão ${button}: sem PDF (${error.message.split("\n")[0]}).`);
-    }
+    const bytes = await pdfFrom(button, row);
+    if (!bytes) continue;
+    if (!pdfButton) log(`Botão do PDF: ${button}.`);
+    pdfButton = button;
+    return bytes;
   }
   throw new Error(`Não consegui baixar o PDF da requisição ${row.number}.`);
+}
+
+/** Baixa e manda ao painel o DA9 da requisição selecionada (já escalada). Falha no DA9 não derruba a rodada. */
+async function sendDa9(row) {
+  const bytes = await pdfFrom(DA9_BUTTON, row, { da9: true });
+  if (!bytes) { log(`  ${row.number}: DA9 indisponível agora.`); return; }
+  await panel("/da9", { method: "POST", body: bytes, headers: { "Content-Type": "application/pdf", "X-Requisicao": row.number, "X-Data": row.date } });
+  log(`  ${row.number}: DA9 guardado.`);
 }
 
 async function run() {
   const startedAt = new Date().toISOString();
   await login();
   await openRegistro();
-  const dates = DIAGNOSTIC ? [datesAround()[1]] : datesAround();
+  const dates = DIAGNOSTIC ? [datesAround()[1]] : REQUEST ? datesBetween(env.OGMO_DATAS) : datesAround();
+  if (!dates.length) throw new Error(`Período da busca inválido: ${env.OGMO_DATAS || "(vazio)"}.`);
   const known = DIAGNOSTIC ? {} : (await panel(`/conhecidas?datas=${dates.join(",")}`)).known;
   const all = [];
-  for (const date of dates) {
+  for (const [index, date] of dates.entries()) {
     const rows = await search(date);
     log(`${brDate(date)}: ${rows.length} requisições (${rows.filter(r => r.cancelled).length} canceladas).`);
     all.push(...rows);
     for (const row of rows.filter(r => !r.cancelled)) {
       if (DIAGNOSTIC) { log(`  ${row.number} · ${row.period} · ${row.vessel} · ${row.local}${row.scaled ? " · escalada" : ""}`); continue; }
-      if (known[row.number]?.scaled && row.scaled) continue; // já escalada e guardada: não muda mais
-      const bytes = await downloadPdf(row);
-      const result = await panel("/pdf", { method: "POST", body: bytes, headers: { "Content-Type": "application/pdf", "X-Arquivo": encodeURIComponent(`${row.number}.pdf`), "X-Escalada": row.scaled ? "1" : "0" } });
-      if (result.number && result.number !== row.number) log(`Atenção: o PDF de ${row.number} veio como ${result.number}.`);
-      log(`  ${row.number} ${row.period} ${row.vessel}: ${result.unchanged ? "sem mudança" : result.status}`);
+      const stored = known[row.number];
+      const needPdf = !(stored?.scaled && row.scaled); // já escalada e guardada: não muda mais
+      const needDa9 = row.scaled && !stored?.da9;
+      if (!needPdf && !needDa9) continue;
+      await select(row);
+      if (needPdf) {
+        const bytes = await downloadPdf(row);
+        const result = await panel("/pdf", { method: "POST", body: bytes, headers: { "Content-Type": "application/pdf", "X-Arquivo": encodeURIComponent(`${row.number}.pdf`), "X-Escalada": row.scaled ? "1" : "0" } });
+        if (result.number && result.number !== row.number) log(`Atenção: o PDF de ${row.number} veio como ${result.number}.`);
+        log(`  ${row.number} ${row.period} ${row.vessel}: ${result.unchanged ? "sem mudança" : result.status}`);
+      }
+      if (needDa9) await sendDa9(row);
       await pause(600);
     }
     if (DIAGNOSTIC) {
       const first = rows.find(r => !r.cancelled);
-      if (first) { const bytes = await downloadPdf(first); log(`PDF de teste da requisição ${first.number}: ${bytes.byteLength} bytes; botão ${pdfButton}.`); }
+      if (first) { await select(first); const bytes = await downloadPdf(first); log(`PDF de teste da requisição ${first.number}: ${bytes.byteLength} bytes; botão ${pdfButton}.`); }
+    }
+    // Busca sob demanda: manda a lista dia a dia (o painel reconfere por partes e mostra o andamento).
+    if (REQUEST) {
+      const part = await panel("/lista", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startedAt, dates: [date], rows: rows.map(({ param, ...row }) => row), pedido: REQUEST, dia: index + 1, dias: dates.length }) });
+      log(`Busca: ${part.days} de ${dates.length} dias lidos.`);
     }
   }
   if (DIAGNOSTIC) { log("Diagnóstico concluído: nada foi enviado ao painel."); return; }
+  if (REQUEST) { log("Busca concluída."); return; }
   const status = await panel("/lista", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ startedAt, dates, rows: all.map(({ param, ...row }) => row) }) });
   log(`Rodada registrada: ${status.active} ativas, ${status.cancelled} canceladas, ${status.missing.length} faltando.`);
 }
@@ -200,7 +240,7 @@ try {
 } catch (error) {
   console.error("Falha:", error.message);
   await page.screenshot({ path: "falha.png", fullPage: true }).catch(() => {});
-  if (!DIAGNOSTIC) await panel("/erro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: error.message }) }).catch(() => {});
+  if (!DIAGNOSTIC) await panel("/erro", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: error.message, ...(REQUEST ? { pedido: REQUEST } : {}) }) }).catch(() => {});
   process.exitCode = 1;
 } finally {
   await browser.close();

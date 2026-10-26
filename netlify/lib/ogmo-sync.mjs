@@ -3,6 +3,8 @@
    - POST /api/requisicoes/ogmo/pdf    cada PDF → mesma conferência da aba (requisitions.mjs)
    - POST /api/requisicoes/ogmo/lista  a lista completa → canceladas, o que falta antes do limite e o resumo da rodada
    - POST /api/requisicoes/ogmo/erro   a rodada falhou (aparece na aba e no sino)
+   - POST /api/requisicoes/ogmo/da9    DA9 (trabalhadores escalados) das requisições já escaladas
+   A aba também pede buscas de um dia ou período (requestSearch): o robô roda só aqueles dias e manda a lista dia a dia.
    O robô se identifica com OGMO_SYNC_TOKEN (o mesmo valor no GitHub e no Netlify). Ele só consulta o OGMO.
    Testado em tests/ogmo-sync.test.mjs. */
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -85,8 +87,8 @@ export async function receivePdf(store, input, context) {
 /** Requisições já guardadas dos dias pedidos: o robô pula o PDF das que já foram escaladas e não mudam mais. */
 export async function known(store, dates) {
   const result = {};
-  for (const date of dates.filter(isDate).slice(0, 4)) {
-    for (const row of await store.list(R.COLLECTION, { from: `${date}_`, to: `${date}_~` })) result[row.number] = { date, scaled: Boolean(row.ogmo?.scaled), cancelled: Boolean(row.cancelled) };
+  for (const date of dates.filter(isDate).slice(0, MAX_SEARCH_DAYS)) {
+    for (const row of await store.list(R.COLLECTION, { from: `${date}_`, to: `${date}_~` })) result[row.number] = { date, scaled: Boolean(row.ogmo?.scaled), cancelled: Boolean(row.cancelled), da9: Boolean(row.da9) };
   }
   return result;
 }
@@ -94,7 +96,7 @@ export async function known(store, dates) {
 /** Lista completa da rodada: marca canceladas, reconfere os períodos afetados e calcula o que falta. */
 export async function receiveList(store, input, context) {
   const now = context.now || new Date();
-  const dates = (Array.isArray(input?.dates) ? input.dates : []).filter(isDate).slice(0, 4);
+  const dates = (Array.isArray(input?.dates) ? input.dates : []).filter(isDate).slice(0, MAX_SEARCH_DAYS);
   const rows = (Array.isArray(input?.rows) ? input.rows : []).slice(0, 400).map(row => ({
     date: String(row.date || ""), number: String(row.number || "").trim(), vessel: String(row.vessel || "").trim().slice(0, 120),
     period: String(row.period || "").replace(/\s+/g, ""), local: String(row.local || "").trim().slice(0, 80), cancelled: Boolean(row.cancelled), scaled: Boolean(row.scaled)
@@ -117,6 +119,19 @@ export async function receiveList(store, input, context) {
   // Reconfere com as regras atuais todos os períodos da rodada (as já escaladas não têm o PDF baixado de novo).
   for (const row of rows) affected.set(`${row.date}|${row.period}`, { date: row.date, period: row.period });
   for (const { date, period } of affected.values()) await R.recheckShift(store, date, period, context);
+  // Busca sob demanda: o robô manda dia a dia; soma o andamento sem mexer na rodada automática (que cuida do que falta).
+  if (input.pedido) {
+    const previous = (await store.get(SYNC, requestId(input.pedido))) || {};
+    const restart = Number(input.dia) === 1 || previous.status !== "lendo"; // 1º dia (ou nova tentativa do robô): começa do zero
+    const add = (key, value) => (restart ? 0 : previous[key] || 0) + value;
+    const days = add("days", dates.length), total = Number(input.dias) || days;
+    const summary = {
+      status: days >= total ? "concluida" : "lendo", days, totalDays: total, updatedAt: now.toISOString(), ...(days >= total ? { finishedAt: now.toISOString() } : {}),
+      total: add("total", rows.length), active: add("active", rows.filter(row => !row.cancelled).length), cancelled: add("cancelled", rows.filter(row => row.cancelled).length), notDownloaded: add("notDownloaded", notDownloaded)
+    };
+    await store.set(SYNC, requestId(input.pedido), summary, { merge: true });
+    return summary;
+  }
   const status = {
     ok: true, lastRunAt: now.toISOString(), runStartedAt: input.startedAt || null, dates,
     total: rows.length, active: rows.filter(row => !row.cancelled).length, cancelled: rows.filter(row => row.cancelled).length, notDownloaded,
@@ -128,8 +143,88 @@ export async function receiveList(store, input, context) {
 
 export async function receiveError(store, input, { now = new Date() } = {}) {
   const message = String(input?.message || "Falha sem mensagem.").slice(0, 500);
+  if (input?.pedido) {
+    await store.set(SYNC, requestId(input.pedido), { status: "falhou", error: message, finishedAt: now.toISOString() }, { merge: true });
+    return { ok: true };
+  }
   await store.set(SYNC, "status", { ok: false, error: message, errorAt: now.toISOString() }, { merge: true });
   return { ok: true };
+}
+
+/* ---------- Busca sob demanda (aba Requisições: "Buscar no OGMO") ---------- */
+
+/** Dias por busca: os mesmos 8 que a aba mostra ao abrir (6 dias atrás até amanhã). */
+export const MAX_SEARCH_DAYS = 8;
+const requestId = id => `busca-${String(id).replace(/[^a-z0-9]/gi, "").slice(0, 16)}`;
+
+/** Pede ao robô a leitura de um dia ou período no OGMO (até 8 dias, no máximo até amanhã). */
+export async function requestSearch(store, input, actor, { now = new Date(), dispatcher }) {
+  const from = String(input?.de || ""), to = String(input?.ate || input?.de || "");
+  if (!isDate(from) || !isDate(to) || from > to) fail(400, "Escolha um dia ou um período válido.");
+  if (S.daysBetween(from, to) >= MAX_SEARCH_DAYS) fail(400, `Busque até ${MAX_SEARCH_DAYS} dias por vez no OGMO.`);
+  const tomorrow = S.addDays(localNow(now).slice(0, 10), 1);
+  if (to > tomorrow) fail(400, "O OGMO só tem requisições até amanhã.");
+  // Uma busca por vez: na fila do GitHub, uma nova espera pela anterior e pode tomar o lugar de outra que esperava.
+  const running = await currentSearch(store, { now });
+  if (running && ["enviada", "lendo"].includes(running.status)) fail(409, `Já há uma busca no OGMO em andamento (pedida por ${running.by?.name || "alguém"}). Aguarde terminar.`);
+  const id = createHash("sha256").update(`${now.toISOString()}${Math.random()}`).digest("hex").slice(0, 12);
+  const record = { id, de: from, ate: to, status: "enviada", by: actor, at: now.toISOString() };
+  await store.set(SYNC, requestId(id), record);
+  await store.set(SYNC, "busca-atual", { id, at: record.at });
+  try {
+    await dispatcher({ modo: "normal", datas: `${from}:${to}`, pedido: id });
+  } catch (error) {
+    await store.set(SYNC, requestId(id), { status: "falhou", error: error.message, finishedAt: now.toISOString() }, { merge: true });
+    fail(502, error.message);
+  }
+  return record;
+}
+
+/** Tempo máximo de uma busca: depois disso (robô parado, cancelado na fila do GitHub) ela conta como não concluída. */
+export const SEARCH_TIMEOUT_MINUTES = 45;
+const expired = (record, now) => ["enviada", "lendo"].includes(record.status) && now - Date.parse(record.at) > SEARCH_TIMEOUT_MINUTES * 60000;
+const withTimeout = (record, now) => expired(record, now) ? { ...record, status: "falhou", error: "O robô não terminou a busca a tempo. Tente de novo." } : record;
+
+export async function searchStatus(store, id, { now = new Date() } = {}) {
+  const record = await store.get(SYNC, requestId(id));
+  if (!record) fail(404, "Busca não encontrada.");
+  return withTimeout(record, now);
+}
+
+/** Última busca pedida (a aba retoma o acompanhamento ao abrir); a que terminou some da tela depois de 30 minutos. */
+export async function currentSearch(store, { now = new Date() } = {}) {
+  const pointer = await store.get(SYNC, "busca-atual");
+  if (!pointer?.id || now - Date.parse(pointer.at) > 2 * 3600000) return null;
+  const record = await store.get(SYNC, requestId(pointer.id));
+  if (!record || (record.finishedAt && now - Date.parse(record.finishedAt) > 30 * 60000)) return null;
+  return withTimeout(record, now);
+}
+
+/* ---------- DA9 (relatório de trabalhadores escalados) ---------- */
+
+/** Guarda o DA9 de uma requisição escalada, baixado pelo robô. */
+export async function receiveDa9(store, files, input, { now = new Date() } = {}) {
+  const number = String(input?.number || ""), date = String(input?.date || "");
+  if (!/^[\d-]+$/.test(number) || !isDate(date)) fail(400, "Requisição do DA9 inválida.");
+  const bytes = input.bytes;
+  if (!bytes?.byteLength || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") fail(415, "O DA9 precisa ser PDF.");
+  const id = `${date}_${number}`;
+  const record = await store.get(R.COLLECTION, id);
+  if (!record) fail(404, "Requisição do DA9 ainda não foi recebida.");
+  const fileKey = `requisicoes/${number}/da9-${createHash("sha256").update(bytes).digest("hex").slice(0, 16)}.pdf`;
+  if (record.da9?.fileKey !== fileKey) {
+    await files.put(fileKey, bytes, { name: `DA9 ${number}.pdf`, type: "application/pdf", size: bytes.byteLength, at: now.toISOString() });
+    await store.set(R.COLLECTION, id, { da9: { fileKey, name: `DA9 ${number}.pdf`, size: bytes.byteLength, at: now.toISOString() } }, { merge: true });
+  }
+  return { ok: true };
+}
+
+export async function readDa9(store, files, id) {
+  const record = await store.get(R.COLLECTION, String(id || ""));
+  if (!record?.da9?.fileKey) fail(404, "DA9 ainda não baixado: ele só existe depois que o OGMO escala a requisição.");
+  const file = await files.get(record.da9.fileKey);
+  if (!file) fail(404, "Arquivo do DA9 não encontrado.");
+  return { data: file.data, name: record.da9.name };
 }
 
 export async function syncStatus(store) {

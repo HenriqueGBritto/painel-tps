@@ -3,6 +3,7 @@
 # limite do OGMO (02:45, 08:45, 14:45 e 17:45 em Brasília). O agendamento do próprio GitHub pulava e atrasava rodadas.
 # Segredos (Settings → Secrets and variables → Actions): OGMO_EMPRESA, OGMO_USUARIO, OGMO_SENHA, OGMO_SYNC_TOKEN.
 # Para testar sem mandar nada ao painel: Actions → Verificação OGMO → Run workflow → modo "diagnostico".
+# A aba Requisições também aciona daqui a busca de um dia ou período ("Buscar no OGMO": entradas datas e pedido).
 name: Verificação OGMO
 
 on:
@@ -13,6 +14,14 @@ on:
         type: choice
         options: [normal, diagnostico]
         default: normal
+      datas:
+        description: "busca da aba Requisições: dias AAAA-MM-DD:AAAA-MM-DD (vazio = ontem, hoje e amanhã)"
+        type: string
+        default: ""
+      pedido:
+        description: "busca da aba Requisições: id do pedido (preenchido pelo painel)"
+        type: string
+        default: ""
 
 # Uma rodada por vez: se uma atrasar, a próxima espera em vez de entrar junto no OGMO.
 concurrency:
@@ -22,7 +31,7 @@ concurrency:
 jobs:
   verificar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     # Imagem oficial do Playwright: já traz o Chromium e as bibliotecas do sistema
     # (instalar a cada rodada levava mais de 4 minutos e estourava a cota do GitHub).
     # A versão da imagem precisa ser a mesma do playwright em robot/package.json.
@@ -38,6 +47,8 @@ jobs:
         env:
           TZ: America/Sao_Paulo
           OGMO_MODO: ${{ inputs.modo || 'normal' }}
+          OGMO_DATAS: ${{ inputs.datas }}
+          OGMO_PEDIDO: ${{ inputs.pedido }}
           OGMO_EMPRESA: ${{ secrets.OGMO_EMPRESA }}
           OGMO_USUARIO: ${{ secrets.OGMO_USUARIO }}
           OGMO_SENHA: ${{ secrets.OGMO_SENHA }}

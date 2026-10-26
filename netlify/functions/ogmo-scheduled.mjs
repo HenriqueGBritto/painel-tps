@@ -8,11 +8,10 @@
    Funções agendadas só rodam no site publicado. */
 import { activitiesStore } from "../lib/activities-store.mjs";
 import { receiveError } from "../lib/ogmo-sync.mjs";
+import { dispatch } from "../lib/github-dispatch.mjs";
+export { dispatch };
 
 export const PRE_DEADLINE_HOURS_UTC = [5, 11, 17, 20];
-const REPO = process.env.GITHUB_REPO || "HenriqueGBritto/painel-tps";
-const WORKFLOW = "ogmo.yml";
-
 /** Nesta hora/minuto (UTC) o robô deve rodar? */
 export function shouldRun(date = new Date()) {
   const minute = date.getUTCMinutes();
@@ -20,25 +19,11 @@ export function shouldRun(date = new Date()) {
   return PRE_DEADLINE_HOURS_UTC.includes(date.getUTCHours()); // 1 hora antes de um limite
 }
 
-export async function dispatch({ token = process.env.GITHUB_DISPATCH_TOKEN, fetcher = fetch } = {}) {
-  if (!token) throw new Error("Falta GITHUB_DISPATCH_TOKEN no Netlify para acionar o robô do OGMO.");
-  const response = await fetcher(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "painel-tps" },
-    body: JSON.stringify({ ref: "main", inputs: { modo: "normal" } }),
-    signal: AbortSignal.timeout(15000)
-  });
-  if (response.status !== 204) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`O GitHub recusou acionar o robô do OGMO (${response.status}${response.status === 401 || response.status === 403 ? ": token inválido, vencido ou sem permissão de Actions" : ""}). ${detail.slice(0, 160)}`);
-  }
-}
-
 export default async function handler() {
   const now = new Date();
   if (!shouldRun(now)) return new Response(null, { status: 204 });
   try {
-    await dispatch();
+    await dispatch({ modo: "normal" });
     console.log("Robô do OGMO acionado no GitHub.");
   } catch (error) {
     console.error(error.message);

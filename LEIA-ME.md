@@ -143,9 +143,11 @@ Um robô entra no sistema de requisições do OGMO com o login da empresa e conf
 - **O que faz:**
   1. Lê a lista de requisições de ontem, hoje e amanhã (Registro de Requisições, porto Rio de Janeiro, todos os períodos).
   2. Baixa o PDF ("Visualiza") das requisições ativas. As já escaladas e já guardadas não são baixadas de novo.
-  3. Manda tudo para o painel, que confere cada PDF pela IT, marca as canceladas no OGMO e reconfere o período delas (por exemplo, a CCT CAPATAZIA).
+  3. Das já escaladas, baixa uma vez o **DA9** (botão verde do OGMO, com os trabalhadores escalados). Ele aparece como "Abrir DA9" ao lado de "Abrir PDF". O OGMO só gera o DA9 depois de escalar a requisição.
+  4. Manda tudo para o painel, que confere cada PDF pela IT, marca as canceladas no OGMO e reconfere o período delas (por exemplo, a CCT CAPATAZIA).
+- **Buscar no OGMO (sob demanda):** na aba, escolha **Período** (até 8 dias) ou **Um dia** e clique em **Buscar no OGMO**. O painel aciona o robô só para esses dias (até amanhã): ele lê a lista, confere e guarda o PDF e o DA9 das requisições que ainda não tem. Leva de 1 a 3 minutos para começar; o andamento aparece embaixo dos filtros e a lista se atualiza sozinha. Uma busca por vez; se o robô não terminar em 45 minutos, a busca conta como falha e libera outra. A busca não mexe no aviso do que falta pedir, que é da rodada automática.
 - **O que falta pedir:** a cada rodada o painel calcula o que falta nos períodos com limite nos próximos 80 minutos: navio ou balsa que teve requisição no período anterior e ainda não tem a do próximo, e navio em operação no Lineup sem nenhuma requisição no dia. Isso aparece no topo da aba e no sino.
-- **Só consulta:** o robô só pode disparar entrar, abrir o Registro de Requisições, escolher porto e período, pesquisar, selecionar e visualizar. Qualquer outro envio ao OGMO (Nova Requisição, Inclusão, Alteração, Exclusão, Modifica, Cancela, Duplica, Sair) é bloqueado antes de sair do navegador, e toda caixa de confirmação do OGMO é recusada. O PDF só é aceito se trouxer o número da requisição selecionada.
+- **Só consulta:** o robô só pode disparar entrar, abrir o Registro de Requisições, escolher porto e período, pesquisar, selecionar, visualizar e gerar o DA9. Qualquer outro envio ao OGMO (Nova Requisição, Inclusão, Alteração, Exclusão, Modifica, Cancela, Duplica, Sair) é bloqueado antes de sair do navegador, e toda caixa de confirmação do OGMO é recusada. O PDF e o DA9 só são aceitos se trouxerem o número da requisição selecionada.
 - **Configuração:**
   - Segredos no GitHub (Settings → Secrets and variables → Actions): `OGMO_EMPRESA`, `OGMO_USUARIO`, `OGMO_SENHA` e `OGMO_SYNC_TOKEN`.
   - No Netlify, a variável `OGMO_SYNC_TOKEN` com o mesmo valor. É ela que deixa o robô entregar os dados ao painel; sem ela, as rotas do robô respondem 503.
@@ -153,8 +155,8 @@ Um robô entra no sistema de requisições do OGMO com o login da empresa e conf
   - No log do GitHub, os números das requisições aparecem como `***53316-1`, porque o GitHub esconde o valor do segredo OGMO_EMPRESA ("250") onde ele aparecer. O painel recebe os números completos.
 - **Testar:** Actions → Verificação OGMO → Run workflow → modo **diagnostico**. Ele lista as requisições de hoje e testa o PDF de uma, sem mandar nada ao painel.
 - **Se parar:** com a rodada falhando ou sem rodar há mais de 2 horas, aparece um aviso na aba e no sino. Quando o robô falha, ele guarda a imagem da tela por 3 dias, para ver onde parou.
-- **Cota do GitHub:** o repositório privado tem 2.000 minutos por mês. São 28 rodadas por dia de cerca de 1 minuto, mas o GitHub cobra cada rodada arredondando para cima; o uso fica em torno de 1.700 minutos por mês.
-- **Onde fica:** Firestore `requisitions` (feriados em `requisitionConfig`); o PDF fica no Netlify Blobs, junto dos anexos. A leitura do PDF usa a biblioteca `unpdf`. As regras ficam em `netlify/lib/requisition-rules.mjs`, e os testes usam o texto de dois PDFs reais (`tests/fixtures/requisicoes`).
+- **Cota do GitHub:** o repositório privado tem 2.000 minutos por mês. São 28 rodadas por dia de cerca de 1 minuto, mas o GitHub cobra cada rodada arredondando para cima; o uso fica em torno de 1.700 minutos por mês. Cada **Buscar no OGMO** gasta mais alguns minutos (de 2 a 15, conforme os dias e o que ainda não foi baixado): use com moderação perto do fim do mês.
+- **Onde fica:** Firestore `requisitions` (feriados em `requisitionConfig`); o PDF e o DA9 ficam no Netlify Blobs, junto dos anexos (o DA9 tem nome e matrícula dos trabalhadores escalados e só abre para quem tem a aba Requisições). A leitura do PDF usa a biblioteca `unpdf`. As regras ficam em `netlify/lib/requisition-rules.mjs`, e os testes usam o texto de dois PDFs reais (`tests/fixtures/requisicoes`).
 
 ## Aba Equipe (quadro de pessoal)
 
