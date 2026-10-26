@@ -1,4 +1,4 @@
-/* Partes do robô do OGMO que não dependem do navegador (testadas em tests/ogmo-robot.test.mjs). */
+/* Partes do robô do OGMO que não dependem do navegador (testadas em tests/ogmo-sync.test.mjs). */
 
 /**
  * Ações do sistema do OGMO que o robô pode disparar: entrar, abrir o Registro de Requisições, escolher porto e
@@ -6,8 +6,8 @@
  * Alteração, Exclusão, Modifica, Cancela, Duplica, Sair…) é bloqueada antes de sair do navegador.
  */
 export const ALLOWED_ACTIONS = new Set(["BTENTRAR", "IWMENU1", "DBLPORTO", "DBLPESQPERIODO", "IWBUSCAR", "IWDBGRID1", "IWDBGRID2", "IWIMAGE5", "IWRELATORIO"]);
-/** Botões que podem gerar o PDF ("Visualiza"/impressora). O robô confere no PDF qual deles é o certo. */
-export const PDF_BUTTONS = ["IWIMAGE5", "IWRELATORIO"];
+/** Botões que podem gerar o PDF ("Visualiza"/impressora). No diagnóstico de 26/10/2026 foi o IWRELATORIO; o robô confere o número no PDF. */
+export const PDF_BUTTONS = ["IWRELATORIO", "IWIMAGE5"];
 export const MENU_REGISTRO = ["IWMENU1", "IWMENU1_submenu5"];
 
 /** Ação de um envio de formulário do IntraWeb (corpo application/x-www-form-urlencoded). */

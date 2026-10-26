@@ -1,16 +1,11 @@
 # Verificação automática das requisições de estiva no sistema do OGMO (robot/ogmo.mjs).
-# Horários em UTC (Brasília = UTC−3):
-#   - de hora em hora, no minuto 7;
-#   - 1 hora antes de cada limite do OGMO: 02:45, 08:45, 14:45 e 17:45 em Brasília
-#     (o GitHub pode atrasar alguns minutos; assim o aviso de requisição faltando chega com folga).
+# Quem dá a largada é o Netlify (netlify/functions/ogmo-scheduled.mjs): de hora em hora e 1 hora antes de cada
+# limite do OGMO (02:45, 08:45, 14:45 e 17:45 em Brasília). O agendamento do próprio GitHub pulava e atrasava rodadas.
 # Segredos (Settings → Secrets and variables → Actions): OGMO_EMPRESA, OGMO_USUARIO, OGMO_SENHA, OGMO_SYNC_TOKEN.
 # Para testar sem mandar nada ao painel: Actions → Verificação OGMO → Run workflow → modo "diagnostico".
 name: Verificação OGMO
 
 on:
-  schedule:
-    - cron: "7 * * * *"
-    - cron: "45 5,11,17,20 * * *"
   workflow_dispatch:
     inputs:
       modo:

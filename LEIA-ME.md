@@ -137,8 +137,8 @@ O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO
 
 Um robô entra no sistema de requisições do OGMO com o login da empresa e confere as requisições sem ninguém precisar enviar PDF.
 
-- **Onde roda:** no GitHub Actions (`.github/workflows/ogmo.yml`; o robô fica em `robot/ogmo.mjs`).
-- **Quando:** de hora em hora, e também 1 hora antes de cada limite: 02:45, 08:45, 14:45 e 17:45.
+- **Onde roda:** no GitHub Actions (`.github/workflows/ogmo.yml`; o robô fica em `robot/ogmo.mjs`). Quem dá a largada é uma tarefa agendada do Netlify (`netlify/functions/ogmo-scheduled.mjs`), porque o agendamento do próprio GitHub pulava e atrasava rodadas: rodou 8 a 10 vezes por dia em vez de 28.
+- **Quando:** de hora em hora (no minuto 7), e também 1 hora antes de cada limite: 02:45, 08:45, 14:45 e 17:45. Cada rodada leva cerca de 1 minuto.
 - **O que faz:**
   1. Lê a lista de requisições de ontem, hoje e amanhã (Registro de Requisições, porto Rio de Janeiro, todos os períodos).
   2. Baixa o PDF ("Visualiza") das requisições ativas. As já escaladas e já guardadas não são baixadas de novo.
@@ -148,9 +148,11 @@ Um robô entra no sistema de requisições do OGMO com o login da empresa e conf
 - **Configuração:**
   - Segredos no GitHub (Settings → Secrets and variables → Actions): `OGMO_EMPRESA`, `OGMO_USUARIO`, `OGMO_SENHA` e `OGMO_SYNC_TOKEN`.
   - No Netlify, a variável `OGMO_SYNC_TOKEN` com o mesmo valor. É ela que deixa o robô entregar os dados ao painel; sem ela, as rotas do robô respondem 503.
+  - No Netlify, a variável `GITHUB_DISPATCH_TOKEN`: um token do GitHub (fine-grained) só com a permissão **Actions: Read and write** neste repositório, para a largada. Quando ele vence, aparece "O GitHub recusou acionar o robô" na aba e no sino; é só gerar outro e trocar a variável.
+  - No log do GitHub, os números das requisições aparecem como `***53316-1`, porque o GitHub esconde o valor do segredo OGMO_EMPRESA ("250") onde ele aparecer. O painel recebe os números completos.
 - **Testar:** Actions → Verificação OGMO → Run workflow → modo **diagnostico**. Ele lista as requisições de hoje e testa o PDF de uma, sem mandar nada ao painel.
 - **Se parar:** com a rodada falhando ou sem rodar há mais de 2 horas, aparece um aviso na aba e no sino. Quando o robô falha, ele guarda a imagem da tela por 3 dias, para ver onde parou.
-- **Cota do GitHub:** o repositório privado tem 2.000 minutos por mês; com cerca de 28 rodadas por dia, o uso fica em torno de 1.700.
+- **Cota do GitHub:** o repositório privado tem 2.000 minutos por mês. São 28 rodadas por dia de cerca de 1 minuto, mas o GitHub cobra cada rodada arredondando para cima; o uso fica em torno de 1.700 minutos por mês.
 - **Onde fica:** Firestore `requisitions` (feriados em `requisitionConfig`); o PDF fica no Netlify Blobs, junto dos anexos. A leitura do PDF usa a biblioteca `unpdf`. As regras ficam em `netlify/lib/requisition-rules.mjs`, e os testes usam o texto de dois PDFs reais (`tests/fixtures/requisicoes`).
 
 ## Aba Equipe (quadro de pessoal)

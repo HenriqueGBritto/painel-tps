@@ -96,3 +96,15 @@ test("robô: só ações de consulta passam; grade e PDF reconhecidos", () => {
   assert.equal(pdfMatches("Requisição: 25053301-1", "25053302-1"), false);
   assert.deepEqual(datesAround(at("2026-10-23T00:30:00")), ["2026-10-22", "2026-10-23", "2026-10-24"]);
 });
+
+test("largada pelo Netlify: de hora em hora e 1 hora antes de cada limite; erro do GitHub vira mensagem clara", async () => {
+  const { shouldRun, dispatch } = await import("../netlify/functions/ogmo-scheduled.mjs");
+  assert.equal(shouldRun(new Date("2026-10-26T13:07:00Z")), true, "minuto 7: rodada de hora em hora");
+  assert.equal(shouldRun(new Date("2026-10-26T11:45:00Z")), true, "08:45 em Brasília: 1 hora antes do limite do 13x19");
+  assert.equal(shouldRun(new Date("2026-10-26T13:45:00Z")), false, "10:45 em Brasília: sem limite perto");
+  const calls = [];
+  await dispatch({ token: "t", fetcher: async (url, options) => { calls.push([url, JSON.parse(options.body)]); return new Response(null, { status: 204 }); } });
+  assert.deepEqual(calls, [["https://api.github.com/repos/HenriqueGBritto/painel-tps/actions/workflows/ogmo.yml/dispatches", { ref: "main", inputs: { modo: "normal" } }]]);
+  await assert.rejects(dispatch({ token: "t", fetcher: async () => new Response("Bad credentials", { status: 401 }) }), /token inválido, vencido ou sem permissão/);
+  await assert.rejects(dispatch({ token: "" }), /GITHUB_DISPATCH_TOKEN/);
+});
