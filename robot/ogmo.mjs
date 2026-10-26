@@ -104,15 +104,35 @@ async function pdfText(bytes) {
   return text;
 }
 
+/**
+ * O IntraWeb marca "enviando" (GSubmitting) e trava a tela (ActivateLock) a cada clique e só solta quando a página
+ * recarrega. O PDF vem como download, a página não recarrega e os próximos cliques seriam ignorados: solta aqui.
+ */
+const unlock = () => page.evaluate(() => {
+  window.GSubmitting = false;
+  if (typeof window.ReleaseLock === "function") try { window.ReleaseLock(); } catch { /* sem o cadeado na tela */ }
+  if (typeof window.SetBusy === "function") try { window.SetBusy(false); } catch { /* sem o cursor de espera */ }
+}).catch(() => {});
+
 let pdfButton = env.OGMO_BOTAO_PDF || null;
 /** Seleciona a requisição e baixa o "Visualiza". Descobre (e lembra) qual botão gera o PDF da requisição. */
 async function downloadPdf(row) {
   if (!row.param) throw new Error(`Requisição ${row.number} sem parâmetro de seleção na grade.`);
-  await act(() => submit("IWDBGRID1", row.param));
+  try {
+    await act(() => submit("IWDBGRID1", row.param));
+  } catch (error) {
+    if (blocked) throw error;
+    // A tela não respondeu depois do PDF anterior: pesquisa o dia de novo e tenta selecionar outra vez.
+    log(`Seleção de ${row.number} sem resposta; pesquisando ${brDate(row.date)} de novo.`);
+    await unlock();
+    await search(row.date);
+    await act(() => submit("IWDBGRID1", row.param));
+  }
   for (const button of pdfButton ? [pdfButton] : PDF_BUTTONS) {
     try {
       const [download] = await Promise.all([page.waitForEvent("download", { timeout: 25000 }), submit(button)]);
       const bytes = await readFile(await download.path());
+      await unlock();
       if (String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-") continue;
       if (!pdfMatches(await pdfText(bytes), row.number)) { log(`Botão ${button}: PDF não é da requisição ${row.number}.`); continue; }
       if (!pdfButton) log(`Botão do PDF: ${button}.`);
