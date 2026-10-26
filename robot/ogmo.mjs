@@ -46,11 +46,15 @@ await page.route("**/*", route => {
 let lastAlert = null;
 page.on("dialog", dialog => { if (dialog.type() === "alert") lastAlert = dialog.message(); dialog.dismiss().catch(() => {}); });
 
-/** Executa uma ação que recarrega a página do IntraWeb e espera a nova página. */
+/**
+ * Executa uma ação que recarrega a página do IntraWeb e espera a nova página ficar utilizável (formulário e funções
+ * da tela prontos). Não espera o "load" completo: o servidor do OGMO às vezes demora a entregar imagens.
+ */
 async function act(run, { optional = false } = {}) {
   blocked = null;
   try {
-    await Promise.all([page.waitForNavigation({ waitUntil: "load", timeout: optional ? 6000 : 30000 }), run()]);
+    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: optional ? 6000 : 45000 }), run()]);
+    await page.waitForFunction(() => typeof window.SubmitClick === "function" && document.querySelector("input[name=IW_TrackID_]"), null, { timeout: 30000 });
   } catch (error) {
     if (blocked) throw new Error(`Ação bloqueada pela trava de segurança: ${blocked}`);
     if (!optional) throw error;
@@ -62,7 +66,7 @@ const submit = (name, param = "") => page.evaluate(([n, p]) => window.SubmitClic
 const formName = () => page.$eval("input[name=IW_FormName]", input => input.value).catch(() => "");
 
 async function login() {
-  await page.goto(OGMO, { waitUntil: "load" });
+  await page.goto(OGMO, { waitUntil: "domcontentloaded", timeout: 45000 });
   // A página inicial do OGMO se redireciona ao abrir: espera o formulário de login aparecer.
   try {
     await page.waitForSelector("input[name=EDTEMPRESA]", { timeout: 45000 });
