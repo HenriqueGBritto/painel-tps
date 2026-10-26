@@ -131,6 +131,7 @@ O assistente envia o PDF da requisição de estiva impresso pelo sistema do OGMO
 - **Atividades:** requisição aprovada (direto ou com justificativa) marca como feita a atividade "Requisição de estiva · período" do turno e anexa o PDF à observação dela. Se o turno já foi encerrado, a requisição avisa e não mexe nele.
 - **Feriados:** lista inicial com feriados nacionais, do estado e da cidade do Rio, Carnaval e Corpus Christi. Quem tem "Configuração das Atividades" ou é administrador edita a lista na própria aba.
 - **Alertas:** requisições de ontem a amanhã reprovadas ou para confirmar aparecem no sino.
+- **Vigia:** requisições só com funções de vigia (por exemplo, VPL, Vigia de Portaló) não são feitas pela Triunfo. Aparecem na lista com a etiqueta cinza "Vigia", só para informação: não são conferidas, não contam como reprovadas, não vão para o sino e não entram no aviso de requisição faltando.
 - **CCT CAPATAZIA:** é criada pelo OGMO junto com toda requisição nossa com capatazia. Se, no mesmo período, não sobrar nenhuma frente nossa com capatazia ativa, a CCT CAPATAZIA ainda ativa é apontada como erro: ela deve ser cancelada.
 
 ### Verificação automática no OGMO

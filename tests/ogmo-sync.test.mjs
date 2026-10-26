@@ -108,3 +108,14 @@ test("largada pelo Netlify: de hora em hora e 1 hora antes de cada limite; erro 
   await assert.rejects(dispatch({ token: "t", fetcher: async () => new Response("Bad credentials", { status: 401 }) }), /token inválido, vencido ou sem permissão/);
   await assert.rejects(dispatch({ token: "" }), /GITHUB_DISPATCH_TOKEN/);
 });
+
+test("vigia (VPL – Vigia de Portaló): não é nossa; aparece só para informação e não entra no que falta", () => {
+  const vigia = { number: "25053313-1", vessel: parseVesselName("BBC KHERSON"), local: "ARMAZEM 11", berthing: "Atracado", port: "Rio de Janeiro", date: "2026-10-26", period: "07-13", travelType: "Longo Curso", printedAt: null,
+    ternos: [{ equipe: 1, generalNote: "ARAMZEM 11 / CABEÇOS 118 X 124", fainas: [], observation: "01 VIGIA DE PORTALÓ", functions: [{ code: "VPL", name: "VIGIA DE PORTALÓ", vagas: 1, section: "VIGIA" }] }] };
+  const check = checkRequisition(vigia, { lineup: [], holidays: [] });
+  assert.deepEqual([check.result, check.operation.key, check.items.filter(item => item.level !== "ok").length], ["informativo", "vigia", 0]);
+  const rows = [
+    { date: "2026-10-26", number: "1-1", vessel: "BBC KHERSON", period: "07-13", cancelled: false, vigia: true }
+  ];
+  assert.deepEqual(O.missingRequisitions(rows, { now: at("2026-10-26T08:50:00") }), [], "vigia no 07x13 não cobra o 13x19");
+});

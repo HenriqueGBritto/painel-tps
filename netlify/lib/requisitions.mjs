@@ -91,7 +91,10 @@ export async function submit(store, input, actor, context) {
   // Mesma requisição sem nenhuma mudança (a verificação no OGMO baixa o PDF de novo a cada rodada): não vira um novo envio.
   const contentKey = JSON.stringify({ ...parsed, printedAt: null });
   if (previous && previous.contentKey === contentKey && !previous.cancelled) {
-    const seen = { lastSeenAt: iso(now), ...(context.ogmo ? { ogmo: context.ogmo } : {}) };
+    // Mesmo PDF: não vira novo envio, mas é conferido de novo com as regras atuais (as regras podem ter mudado).
+    const holidays = (await getHolidays(store, now)).holidays;
+    const check = recheck({ id, ...previous }, { lineup: context.lineup, holidays }, await sameShift(store, { id, ...previous }));
+    const seen = { lastSeenAt: iso(now), ...(context.ogmo ? { ogmo: context.ogmo } : {}), ...(JSON.stringify(check) !== JSON.stringify(previous.check) ? { check } : {}) };
     await store.set(COLLECTION, id, seen, { merge: true });
     return { ...publicRecord({ id, ...previous, ...seen }), unchanged: true };
   }

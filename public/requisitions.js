@@ -7,7 +7,7 @@
   const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false };
   const RESULT = {
     reprovado: { label: "Reprovada", css: "is-error" }, confirmar: { label: "Confirmar", css: "is-warn" },
-    aprovado: { label: "Aprovada", css: "is-ok" }, cancelada: { label: "Cancelada", css: "is-off" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
+    aprovado: { label: "Aprovada", css: "is-ok" }, cancelada: { label: "Cancelada", css: "is-off" }, informativo: { label: "Vigia", css: "is-off" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
   };
   const brDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
   const period = value => String(value || "").replace("-", "x");
@@ -120,7 +120,7 @@
   function render() {
     renderSync();
     const filter = $("requisitionsResult").value;
-    const rows = state.rows.filter(row => !filter || (filter === "aprovado" ? row.status.startsWith("aprovado") : row.status === filter)).sort((a, b) => (a.status === "cancelada") - (b.status === "cancelada"));
+    const rows = state.rows.filter(row => !filter || (filter === "aprovado" ? row.status.startsWith("aprovado") : row.status === filter)).sort((a, b) => ["cancelada", "informativo"].includes(a.status) - ["cancelada", "informativo"].includes(b.status));
     const counts = Object.fromEntries(["reprovado", "confirmar", "aprovado"].map(key => [key, state.rows.filter(row => key === "aprovado" ? row.status.startsWith("aprovado") : row.status === key).length]));
     $("requisitionsSummary").innerHTML = state.rows.length
       ? `<span class="req-badge is-error">${counts.reprovado} reprovada${counts.reprovado === 1 ? "" : "s"}</span><span class="req-badge is-warn">${counts.confirmar} para confirmar</span><span class="req-badge is-ok">${counts.aprovado} aprovada${counts.aprovado === 1 ? "" : "s"}</span>`

@@ -239,6 +239,11 @@ export function retroactiveCheck(requisition) {
 
 const count = (terno, code) => terno.functions.filter(f => f.code === code && f.vagas > 0).reduce((sum, f) => sum + f.vagas, 0);
 const sameShift = (a, b) => a.number !== b.number && a.date === b.date && a.period === b.period;
+/** Requisição só com funções de vigia (seção VIGIA do PDF, ex.: VPL). */
+export function isVigia(requisition) {
+  const functions = requisition.ternos.flatMap(terno => terno.functions.filter(f => f.vagas > 0));
+  return functions.length > 0 && functions.every(f => f.section === "VIGIA" || /^VIGIA\b/.test(normalize(f.name)));
+}
 const CCT = "CCT CAPATAZIA";
 const shipOf = requisition => vesselKey(requisition.vessel.attachedTo || requisition.vessel.name);
 
@@ -250,6 +255,11 @@ export function checkRequisition(requisition, { lineup = null, holidays = [], re
   const many = requisition.ternos.length > 1;
   const v = requisition.vessel;
   const others = related.filter(other => sameShift(other, requisition) && !other.cancelled);
+
+  // Vigia (ex.: VPL – Vigia de Portaló): não é requisitada pela Triunfo. Aparece só para informação, sem conferência.
+  if (isVigia(requisition)) {
+    return { result: "informativo", operation: { key: "vigia", title: "vigia (não é requisitada pela Triunfo)", ref: "—" }, items: [{ level: "ok", text: "Requisição de vigia: não é nossa, aparece só para informação.", ref: "—" }] };
+  }
 
   // CCT CAPATAZIA: criada pelo OGMO junto com toda requisição nossa com capatazia. Sem nenhuma frente nossa com
   // capatazia ativa no mesmo período, ela precisa ser cancelada.

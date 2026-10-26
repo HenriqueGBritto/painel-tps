@@ -51,7 +51,8 @@ const shipOf = name => { const vessel = parseVesselName(name); return normalize(
  * - navio em operação no Lineup sem nenhuma requisição no dia.
  */
 export function missingRequisitions(rows, { now = new Date(), operating = [] } = {}) {
-  const active = rows.filter(row => !row.cancelled && normalize(row.vessel) !== CCT);
+  // Vigia não é requisitada pela Triunfo: não entra no que falta.
+  const active = rows.filter(row => !row.cancelled && !row.vigia && normalize(row.vessel) !== CCT);
   const current = localNow(now), limit = addMinutes(current, WARN_MINUTES);
   const today = current.slice(0, 10);
   const missing = [];
@@ -105,6 +106,7 @@ export async function receiveList(store, input, context) {
     const id = `${row.date}_${row.number}`;
     const stored = await store.get(R.COLLECTION, id);
     if (!stored) { if (!row.cancelled) notDownloaded++; continue; }
+    if (stored.check?.operation?.key === "vigia") row.vigia = true;
     const change = { ogmo: { ...(stored.ogmo || {}), scaled: row.scaled, seenAt: now.toISOString() } };
     if (row.cancelled !== Boolean(stored.cancelled)) {
       Object.assign(change, { cancelled: row.cancelled, cancelledAt: row.cancelled ? now.toISOString() : null });
