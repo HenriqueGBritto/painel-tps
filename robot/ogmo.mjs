@@ -46,6 +46,9 @@ await page.route("**/*", route => {
 let lastAlert = null;
 page.on("dialog", dialog => { if (dialog.type() === "alert") lastAlert = dialog.message(); dialog.dismiss().catch(() => {}); });
 
+/** A tela do IntraWeb está pronta para clicar: funções carregadas e inicialização da página feita (GActivateLock). */
+const ready = () => page.waitForFunction(() => typeof window.SubmitClickConfirm === "function" && typeof window.GActivateLock !== "undefined" && document.querySelector("input[name=IW_TrackID_]"), null, { timeout: 60000 });
+
 /**
  * Executa uma ação que recarrega a página do IntraWeb e espera a nova página ficar utilizável (formulário e funções
  * da tela prontos). Não espera o "load" completo: o servidor do OGMO às vezes demora a entregar imagens.
@@ -54,7 +57,7 @@ async function act(run, { optional = false } = {}) {
   blocked = null;
   try {
     await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: optional ? 6000 : 45000 }), run()]);
-    await page.waitForFunction(() => typeof window.SubmitClick === "function" && document.querySelector("input[name=IW_TrackID_]"), null, { timeout: 30000 });
+    await ready();
   } catch (error) {
     if (blocked) throw new Error(`Ação bloqueada pela trava de segurança: ${blocked}`);
     if (!optional) throw error;
@@ -180,8 +183,20 @@ async function run() {
   log(`Rodada registrada: ${status.active} ativas, ${status.cancelled} canceladas, ${status.missing.length} faltando.`);
 }
 
+/** Até 2 tentativas: o servidor do OGMO às vezes demora. Trava de segurança e login recusado não se repetem. */
+async function runWithRetry() {
+  for (let attempt = 1; ; attempt++) {
+    try { return await run(); }
+    catch (error) {
+      if (attempt >= 2 || /trava de segurança|Não entrou no OGMO|recusou o navegador/.test(error.message)) throw error;
+      log(`Tentativa ${attempt} falhou (${error.message.split("\n")[0]}); entrando de novo em 20 s.`);
+      await pause(20000);
+    }
+  }
+}
+
 try {
-  await run();
+  await runWithRetry();
 } catch (error) {
   console.error("Falha:", error.message);
   await page.screenshot({ path: "falha.png", fullPage: true }).catch(() => {});
