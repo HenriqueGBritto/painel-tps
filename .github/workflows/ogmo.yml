@@ -32,20 +32,24 @@ jobs:
   verificar:
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    # Imagem oficial do Playwright: já traz o Chromium e as bibliotecas do sistema
-    # (instalar a cada rodada levava mais de 4 minutos e estourava a cota do GitHub).
-    # A versão da imagem precisa ser a mesma do playwright em robot/package.json.
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
-      options: --user 1001
+    # Usa o Google Chrome que já vem na máquina do GitHub (ubuntu-latest): sem baixar navegador nem imagem.
+    # Antes era a imagem do Playwright, que levava ~47 s só para preparar a cada rodada.
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: robot/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: robot
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: node ogmo.mjs
         working-directory: robot
         env:
           TZ: America/Sao_Paulo
+          OGMO_NAVEGADOR: chrome
           OGMO_MODO: ${{ inputs.modo || 'normal' }}
           OGMO_DATAS: ${{ inputs.datas }}
           OGMO_PEDIDO: ${{ inputs.pedido }}

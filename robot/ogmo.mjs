@@ -31,7 +31,8 @@ async function panel(path, { method = "GET", body, headers = {} } = {}) {
   return data;
 }
 
-const browser = await chromium.launch();
+// No GitHub, OGMO_NAVEGADOR=chrome usa o Google Chrome que já vem na máquina (sem baixar navegador).
+const browser = await chromium.launch(env.OGMO_NAVEGADOR ? { channel: env.OGMO_NAVEGADOR } : {});
 const context = await browser.newContext({ acceptDownloads: true, locale: "pt-BR", timezoneId: "America/Sao_Paulo", viewport: { width: 1280, height: 900 } });
 const page = await context.newPage();
 page.setDefaultTimeout(30000);
@@ -51,16 +52,16 @@ let lastAlert = null;
 page.on("dialog", dialog => { if (dialog.type() === "alert") lastAlert = dialog.message(); dialog.dismiss().catch(() => {}); });
 
 /** A tela do IntraWeb está pronta para clicar: funções carregadas e inicialização da página feita (GActivateLock). */
-const ready = () => page.waitForFunction(() => typeof window.SubmitClickConfirm === "function" && typeof window.GActivateLock !== "undefined" && document.querySelector("input[name=IW_TrackID_]"), null, { timeout: 60000 });
+const ready = (timeout = 60000) => page.waitForFunction(() => typeof window.SubmitClickConfirm === "function" && typeof window.GActivateLock !== "undefined" && document.querySelector("input[name=IW_TrackID_]"), null, { timeout });
 
 /**
  * Executa uma ação que recarrega a página do IntraWeb e espera a nova página ficar utilizável (formulário e funções
  * da tela prontos). Não espera o "load" completo: o servidor do OGMO às vezes demora a entregar imagens.
  */
-async function act(run, { optional = false } = {}) {
+async function act(run, { optional = false, timeout = 45000 } = {}) {
   blocked = null;
   try {
-    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: optional ? 6000 : 45000 }), run()]);
+    await Promise.all([page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: optional ? 6000 : timeout }), run()]);
     await ready();
   } catch (error) {
     if (blocked) throw new Error(`Ação bloqueada pela trava de segurança: ${blocked}`);
@@ -129,14 +130,17 @@ const unlock = () => page.evaluate(() => {
 async function select(row) {
   if (!row.param) throw new Error(`Requisição ${row.number} sem parâmetro de seleção na grade.`);
   try {
-    await act(() => submit("IWDBGRID1", row.param));
+    await act(() => submit("IWDBGRID1", row.param), { timeout: 15000 });
   } catch (error) {
     if (blocked) throw error;
-    // A tela não respondeu depois do PDF anterior: pesquisa o dia de novo e tenta selecionar outra vez.
-    log(`Seleção de ${row.number} sem resposta; pesquisando ${brDate(row.date)} de novo.`);
+    // A tela não respondeu (OGMO lento ou travado depois do PDF anterior): espera a página assentar,
+    // pesquisa o dia de novo e tenta selecionar outra vez.
+    log(`Seleção de ${row.number} sem resposta em 15 s; pesquisando ${brDate(row.date)} de novo.`);
+    await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+    await ready(45000).catch(() => {});
     await unlock();
     await search(row.date);
-    await act(() => submit("IWDBGRID1", row.param));
+    await act(() => submit("IWDBGRID1", row.param), { timeout: 45000 });
   }
 }
 
@@ -229,8 +233,8 @@ async function runWithRetry() {
     try { return await run(); }
     catch (error) {
       if (attempt >= 2 || /trava de segurança|Não entrou no OGMO|recusou o navegador/.test(error.message)) throw error;
-      log(`Tentativa ${attempt} falhou (${error.message.split("\n")[0]}); entrando de novo em 20 s.`);
-      await pause(20000);
+      log(`Tentativa ${attempt} falhou (${error.message.split("\n")[0]}); entrando de novo em 10 s.`);
+      await pause(10000);
     }
   }
 }

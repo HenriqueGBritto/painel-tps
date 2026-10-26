@@ -171,7 +171,7 @@
     const days = search.de === search.ate ? brDate(search.de) : `${brDate(search.de).slice(0, 5)} a ${brDate(search.ate)}`;
     box.hidden = false;
     box.className = `req-search${search.status === "falhou" ? " is-error" : running ? " is-busy" : " is-ok"}`;
-    box.textContent = search.status === "enviada" ? `Robô do OGMO acionado para ${days}. Ele leva de 1 a 3 minutos para começar; a lista se atualiza sozinha.`
+    box.textContent = search.status === "enviada" ? `Robô do OGMO acionado para ${days}. Ele leva cerca de 1 minuto para começar; a lista se atualiza sozinha.`
       : search.status === "lendo" ? `Lendo o OGMO (${days})…${search.totalDays > 1 ? ` ${search.days} de ${search.totalDays} dias prontos, ${search.active} requisições ativas até agora.` : ""}`
       : search.status === "concluida" ? `Busca no OGMO concluída (${days}) em ${when(search.finishedAt)}: ${search.active} ativas, ${search.cancelled} canceladas.`
       : `A busca no OGMO (${days}) falhou: ${search.error || "sem detalhe"}`;
@@ -190,7 +190,7 @@
         // Cada dia lido já aparece na lista, se estiver no período da tela.
         if (progressed && next.status !== "falhou" && !(next.ate < range().from || next.de > range().to)) await load({ quiet: true, keepSearch: true });
       } catch { follow(search); }
-    }, 15000);
+    }, 5000);
   }
 
   async function requestSearch() {
