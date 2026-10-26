@@ -114,6 +114,8 @@ export async function receiveList(store, input, context) {
     }
     await store.set(R.COLLECTION, id, change, { merge: true });
   }
+  // Reconfere com as regras atuais todos os períodos da rodada (as já escaladas não têm o PDF baixado de novo).
+  for (const row of rows) affected.set(`${row.date}|${row.period}`, { date: row.date, period: row.period });
   for (const { date, period } of affected.values()) await R.recheckShift(store, date, period, context);
   const status = {
     ok: true, lastRunAt: now.toISOString(), runStartedAt: input.startedAt || null, dates,

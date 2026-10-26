@@ -119,3 +119,12 @@ test("vigia (VPL – Vigia de Portaló): não é nossa; aparece só para informa
   ];
   assert.deepEqual(O.missingRequisitions(rows, { now: at("2026-10-26T08:50:00") }), [], "vigia no 07x13 não cobra o 13x19");
 });
+
+test("rodada reconfere com as regras atuais as requisições já guardadas (inclusive escaladas, sem PDF novo)", async () => {
+  const store = memoryStore();
+  const vigia = { number: "25053313-1", vessel: parseVesselName("BBC KHERSON"), local: "ARMAZEM 11", berthing: "Atracado", port: "Rio de Janeiro", date: "2026-10-26", period: "07-13", travelType: "Longo Curso", printedAt: null,
+    ternos: [{ equipe: 1, generalNote: "", fainas: [], observation: "01 VIGIA DE PORTALÓ", functions: [{ code: "VPL", name: "VIGIA DE PORTALÓ", vagas: 1, section: "VIGIA" }] }] };
+  await store.set(R.COLLECTION, "2026-10-26_25053313-1", { id: "2026-10-26_25053313-1", ...vigia, check: { result: "reprovado", operation: { key: null, title: "" }, items: [] }, ogmo: { scaled: true } });
+  await O.receiveList(store, { dates: ["2026-10-26"], rows: [{ date: "2026-10-26", number: "25053313-1", vessel: "BBC KHERSON", period: "07-13", local: "ARMAZEM 11", cancelled: false, scaled: true }] }, { now: at("2026-10-26T10:00:00"), lineup: null });
+  assert.equal((await store.get(R.COLLECTION, "2026-10-26_25053313-1")).check.result, "informativo");
+});
