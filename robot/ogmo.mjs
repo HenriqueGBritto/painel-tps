@@ -63,7 +63,13 @@ const formName = () => page.$eval("input[name=IW_FormName]", input => input.valu
 
 async function login() {
   await page.goto(OGMO, { waitUntil: "load" });
-  if (/Device not supported/i.test(await page.content())) throw new Error("O OGMO recusou o navegador (Device not supported).");
+  // A página inicial do OGMO se redireciona ao abrir: espera o formulário de login aparecer.
+  try {
+    await page.waitForSelector("input[name=EDTEMPRESA]", { timeout: 45000 });
+  } catch {
+    const html = await page.content().catch(() => "");
+    throw new Error(/Device not supported/i.test(html) ? "O OGMO recusou o navegador (Device not supported)." : "A tela de login do OGMO não apareceu.");
+  }
   await page.fill("input[name=EDTEMPRESA]", env.OGMO_EMPRESA);
   await page.fill("input[name=EDTUSUARIO]", env.OGMO_USUARIO);
   await page.fill("input[name=EDTSENHA]", env.OGMO_SENHA);

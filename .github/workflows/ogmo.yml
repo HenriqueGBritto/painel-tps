@@ -28,20 +28,15 @@ jobs:
   verificar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Imagem oficial do Playwright: já traz o Chromium e as bibliotecas do sistema
+    # (instalar a cada rodada levava mais de 4 minutos e estourava a cota do GitHub).
+    # A versão da imagem precisa ser a mesma do playwright em robot/package.json.
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: robot/package-lock.json
       - run: npm ci --no-audit --no-fund
-        working-directory: robot
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('robot/package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
         working-directory: robot
       - run: node ogmo.mjs
         working-directory: robot
