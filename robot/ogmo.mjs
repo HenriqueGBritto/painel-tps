@@ -37,6 +37,10 @@ const context = await browser.newContext({ acceptDownloads: true, locale: "pt-BR
 const page = await context.newPage();
 page.setDefaultTimeout(30000);
 
+// Imagem vazia no lugar das do OGMO: a tela do IntraWeb só inicia (body onload="Initialize()") depois de carregar
+// todas as imagens, e o servidor do OGMO demora a entregá-las. O robô clica pelos nomes, não precisa delas.
+const BLANK_GIF = Buffer.from("R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==", "base64");
+
 // Trava de segurança: nenhum envio ao OGMO fora das ações de consulta.
 let blocked = null;
 await page.route("**/*", route => {
@@ -45,6 +49,7 @@ await page.route("**/*", route => {
     blocked = actionOf(request.postData()) || "(sem ação)";
     return route.abort();
   }
+  if (["image", "media", "font"].includes(request.resourceType())) return route.fulfill({ status: 200, contentType: "image/gif", body: BLANK_GIF });
   return route.continue();
 });
 // Confirmações do OGMO ("Deseja realmente…?") são sempre recusadas; avisos (alert) são lidos e fechados.
