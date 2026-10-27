@@ -64,7 +64,8 @@ const routes = {
     ...(await requisitions.getHolidays(store)),
     canEditHolidays: can(access.user, ACTIONS.configureRequisitions),
     sync: await ogmo.syncStatus(store),
-    search: await ogmo.currentSearch(store)
+    search: await ogmo.currentSearch(store),
+    upcoming: await ogmo.upcomingFromStore(store, { operating: await operating() })
   }) },
   "POST /enviar": { action: ACTIONS.sendRequisitions, raw: true, run: async ({ store, request, access }) => requisitions.submit(store, await readPdfBody(request), actorOf(access), { lineup: await lineup(), files: attachmentsStore() }) },
   "GET /pdf": { action: ACTIONS.readRequisitions, run: async ({ store, url }) => {
@@ -73,6 +74,7 @@ const routes = {
   } },
   "POST /aprovar": { action: ACTIONS.sendRequisitions, run: async ({ store, request, access }) => requisitions.approveWithReason(store, await readJson(request), actorOf(access), { files: attachmentsStore() }) },
   "POST /feriados": { action: ACTIONS.configureRequisitions, run: async ({ store, request, access }) => requisitions.saveHolidays(store, await readJson(request), actorOf(access)) },
+  "GET /proximos": { action: ACTIONS.readRequisitions, run: async ({ store }) => ({ upcoming: await ogmo.upcomingFromStore(store, { operating: await operating() }) }) },
   "GET /da9": { action: ACTIONS.readRequisitions, run: async ({ store, url }) => {
     const { data, name } = await ogmo.readDa9(store, attachmentsStore(), url.searchParams.get("id"));
     return new Response(data, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff" } });

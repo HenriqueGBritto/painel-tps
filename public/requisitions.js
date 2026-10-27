@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const S = window.TpsShifts;
-  const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false, search: null, polling: null };
+  const state = { sync: null, rows: [], holidays: [], customHolidays: false, canEditHolidays: false, started: false, busy: false, open: new Set(), editingHolidays: false, search: null, polling: null, upcoming: [], alertTimer: null };
   const RESULT = {
     reprovado: { label: "Reprovada", css: "is-error" }, confirmar: { label: "Confirmar", css: "is-warn" },
     aprovado: { label: "Aprovada", css: "is-ok" }, cancelada: { label: "Cancelada", css: "is-off" }, informativo: { label: "Vigia", css: "is-off" }, "aprovado-justificado": { label: "Justificada", css: "is-ok" }
@@ -127,8 +127,27 @@
       ${missing.length ? `<ul class="req-missing">${missing.map(item => `<li><strong>${escapeHtml(item.vessel)}</strong>: falta a requisição do ${period(item.period)} de ${brDate(item.date).slice(0, 5)} · limite ${item.deadline.slice(11, 16)} <small>(${escapeHtml(item.reason)})</small></li>`).join("")}</ul>` : ""}`;
   }
 
+  /** Próximos períodos (limites nas próximas 24 h) e o que ainda falta pedir em cada um. */
+  function renderUpcoming() {
+    const box = $("requisitionsUpcoming");
+    const items = (state.upcoming || []).filter(item => deadlineAt(item) > Date.now());
+    if (!items.length) { box.hidden = true; return; }
+    const missingCount = items.filter(item => item.missing.length).length;
+    box.hidden = false;
+    box.className = `req-upcoming${missingCount ? " is-alert" : ""}`;
+    box.innerHTML = `<p class="req-up-title"><strong>Próximos períodos</strong> · ${missingCount ? `${missingCount} ${missingCount === 1 ? "período com requisição faltando" : "períodos com requisição faltando"}` : "tudo pedido até agora"}${alertsOn() ? "" : " · <span>ative os alertas para ser avisado antes do limite</span>"}</p>
+      <ul class="req-up-list">${items.map(item => `<li class="${item.missing.length ? "is-missing" : item.requested ? "is-ok" : "is-none"}">
+        <span class="req-up-period">${period(item.period)} <small>${S.WEEKDAYS[S.weekday(item.date)]} ${brDate(item.date).slice(0, 5)}</small></span>
+        <span class="req-up-deadline">limite ${item.deadline.slice(11, 16)} <small>${left(item)}</small></span>
+        <span class="req-up-status">${item.missing.length
+          ? `Falta pedir: ${item.missing.map(miss => `<strong>${escapeHtml(miss.vessel)}</strong> <small>(${escapeHtml(miss.reason)})</small>`).join(", ")}`
+          : item.requested ? `${item.requested} ${item.requested === 1 ? "requisição pedida" : "requisições pedidas"}` : "Nenhuma requisição (nenhum navio em operação)"}</span>
+      </li>`).join("")}</ul>`;
+  }
+
   function render() {
     renderSync();
+    renderUpcoming();
     const filter = $("requisitionsResult").value;
     const rows = state.rows.filter(row => !filter || (filter === "aprovado" ? row.status.startsWith("aprovado") : row.status === filter)).sort((a, b) => ["cancelada", "informativo"].includes(a.status) - ["cancelada", "informativo"].includes(b.status));
     const counts = Object.fromEntries(["reprovado", "confirmar", "aprovado"].map(key => [key, state.rows.filter(row => key === "aprovado" ? row.status.startsWith("aprovado") : row.status === key).length]));
@@ -169,6 +188,90 @@
     $("requisitionsTo").required = !day;
     $("requisitionsFromText").textContent = day ? "Dia" : "De";
   }
+
+  /* ---------- Alertas no computador: requisição faltando perto do limite do OGMO ---------- */
+
+  const ALERT_KEY = "tps-requisicoes-alertas", SENT_KEY = "tps-requisicoes-alertas-enviados";
+  const REFRESH_MS = 5 * 60000, CHECK_MS = 60000;
+  const storage = {
+    get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* navegador sem armazenamento: alerta só nesta sessão */ } }
+  };
+  const deadlineAt = item => Date.parse(`${item.deadline}-03:00`);
+  function left(item) {
+    const minutes = Math.round((deadlineAt(item) - Date.now()) / 60000);
+    return minutes < 60 ? `em ${minutes} min` : `em ${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
+  }
+  const notificationsSupported = () => "Notification" in window;
+  const alertsOn = () => notificationsSupported() && Notification.permission === "granted" && storage.get(ALERT_KEY) === true;
+
+  function renderAlertButton() {
+    const button = $("requisitionsAlerts");
+    if (!button) return;
+    const on = alertsOn();
+    button.textContent = on ? "Alertas ligados" : "Ativar alertas";
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-pressed", String(on));
+    button.title = on ? "Clique para desligar os alertas neste computador" : "Avisar no computador 1 hora e 30 minutos antes do limite quando faltar requisição";
+  }
+
+  async function toggleAlerts() {
+    if (!notificationsSupported()) { announce("Este navegador não mostra notificações.", true); return; }
+    if (alertsOn()) { storage.set(ALERT_KEY, false); stopAlerts(); renderAlertButton(); renderUpcoming(); announce("Alertas de requisição desligados neste computador."); return; }
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission !== "granted") { announce("O navegador bloqueou as notificações. Libere em Configurações do site (cadeado ao lado do endereço).", true); renderAlertButton(); return; }
+    storage.set(ALERT_KEY, true);
+    renderAlertButton();
+    renderUpcoming();
+    startAlerts();
+    announce("Alertas ligados: o painel avisa 1 hora e 30 minutos antes do limite quando faltar requisição. Funciona com o painel aberto em alguma aba.");
+  }
+
+  /** Registra o alerta como enviado; devolve false se outra aba já enviou. */
+  function claim(key) {
+    const sent = storage.get(SENT_KEY) || {};
+    if (sent[key]) return false;
+    const cutoff = Date.now() - 3 * 86400000;
+    for (const [old, at] of Object.entries(sent)) if (at < cutoff) delete sent[old];
+    sent[key] = Date.now();
+    storage.set(SENT_KEY, sent);
+    return true;
+  }
+
+  function checkAlerts() {
+    if (!alertsOn()) return;
+    const now = Date.now();
+    for (const item of state.upcoming || []) {
+      const minutes = (deadlineAt(item) - now) / 60000;
+      if (!item.missing.length || minutes <= 0 || minutes > 60) continue;
+      const stage = minutes <= 30 ? 30 : 60;
+      if (!claim(`${item.date}|${item.period}|${stage}`)) continue;
+      try {
+        const notification = new Notification(`Falta requisição do ${period(item.period)} · limite ${item.deadline.slice(11, 16)}`, {
+          body: `${item.missing.map(miss => miss.vessel).join(", ")}
+${S.WEEKDAYS[S.weekday(item.date)]} ${brDate(item.date).slice(0, 5)} · faltam ${Math.round(minutes)} min`,
+          tag: `requisicao-${item.date}-${item.period}`, requireInteraction: true, icon: "/favicon.svg"
+        });
+        notification.onclick = () => { window.focus(); window.openRequisitions?.(); notification.close(); };
+      } catch { /* alguns navegadores só notificam via service worker; a lista na aba continua valendo */ }
+    }
+    if (state.started) renderUpcoming();
+  }
+
+  async function refreshUpcoming() {
+    try { state.upcoming = (await api("/proximos")).upcoming || []; }
+    catch { /* sem login ou sem acesso: tenta de novo na próxima volta */ }
+    checkAlerts();
+  }
+
+  function startAlerts() {
+    stopAlerts();
+    if (!alertsOn()) return;
+    let ticks = 0;
+    const tick = () => { (ticks++ % (REFRESH_MS / CHECK_MS) === 0 ? refreshUpcoming() : Promise.resolve(checkAlerts())).finally(() => { state.alertTimer = setTimeout(tick, CHECK_MS); }); };
+    tick();
+  }
+  function stopAlerts() { clearTimeout(state.alertTimer); state.alertTimer = null; }
 
   /* ---------- Busca no OGMO sob demanda ---------- */
 
@@ -220,6 +323,7 @@
       state.holidays = data.holidays;
       state.customHolidays = data.custom;
       state.canEditHolidays = data.canEditHolidays;
+      state.upcoming = data.upcoming || [];
       if (!keepSearch && data.search && (!state.search || state.search.id !== data.search.id || !state.polling)) follow(data.search);
       render();
       if (!quiet) announce("");
@@ -270,6 +374,8 @@
     $("requisitionsFilters").addEventListener("submit", event => { event.preventDefault(); load(); });
     $("requisitionsMode").addEventListener("change", () => { setMode(); load(); });
     $("requisitionsSearch").addEventListener("click", requestSearch);
+    $("requisitionsAlerts").addEventListener("click", toggleAlerts);
+    renderAlertButton();
     $("requisitionsResult").addEventListener("change", render);
     $("requisitionsFile").addEventListener("change", event => { upload(event.target.files); event.target.value = ""; });
     const drop = $("requisitionsDrop");
@@ -288,4 +394,6 @@
   }
 
   window.requisitionsPanel = { show };
+  // Alertas ligados neste computador: conferem em segundo plano, com o painel aberto em qualquer aba.
+  if (alertsOn()) setTimeout(startAlerts, 3000);
 })();

@@ -185,3 +185,24 @@ test("robô: dias da busca, DA9 reconhecido pelo texto e número em maiúsculas"
   const da9 = "DATA OPERAÇÃO: 26/10/2026 NAVIO: BBC KHERSON REQUISIÇÃO: 25053313-1 PERÍODO: 07-13 Matrícula Nome R/C Seção";
   assert.deepEqual([pdfMatches(da9, "25053313-1"), isDa9(da9), isDa9("Requisição: 25053313-1 Navio: BBC KHERSON")], [true, true, false]);
 });
+
+test("próximos períodos: mostra o que falta até 24 h, encadeia quem já faltava e ignora vigia, CCT e limite vencido", () => {
+  const rows = [
+    { date: "2026-10-27", vessel: "LIBERTY BAY", period: "07-13", cancelled: false },
+    { date: "2026-10-27", vessel: "LIBERTY BAY", period: "13-19", cancelled: false },
+    { date: "2026-10-27", vessel: "ASALET", period: "13-19", cancelled: false },
+    { date: "2026-10-27", vessel: "CCT CAPATAZIA", period: "13-19", cancelled: false },
+    { date: "2026-10-27", vessel: "BBC KHERSON", period: "13-19", cancelled: false, vigia: true },
+    { date: "2026-10-27", vessel: "ASALET", period: "19-01", cancelled: true }
+  ];
+  // 10:00: limite do 13x19 (09:45) já passou; próximos: 19x01 (15:45), 01x07 (18:45), 07x13 de amanhã (03:45), 13x19 de amanhã (09:45).
+  const list = O.upcomingPeriods(rows, { now: at("2026-10-27T10:00:00"), operating: ["SKOMER ISLAND"] });
+  assert.deepEqual(list.map(item => `${item.date} ${item.period}`), ["2026-10-27 19-01", "2026-10-27 01-07", "2026-10-28 07-13", "2026-10-28 13-19"]);
+  const first = list[0];
+  assert.deepEqual(first.missing.map(m => m.vessel), ["LIBERTY BAY", "ASALET", "SKOMER ISLAND"], "trabalharam no 13x19 (a cancelada não conta) + navio em operação sem requisição");
+  assert.equal(first.missing[0].reason, "trabalhou no 13x19");
+  assert.deepEqual(list[1].missing.map(m => m.vessel), ["LIBERTY BAY", "ASALET", "SKOMER ISLAND"], "quem faltava no 19x01 continua faltando no 01x07");
+  assert.ok(!list.some(item => item.missing.some(m => /KHERSON|CCT/.test(m.vessel))), "vigia e CCT não são cobradas");
+  const done = O.upcomingPeriods([...rows, { date: "2026-10-27", vessel: "LIBERTY BAY", period: "19-01", cancelled: false }], { now: at("2026-10-27T10:00:00") });
+  assert.deepEqual([done[0].requested, done[0].missing.map(m => m.vessel)], [1, ["ASALET"]]);
+});

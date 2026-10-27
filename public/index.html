@@ -261,7 +261,7 @@
         <div id="activitiesSettings"></div>
       </section>
       <section id="requisicoes" class="tab-panel activities-panel">
-        <div class="base-heading"><div><p class="eyebrow">ESTIVA · OGMO</p><h2>Requisições de estiva</h2><p>Envie o PDF impresso pelo sistema do OGMO. O painel confere pela instrução de trabalho.</p></div></div>
+        <div class="base-heading"><div><p class="eyebrow">ESTIVA · OGMO</p><h2>Requisições de estiva</h2><p>Envie o PDF impresso pelo sistema do OGMO. O painel confere pela instrução de trabalho.</p></div><button type="button" class="production-refresh act-alerts" id="requisitionsAlerts" aria-pressed="false">Ativar alertas</button></div>
         <div id="requisitionsPanel">
           <div class="req-upload">
             <label class="req-drop" id="requisitionsDrop"><input type="file" id="requisitionsFile" accept="application/pdf,.pdf" multiple><strong>Arraste o PDF da requisição aqui ou clique para escolher</strong><span>Um arquivo por requisição, com todos os ternos. Pode enviar vários de uma vez.</span></label>
@@ -270,6 +270,7 @@
           <form class="base-filters" id="requisitionsFilters" aria-label="Filtros das requisições"><label>Mostrar<select id="requisitionsMode"><option value="periodo">Período</option><option value="dia">Um dia</option></select></label><label id="requisitionsFromLabel"><span id="requisitionsFromText">De</span><input id="requisitionsFrom" type="date" required></label><label id="requisitionsToLabel">Até<input id="requisitionsTo" type="date" required></label><label>Resultado<select id="requisitionsResult"><option value="">Todos</option><option value="reprovado">Reprovadas</option><option value="confirmar">Para confirmar</option><option value="aprovado">Aprovadas</option></select></label><button type="submit" class="act-button is-primary">Filtrar</button><button type="button" class="act-button" id="requisitionsSearch" title="O robô entra no OGMO, lê as requisições desses dias, confere e baixa o PDF e o DA9 (leva alguns minutos)">Buscar no OGMO</button></form>
           <p class="req-search" id="requisitionsSearchStatus" role="status" aria-live="polite" hidden></p>
           <div class="req-sync" id="requisitionsSync" role="status" hidden></div>
+          <section class="req-upcoming" id="requisitionsUpcoming" aria-label="Próximos períodos" hidden></section>
           <div class="req-summary" id="requisitionsSummary"></div>
           <div id="requisitionsList"></div>
           <details class="req-holidays-box" id="requisitionsHolidays"></details>

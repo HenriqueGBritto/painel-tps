@@ -79,6 +79,53 @@ export function missingRequisitions(rows, { now = new Date(), operating = [] } =
   return missing;
 }
 
+/** Antecedência da lista "próximos períodos" da aba: limites de pedido nas próximas 24 horas. */
+export const PENDING_HOURS = 24;
+
+/**
+ * Próximos períodos (limite de pedido nas próximas PENDING_HOURS) e o que ainda falta pedir em cada um:
+ * - navio (ou balsa) que teve requisição no período anterior, ou que já faltava nele, e ainda não tem a deste;
+ * - navio em operação no Lineup sem nenhuma requisição no dia.
+ * Os períodos sem falta também entram (com o número de requisições já pedidas).
+ */
+export function upcomingPeriods(rows, { now = new Date(), operating = [], hours = PENDING_HOURS } = {}) {
+  const active = rows.filter(row => !row.cancelled && !row.vigia && normalize(row.vessel) !== CCT);
+  const current = localNow(now), limit = addMinutes(current, hours * 60);
+  const today = current.slice(0, 10);
+  const original = new Map(active.map(row => [normalize(row.vessel), row.vessel]));
+  const ships = [...new Set(operating.map(normalize))].filter(Boolean);
+  const carried = new Map(); // período → navios que já faltavam nele (seguem faltando no próximo)
+  const result = [];
+  for (const date of [S.addDays(today, -1), today, S.addDays(today, 1)]) {
+    for (const period of ORDER) {
+      const deadline = deadlineOf(date, period);
+      if (deadline > limit) return result;
+      const prev = previousPeriod(date, period);
+      const inShift = active.filter(row => row.date === date && row.period === period);
+      const here = new Set(inShift.map(row => normalize(row.vessel)));
+      const before = new Set([...active.filter(row => row.date === prev.date && row.period === prev.period).map(row => normalize(row.vessel)), ...(carried.get(`${prev.date}|${prev.period}`) || [])]);
+      const lacking = [...before].filter(name => !here.has(name));
+      carried.set(`${date}|${period}`, lacking);
+      if (deadline <= current) continue; // limite já passou
+      const shipsToday = new Set(active.filter(row => row.date === date).map(row => shipOf(row.vessel)));
+      const missing = [
+        ...lacking.map(name => ({ vessel: original.get(name) || name, reason: `trabalhou no ${prev.period.replace("-", "x")}` })),
+        ...ships.filter(name => !shipsToday.has(name) && !lacking.includes(name)).map(name => ({ vessel: name, reason: "em operação no Lineup, sem requisição no dia" }))
+      ];
+      result.push({ date, period, deadline, requested: here.size, missing });
+    }
+  }
+  return result;
+}
+
+/** Os próximos períodos a partir das requisições guardadas (as do robô e as enviadas pela equipe). */
+export async function upcomingFromStore(store, { now = new Date(), operating = [] } = {}) {
+  const today = localNow(now).slice(0, 10);
+  const records = await store.list(R.COLLECTION, { from: `${S.addDays(today, -1)}_`, to: `${S.addDays(today, 1)}_~` });
+  const rows = records.map(record => ({ date: record.date, period: record.period, vessel: record.vessel?.raw || String(record.vessel || ""), cancelled: Boolean(record.cancelled), vigia: record.check?.operation?.key === "vigia" }));
+  return upcomingPeriods(rows, { now, operating });
+}
+
 /** Cada PDF baixado do OGMO passa pela mesma conferência dos PDFs enviados pela equipe. */
 export async function receivePdf(store, input, context) {
   return R.submit(store, { bytes: input.bytes, name: input.name }, ROBOT, { ...context, source: "ogmo", ogmo: { scaled: Boolean(input.scaled), seenAt: (context.now || new Date()).toISOString() } });

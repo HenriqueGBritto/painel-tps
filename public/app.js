@@ -823,6 +823,7 @@ document.fonts?.addEventListener?.("loadingdone",()=>{if(state.dataLoaded)render
 init().catch(error=>{document.querySelector("main").innerHTML=`<div class="empty"><strong>Não foi possível abrir o painel.</strong><p>${escapeHtml(error.message)}</p></div>`});
 /* Clique numa notificação de atividade: abre a lista do turno. */
 window.openActivities=()=>{state.menu="atividades";state.activityView="turno";activateNavigation()};
+window.openRequisitions=()=>{state.menu="requisicoes";activateNavigation()};
 /* Ficha de pessoa aberta de outra subaba da Equipe: vai para Pessoas. */
 window.openTeamView=view=>{state.menu="equipe";state.teamView=view;activateNavigation()};
 /* Abre ou fecha um grupo do menu lateral (Operação, RH). */
