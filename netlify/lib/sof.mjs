@@ -2,8 +2,8 @@
    aba "Base SOF", 2025 e 2026) + SOFs enviados pela equipe (Firestore, coleção sofVessels).
    O dicionário de responsáveis começa com o histórico e aprende com cada SOF salvo (documento sofConfig/dictionary).
    A desatracação, o berço e o cliente vêm da planilha de navios sempre que o navio for encontrado nela. */
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+// O JSON entra no pacote da função: ler o arquivo pelo caminho falhava no Netlify, onde import.meta.url aponta para a função.
+import initialSof from "./initial-sof.json" with { type: "json" };
 import "../../public/sof-core.js";
 
 export const Sof = globalThis.TpsSof;
@@ -16,9 +16,8 @@ let seedCache = null;
 /** Histórico da Base SOF, com a chave de cada descrição já calculada. */
 export function seed() {
   if (seedCache) return seedCache;
-  const raw = JSON.parse(readFileSync(fileURLToPath(new URL("./initial-sof.json", import.meta.url)), "utf8"));
-  for (const vessel of raw.vessels) vessel.events = vessel.events.map(expandEvent);
-  return seedCache = raw;
+  const raw = initialSof;
+  return seedCache = { ...raw, vessels: raw.vessels.map(vessel => ({ ...vessel, events: vessel.events.map(expandEvent) })) };
 }
 export function useSeed(value) { seedCache = value; }
 
