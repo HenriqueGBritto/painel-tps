@@ -8,9 +8,10 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 
 | Base | Arquivo no Drive | Usada em |
 |---|---|---|
-| Navios | `dados_navios_dinamico_triunfo.xlsm` (ID `1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm`) | Operacional, Ocupação, Ferro gusa |
+| Navios | `dados_navios_dinamico_triunfo.xlsm` (ID `1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm`) | Navios em andamento, desatracação/berço/cliente da Base SOF, Ferro gusa |
 | Lineup | Aba `LINEUP` da planilha de produção "outras" (Google Planilhas, ID `1KDStqZVY5vBG4LwByytYa2QSyNcjg9KQJXlV1rN43PU`) | Lineup e peso previsto dos navios atracados |
 | Indicadores | `Base - Indicadores Operacionais TPS.xlsx` (ID `12ionZt6pJ7yeX59EUX-rppOCugcvp9F7`) | Descarga e Pesagem |
+| Base SOF | Histórico fixo `netlify/lib/initial-sof.json` (aba Base SOF, 2025–2026) + SOFs enviados no painel (Firestore) | Operacional e Ocupação |
 | Equipe | Planilha da equipe TPS (arquivo .xlsx no Drive, ID `1qeQgIOmbg9jW1l0id6Sgt39y657PTzbM`) | Aba Equipe (somente leitura) |
 
 - As planilhas precisam estar compartilhadas como **"Qualquer pessoa com o link – Leitor"**.
@@ -35,6 +36,18 @@ O sino mostra alertas calculados na hora, a partir do que o painel já tem guard
 - **Passagem não recebida** (Atividades): o turno atual começou há mais de 30 minutos e ninguém confirmou o recebimento.
 
 Os limites ficam em `LIMITS`, em `netlify/lib/alerts.mjs`. Por enquanto os alertas aparecem só no painel; envio por e-mail precisa de um serviço de e-mail configurado.
+
+## Operacional e Ocupação (Base SOF)
+
+Os indicadores Operacional e Ocupação vêm dos Statement of Facts (SOF), não mais da planilha de navios.
+
+- **Histórico:** a aba "Base SOF" da planilha de indicadores, só 2025 e 2026, convertida uma vez para `netlify/lib/initial-sof.json` por `node scripts/import-base-sof.mjs` (sem argumento baixa a planilha do Google; com um .xlsx, lê o arquivo). Rodar de novo regera o arquivo; os SOFs enviados no painel não são afetados.
+- **SOFs novos:** botão **Enviar SOF** (qualquer pessoa logada, por enquanto). O Excel é lido no navegador (`public/sof-core.js`), nos modelos Rev04 e Revisão 03: o painel acha a tabela pelos nomes das colunas (Date, From, To, Stoppages…), repete a data nas linhas do mesmo dia, ignora "Period Total" e põe a madrugada listada depois da noite no dia seguinte. Atracação, início e término vêm do quadro de eventos (Made all fast, Commenced/Completed). Antes de salvar dá para corrigir navio, carga, operação, volume e horários. Reenviar o SOF do mesmo navio substitui o anterior; um SOF enviado também substitui o mesmo navio do histórico.
+- **Desatracação, berço e cliente:** da planilha de navios, pelo nome do navio e pela atracação mais próxima (até 5 dias). Sem o navio na planilha, vale o que estiver no SOF ou na Base SOF (marcado com * na lista).
+- **Responsáveis:** cada descrição (sem números, pontuação e palavras como "not worked due to") guarda quantas vezes recebeu cada responsável. Com 90% ou mais para o mesmo, ele é aplicado sozinho; histórico dividido pede confirmação; descrição nova pede escolha. "Loading/Discharging…" vira Operação (carga) e "Rain" vira Chuva. A coluna Responsibility do modelo antigo, quando preenchida, vale. As escolhas de cada SOF salvo entram no dicionário (Firestore, `sofConfig/dictionary`); o botão **Responsáveis** mostra o dicionário e permite fixar um responsável.
+- **Cálculos (como na Base SOF):** o tempo de cada responsável é a soma das durações das ocorrências, proporcional ao tempo de operação (início → término). Prancha bruta = volume ÷ tempo de operação; líquida = volume ÷ tempo operando (Cargo); Triunfo = volume ÷ (Cargo + Terminal). Ocupação de berço = tempo atracado ÷ tempo do período, por berço, sem contar duas vezes navios ao mesmo tempo. Mês pela data de início da operação.
+- **Comparação:** com um ano escolhido, cada indicador mostra a variação contra o ano anterior. No ano do último SOF, a comparação usa de janeiro até o mês desse SOF.
+- Rotas: `netlify/functions/sof.mjs`; regras do servidor: `netlify/lib/sof.mjs`; testes: `tests/sof.test.mjs`.
 
 ## Aba Descarga
 

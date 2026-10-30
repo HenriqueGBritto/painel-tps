@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="brand.css">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="discharge.css">
+  <link rel="stylesheet" href="sof.css">
   <link rel="stylesheet" href="navigation.css">
   <link rel="stylesheet" href="insights.css">
   <link rel="stylesheet" href="activities.css">
@@ -149,7 +150,6 @@
           </article>
         </section>
 
-        <section class="active-card" id="activeOverview" data-category="operacional" hidden><div class="card-heading"><div><p class="eyebrow">OPERAÇÕES ATUAIS</p><h2>Navios em andamento</h2></div><span class="active-note">Clique em um navio para ver detalhes</span></div><div class="active-list" id="activeOverviewList"></div></section>
 
         <section class="mini-card occupancy-by-berth" data-category="ocupacao"><div class="card-heading compact"><div><p class="eyebrow">OCUPAÇÃO DE BERÇO</p><h2>Por berço</h2></div></div><div id="occupancyBreakdown" class="occupancy-list"></div></section>
 
@@ -202,6 +202,28 @@
         </section>
       </section>
 
+      <section id="sof" class="tab-panel operational-base-panel sof-panel">
+        <div class="base-heading"><div><p class="eyebrow">INDICADORES · BASE SOF</p><h2 id="sofTitle">Operacional</h2><p>Statement of Facts de 2025 e 2026. Desatracação e berço vêm da planilha de navios.</p></div>
+          <div class="sof-actions"><button type="button" class="base-upload" id="sofOpenDictionary">Responsáveis</button><label class="base-upload sof-file">Enviar SOF <span aria-hidden="true">↑</span><input type="file" id="sofFile" accept=".xlsx,.xlsm,.xls"></label></div></div>
+        <section class="base-sheet sof-upload" id="sofUpload" aria-live="polite" hidden></section>
+        <section class="base-sheet sof-upload" id="sofDictionary" hidden></section>
+        <div class="base-filters" aria-label="Filtros da Base SOF"><label>Ano<select id="sofYear"></select></label><label>Mês<select id="sofMonth"></select></label><label>Carga<select id="sofCargo"></select></label><label>Operação<select id="sofOperation"></select></label><label>Berço<select id="sofBerth"></select></label><label class="base-search">Navio<input id="sofVessel" type="search" list="sofVesselList" placeholder="Buscar navio" autocomplete="off" spellcheck="false"><datalist id="sofVesselList"></datalist></label><button type="button" id="sofClear" class="base-reset">Limpar filtros</button></div>
+        <p class="base-status" id="sofStatus" role="status" aria-live="polite"></p>
+        <p class="sof-summary" id="sofSummary"></p>
+        <div class="base-kpis sof-kpis" id="sofKpis" aria-label="Indicadores principais"></div>
+        <div data-sof-view="operacional"><section class="active-card" id="activeOverview" data-category="operacional" hidden><div class="card-heading"><div><p class="eyebrow">OPERAÇÕES ATUAIS</p><h2>Navios em andamento</h2></div><span class="active-note">Clique em um navio para ver detalhes</span></div><div class="active-list" id="activeOverviewList"></div></section></div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">COMPARAÇÃO ANUAL</p><h3 id="sofChartTitle">Mês a mês</h3></div><div class="base-chart-tools"><div class="sof-legend-row" id="sofChartLegend"></div><label class="sof-metric">Indicador<select id="sofMetric"></select></label></div></div>
+          <div class="base-chart-scroll"><div class="sof-chart" id="sofChart"></div></div>
+          <p class="base-footnote">Mês pela data de início da operação; na ocupação, pelo tempo atracado dentro de cada mês. Passe o mouse numa coluna para ver o valor.</p>
+          <details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead id="sofChartHead"></thead><tbody id="sofChartRows"></tbody></table></div></details></section>
+        <div class="sof-grid" data-sof-view="operacional">
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">TEMPO DE OPERAÇÃO</p><h3>Por responsável</h3></div><span>traço = mesmo período do ano anterior</span></div><div id="sofResponsibles" class="sof-resp-list"></div><p class="base-footnote">Como na Base SOF: as durações das ocorrências são proporcionais e somam o tempo de operação (início → término). “Operação (carga)” é o tempo operando; o resto é paralisação.</p></section>
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PARALISAÇÕES</p><h3>Principais motivos</h3></div></div><div class="sof-chips" id="sofStopFilter" role="group" aria-label="Filtrar por responsável"></div><div class="base-occurrence-list" id="sofStoppages"></div></section>
+        </div>
+        <section class="base-sheet" data-sof-view="operacional"><div class="base-sheet-head"><div><p class="eyebrow">PRANCHA</p><h3>Por carga</h3></div><span>padrão = prancha de referência da Base SOF</span></div><div class="base-table-scroll"><table class="base-table"><thead><tr><th>Carga</th><th>Navios</th><th>Volume (t)</th><th>Bruta</th><th>Líquida</th><th>Triunfo</th><th>Padrão</th><th>Bruta ÷ padrão</th></tr></thead><tbody id="sofCargoRows"></tbody></table></div></section>
+        <section class="base-sheet" data-sof-view="ocupacao"><div class="base-sheet-head"><div><p class="eyebrow">OCUPAÇÃO DE BERÇO</p><h3>Por berço</h3></div><span>traço = mesmo período do ano anterior</span></div><div id="sofBerths" class="sof-resp-list"></div><p class="base-footnote">Tempo atracado (atracação → desatracação) sobre o tempo do período, por berço. Navios no mesmo berço ao mesmo tempo contam uma vez. No ano em andamento, o período vai até o último SOF da base.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">NAVIOS</p><h3>Operações no período</h3></div><span id="sofVesselCount"></span></div><div class="base-table-scroll"><table class="base-table sof-vessels"><thead><tr><th>Navio</th><th>Berço</th><th>Atracação</th><th>Início</th><th>Término</th><th>Desatracação</th><th>Volume (t)</th><th>Prancha bruta</th><th>Prancha líquida</th><th>Parado</th></tr></thead><tbody id="sofVesselRows"></tbody></table></div><p class="base-footnote">Clique num navio para ver as ocorrências. * desatracação do SOF ou da Base SOF (navio não encontrado na planilha de navios).</p></section>
+      </section>
       <section id="descarga" class="tab-panel operational-base-panel">
         <div class="base-heading"><div><p class="eyebrow">BASE DE INDICADORES OPERACIONAIS</p><h2>Descarga de ferro gusa</h2><p>Volume e ocorrências pela data da descarga.</p></div><a class="base-upload" id="dischargeSheetLink" href="#" target="_blank" rel="noopener" hidden>Abrir planilha <span aria-hidden="true">↗</span></a></div>
         <div class="base-filters" aria-label="Filtros de descarga"><label>Ano<select id="dischargeYear"></select></label><label>Mês<select id="dischargeMonth"></select></label><label>De<input id="dischargeStart" type="date"></label><label>Até<input id="dischargeEnd" type="date"></label><button type="button" id="dischargeLastWeek" class="base-reset">Últimos 7 dias</button></div>
@@ -298,6 +320,7 @@
   <script src="auth.js"></script>
   <script src="xlsx.full.min.js"></script>
   <script src="metrics.js"></script>
+  <script src="sof-core.js"></script>
   <script src="url-state.js"></script>
   <script src="shifts.js"></script>
   <script src="activities.js"></script>
@@ -305,6 +328,7 @@
   <script src="team.js"></script>
   <script src="production.js"></script>
   <script src="discharge.js"></script>
+  <script src="sof.js"></script>
   <script src="access-admin.js"></script>
   <script src="requisitions.js"></script>
   <script src="alerts.js"></script>

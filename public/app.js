@@ -331,11 +331,12 @@ function activateNavigation(){
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-team]").forEach(button=>{const active=button.dataset.team===state.teamView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"geral"):state.menu==="acessos"?"acessos":state.menu==="requisicoes"?"requisicoes":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"sof"):state.menu==="acessos"?"acessos":state.menu==="requisicoes"?"requisicoes":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
-  if(visible==="geral"&&state.indicator==="operacional"&&state.dataLoaded)render();
+  // Operacional e Ocupação usam a Base SOF (sof.js); "Navios em andamento" continua vindo da planilha de navios.
+  if(visible==="sof"){window.sofPanel?.show(state.indicator);if(state.dataLoaded)renderActiveOverview()}
   if(visible==="lineup"&&state.dataLoaded)renderLineup();
   if(visible==="mares")renderTides();
   if(visible==="producao")window.productionPanel?.load();

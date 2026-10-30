@@ -20,7 +20,9 @@ export const ACTIONS = {
   readAlerts: "alertas:ver",
   readRequisitions: "requisicoes:ver",
   sendRequisitions: "requisicoes:enviar",
-  configureRequisitions: "requisicoes:configurar"
+  configureRequisitions: "requisicoes:configurar",
+  readSof: "sof:ver",
+  sendSof: "sof:enviar"
 };
 
 /** Acessos que liberam cada ação (basta ter um). Lista vazia = qualquer pessoa logada. */
@@ -42,7 +44,10 @@ export const REQUIRED = {
   [ACTIONS.readRequisitions]: ["requisicoes"],
   [ACTIONS.sendRequisitions]: ["requisicoes"],
   // Feriados mudam a capatazia esperada de todos: só quem configura as Atividades ou administra.
-  [ACTIONS.configureRequisitions]: ["atividades-config", "admin"]
+  [ACTIONS.configureRequisitions]: ["atividades-config", "admin"],
+  [ACTIONS.readSof]: ["indicadores"],
+  // Por enquanto qualquer pessoa logada envia SOF; os acessos serão separados depois.
+  [ACTIONS.sendSof]: []
 };
 
 export function can(user, action) {

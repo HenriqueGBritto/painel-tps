@@ -6,7 +6,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["netlify/lib/initial-operations.json", "netlify/lib/initial-discharge.json"]
+  included_files = ["netlify/lib/initial-operations.json", "netlify/lib/initial-discharge.json", "netlify/lib/initial-sof.json"]
 
 [[headers]]
   for = "/api/*"
