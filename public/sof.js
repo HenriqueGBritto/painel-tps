@@ -385,6 +385,63 @@
     renderDictionary();
   }
 
+  /* ---------- Exportação para Excel ---------- */
+
+  // Datas como data do Excel (hora de Brasília), para o arquivo poder ser filtrado e somado.
+  const xlDate = iso => { const t = Date.parse(iso || ""); return Number.isFinite(t) ? { t: "n", v: (t - 3 * 3600000) / 86400000 + 25569, z: "dd/mm/yyyy hh:mm" } : null; };
+  const xlDay = day => /^\d{4}-\d{2}-\d{2}$/.test(day || "") ? { t: "n", v: Date.parse(day) / 86400000 + 25569, z: "dd/mm/yyyy" } : day || "";
+  const xlNum = (value, z = "#,##0.00") => value === null || value === undefined || !Number.isFinite(value) ? null : { t: "n", v: value, z };
+  const xlHours = daysValue => xlNum(daysValue === null || daysValue === undefined ? null : daysValue * 24);
+  function sheet(header, rows, widths) {
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    ws["!cols"] = widths.map(wch => ({ wch }));
+    ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: header.length - 1 } }) };
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    return ws;
+  }
+
+  async function exportBase() {
+    const button = $("sofExport");
+    button.disabled = true;
+    $("sofStatus").textContent = "Montando o Excel da Base SOF…";
+    try {
+      const response = await fetch("/api/sof/exportar");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Não foi possível exportar a Base SOF.");
+      const origin = v => v.source === "sof" ? "SOF enviado" : "Histórico";
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, sheet(
+        ["ID", "Origem", "Navio", "Operação", "Carga", "Cliente", "Berço", "Atracação", "Início da operação", "Fim da operação", "Desatracação", "Toneladas",
+          "Espera p/ operar (h)", "Tempo atracado (h)", "Tempo de operação (h)", ...S.RESPONSIBLES.map(n => `Horas: ${label(n)}`),
+          "Prancha bruta (t/dia)", "Prancha líquida (t/dia)", "Prancha Triunfo (t/dia)", "Ocorrências", "Na planilha de navios", "Arquivo do SOF", "Enviado por", "Enviado em"],
+        body.vessels.map(v => {
+          const s = v.summary;
+          return [v.id, origin(v), v.vessel, v.operation, v.cargo, v.client || "", v.berth || "", xlDate(v.berthStart), xlDate(v.operationStart), xlDate(v.operationEnd), xlDate(v.berthEnd), xlNum(v.tons, "#,##0.000"),
+            xlHours(s.waitDays), xlHours(s.berthDays), xlHours(s.operationDays), ...S.RESPONSIBLES.map(n => xlHours(s.byResponsible[n])),
+            xlNum(s.grossRate, "#,##0"), xlNum(s.netRate, "#,##0"), xlNum(s.triunfoRate, "#,##0"), v.events.length, v.matched ? "Sim" : "Não", v.fileName || "", v.savedBy || "", xlDate(v.savedAt)];
+        }),
+        [16, 12, 26, 13, 18, 22, 12, 16, 16, 16, 16, 12, 11, 11, 11, ...S.RESPONSIBLES.map(() => 11), 12, 12, 12, 11, 11, 30, 18, 16]), "Navios");
+      XLSX.utils.book_append_sheet(book, sheet(
+        ["ID do navio", "Navio", "Origem", "Data", "Início", "Fim", "Duração (min)", "Período", "Terno", "Porão", "Descrição", "Responsável", "Volume", "Peso (t)"],
+        body.vessels.flatMap(v => v.events.map(e => [v.id, v.vessel, origin(v), xlDay(e.date), xlDate(e.start), xlDate(e.end), e.minutes, e.period || "", e.gang || "", e.hold || "",
+          e.description, label(e.responsible), xlNum(e.volume, "#,##0"), xlNum(e.weight, "#,##0.000")])),
+        [16, 24, 12, 11, 16, 16, 10, 9, 8, 8, 70, 14, 9, 10]), "Ocorrências");
+      XLSX.utils.book_append_sheet(book, sheet(
+        ["Descrição", "Responsável fixado", "Responsável mais usado", "% do mais usado", "Vezes usada", ...S.RESPONSIBLES.map(label)],
+        Object.values(body.dictionary).map(entry => {
+          const rank = S.ranking(entry);
+          return [entry.text, entry.fixed ? label(entry.fixed) : "", rank.top ? label(rank.top) : "", xlNum(rank.share, "0%"), rank.total, ...S.RESPONSIBLES.map(n => entry.counts[n] || null)];
+        }).sort((a, b) => b[4] - a[4]),
+        [70, 14, 16, 10, 10, ...S.RESPONSIBLES.map(() => 10)]), "Dicionário");
+      XLSX.writeFile(book, `base-sof-${new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)}.xlsx`);
+      $("sofStatus").textContent = "";
+    } catch (error) {
+      $("sofStatus").textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   /* ---------- Eventos ---------- */
 
   function setup() {
@@ -395,6 +452,7 @@
     $("sofStopFilter").addEventListener("click", event => { const b = event.target.closest("[data-resp]"); if (!b) return; state.stopResponsible = b.dataset.resp; render(); });
     $("sofFile").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) readFile(file); });
     $("sofOpenDictionary").addEventListener("click", openDictionary);
+    $("sofExport").addEventListener("click", exportBase);
     $("sofVesselRows").addEventListener("click", event => { const row = event.target.closest("[data-sof-id]"); if (row) openVessel(row.dataset.sofId); });
     $("sofVesselRows").addEventListener("keydown", event => { const row = event.target.closest("[data-sof-id]"); if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openVessel(row.dataset.sofId); } });
     $("vesselList").addEventListener("click", event => { const b = event.target.closest("[data-sof-delete]"); if (b) deleteVessel(b.dataset.sofDelete); });

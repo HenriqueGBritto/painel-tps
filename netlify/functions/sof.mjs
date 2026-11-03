@@ -1,6 +1,7 @@
 /* API da Base SOF (indicadores Operacional e Ocupação).
    GET    /api/sof                 navios (histórico + enviados) com o resumo de cada um, para os indicadores
    GET    /api/sof/navio?id=       um navio com todas as ocorrências
+   GET    /api/sof/exportar        todos os navios com as ocorrências e o dicionário (exportação para Excel)
    GET    /api/sof/planilha?navio=&inicio=   navio correspondente na planilha de navios
    GET    /api/sof/dicionario      dicionário de responsáveis (descrição → contagens e responsável fixo)
    POST   /api/sof/dicionario      { key, responsible } fixa o responsável de uma descrição (vazio solta)
@@ -48,6 +49,10 @@ export default async function handler(request) {
     const [vessels, records] = await Promise.all([sof.allVessels(store), operations()]);
     const vessel = vessels.find(v => v.id === id);
     return vessel ? json({ vessel: sof.enrich(vessel, records) }) : json({ error: "Navio não encontrado." }, 404);
+  }
+  if (reading && route === "exportar") {
+    const [vessels, records, dictionary] = await Promise.all([sof.allVessels(store), operations(), sof.dictionary(store)]);
+    return json({ vessels: vessels.map(v => sof.exportOf(sof.enrich(v, records))), dictionary });
   }
   if (reading && route === "dicionario") return json({ dictionary: await sof.dictionary(store), autoShare: sof.Sof.AUTO_SHARE });
   if (reading && route === "planilha") {

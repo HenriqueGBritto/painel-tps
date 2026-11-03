@@ -121,6 +121,14 @@ export function summaryOf(vessel) {
   return { ...rest, events: events.length, summary: { ...summary, stoppages: summary.stoppages.slice(0, 25) } };
 }
 
+/** Navio completo para a exportação: resumo calculado + ocorrências sem os campos internos. */
+export function exportOf(vessel) {
+  const { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } = Sof.vesselSummary(vessel);
+  const events = vessel.events.map(({ date, start, end, minutes, period, gang, hold, description, volume, weight, responsible }) =>
+    ({ date, start, end, minutes, period, gang, hold, description, volume, weight, responsible }));
+  return { ...vessel, savedBy: vessel.savedBy?.name || "", events, summary: { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } };
+}
+
 /* ---------- Dicionário ---------- */
 
 /** Histórico + o que foi aprendido/fixado no painel. */

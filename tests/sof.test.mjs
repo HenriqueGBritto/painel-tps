@@ -157,3 +157,12 @@ test("histórico embutido: 2025 e 2026, ocorrências com responsável e dicioná
   assert.ok(data.vessels.every(v => v.events.every(e => S.RESPONSIBLES.includes(e.responsible))));
   assert.ok(Object.keys(data.dictionary).length > 500);
 });
+
+test("exportação: navio com resumo calculado e ocorrências sem campos internos", () => {
+  const vessel = sof.seed().vessels[0];
+  const row = sof.exportOf({ ...vessel, savedBy: { name: "Equipe", uid: "x" } });
+  assert.equal(row.events.length, vessel.events.length);
+  assert.equal(row.savedBy, "Equipe");
+  assert.ok(row.summary.operationDays > 0 && row.summary.grossRate > 0);
+  assert.deepEqual(Object.keys(row.events[0]).sort(), ["date", "description", "end", "gang", "hold", "minutes", "period", "responsible", "start", "volume", "weight"].sort());
+});
