@@ -410,30 +410,56 @@
       if (!response.ok) throw new Error(body.error || "Não foi possível exportar a Base SOF.");
       const origin = v => v.source === "sof" ? "SOF enviado" : "Histórico";
       const book = XLSX.utils.book_new();
+      // Colunas calculadas saem como fórmula do Excel (com o valor do painel já preenchido, para abrir pronto).
+      // Navios: A ID … H Atracação, I Início, J Fim, K Desatracação, L Toneladas, M–O tempos, P–V horas por responsável, W–Y pranchas, Z ocorrências.
+      // Ocorrências: A ID do navio, E Início, F Fim, G Duração (min), L Responsável.
+      const last = 1 + body.vessels.reduce((sum, v) => sum + v.events.length, 0);
+      const occ = column => `'Ocorrências'!$${column}$2:$${column}$${last}`;
+      const respColumn = S.RESPONSIBLES.map((_, i) => String.fromCharCode(80 + i)); // P…V
+      const resp = name => respColumn[S.RESPONSIBLES.indexOf(name)];
+      const formula = (cell, f) => cell ? { ...cell, f } : { t: "s", v: "", f };
       XLSX.utils.book_append_sheet(book, sheet(
         ["ID", "Origem", "Navio", "Operação", "Carga", "Cliente", "Berço", "Atracação", "Início da operação", "Fim da operação", "Desatracação", "Toneladas",
           "Espera p/ operar (h)", "Tempo atracado (h)", "Tempo de operação (h)", ...S.RESPONSIBLES.map(n => `Horas: ${label(n)}`),
           "Prancha bruta (t/dia)", "Prancha líquida (t/dia)", "Prancha Triunfo (t/dia)", "Ocorrências", "Na planilha de navios", "Arquivo do SOF", "Enviado por", "Enviado em"],
-        body.vessels.map(v => {
-          const s = v.summary;
+        body.vessels.map((v, i) => {
+          const s = v.summary, r = i + 2;
           return [v.id, origin(v), v.vessel, v.operation, v.cargo, v.client || "", v.berth || "", xlDate(v.berthStart), xlDate(v.operationStart), xlDate(v.operationEnd), xlDate(v.berthEnd), xlNum(v.tons, "#,##0.000"),
-            xlHours(s.waitDays), xlHours(s.berthDays), xlHours(s.operationDays), ...S.RESPONSIBLES.map(n => xlHours(s.byResponsible[n])),
-            xlNum(s.grossRate, "#,##0"), xlNum(s.netRate, "#,##0"), xlNum(s.triunfoRate, "#,##0"), v.events.length, v.matched ? "Sim" : "Não", v.fileName || "", v.savedBy || "", xlDate(v.savedAt)];
+            formula(xlHours(s.waitDays), `IF(AND(H${r}<>"",I${r}<>""),(I${r}-H${r})*24,"")`),
+            formula(xlHours(s.berthDays), `IF(AND(H${r}<>"",K${r}<>""),(K${r}-H${r})*24,"")`),
+            formula(xlHours(s.operationDays), `(J${r}-I${r})*24`),
+            // Tempo de cada responsável = minutos dele ÷ minutos de todas as ocorrências × tempo de operação.
+            ...S.RESPONSIBLES.map(n => formula(xlHours(s.byResponsible[n]),
+              `IFERROR(SUMIFS(${occ("G")},${occ("A")},$A${r},${occ("L")},"${label(n)}")/SUMIFS(${occ("G")},${occ("A")},$A${r})*$O${r},0)`)),
+            formula(xlNum(s.grossRate, "#,##0"), `IFERROR(L${r}/(O${r}/24),"")`),
+            formula(xlNum(s.netRate, "#,##0"), `IFERROR(L${r}/(${resp("Cargo")}${r}/24),"")`),
+            formula(xlNum(s.triunfoRate, "#,##0"), `IFERROR(L${r}/((${resp("Cargo")}${r}+${resp("Terminal")}${r})/24),"")`),
+            formula({ t: "n", v: v.events.length }, `COUNTIF(${occ("A")},A${r})`),
+            v.matched ? "Sim" : "Não", v.fileName || "", v.savedBy || "", xlDate(v.savedAt)];
         }),
         [16, 12, 26, 13, 18, 22, 12, 16, 16, 16, 16, 12, 11, 11, 11, ...S.RESPONSIBLES.map(() => 11), 12, 12, 12, 11, 11, 30, 18, 16]), "Navios");
+      let row = 1;
       XLSX.utils.book_append_sheet(book, sheet(
         ["ID do navio", "Navio", "Origem", "Data", "Início", "Fim", "Duração (min)", "Período", "Terno", "Porão", "Descrição", "Responsável", "Volume", "Peso (t)"],
-        body.vessels.flatMap(v => v.events.map(e => [v.id, v.vessel, origin(v), xlDay(e.date), xlDate(e.start), xlDate(e.end), e.minutes, e.period || "", e.gang || "", e.hold || "",
-          e.description, label(e.responsible), xlNum(e.volume, "#,##0"), xlNum(e.weight, "#,##0.000")])),
+        body.vessels.flatMap(v => v.events.map(e => {
+          row++;
+          return [v.id, v.vessel, origin(v), xlDay(e.date), xlDate(e.start), formula(xlDate(e.end), `E${row}+G${row}/1440`), e.minutes, e.period || "", e.gang || "", e.hold || "",
+            e.description, label(e.responsible), xlNum(e.volume, "#,##0"), xlNum(e.weight, "#,##0.000")];
+        })),
         [16, 24, 12, 11, 16, 16, 10, 9, 8, 8, 70, 14, 9, 10]), "Ocorrências");
+      // Dicionário: F…L são as contagens por responsável; total, mais usado e % saem delas.
       XLSX.utils.book_append_sheet(book, sheet(
         ["Descrição", "Responsável fixado", "Responsável mais usado", "% do mais usado", "Vezes usada", ...S.RESPONSIBLES.map(label)],
-        Object.values(body.dictionary).map(entry => {
-          const rank = S.ranking(entry);
-          return [entry.text, entry.fixed ? label(entry.fixed) : "", rank.top ? label(rank.top) : "", xlNum(rank.share, "0%"), rank.total, ...S.RESPONSIBLES.map(n => entry.counts[n] || null)];
-        }).sort((a, b) => b[4] - a[4]),
+        Object.values(body.dictionary).map(entry => ({ entry, rank: S.ranking(entry) })).sort((a, b) => b.rank.total - a.rank.total).map(({ entry, rank }, i) => {
+          const r = i + 2, counts = `F${r}:L${r}`;
+          return [entry.text, entry.fixed ? label(entry.fixed) : "",
+            formula({ t: "s", v: rank.top ? label(rank.top) : "" }, `IF(E${r}=0,"",INDEX($F$1:$L$1,MATCH(MAX(${counts}),${counts},0)))`),
+            formula(xlNum(rank.share, "0%"), `IFERROR(MAX(${counts})/E${r},"")`),
+            formula({ t: "n", v: rank.total }, `SUM(${counts})`),
+            ...S.RESPONSIBLES.map(n => entry.counts[n] || null)];
+        }),
         [70, 14, 16, 10, 10, ...S.RESPONSIBLES.map(() => 10)]), "Dicionário");
-      XLSX.writeFile(book, `base-sof-${new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(book, `base-sof-${new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)}.xlsx`, { compression: true });
       $("sofStatus").textContent = "";
     } catch (error) {
       $("sofStatus").textContent = error.message;
