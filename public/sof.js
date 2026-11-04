@@ -358,7 +358,7 @@
     try { await dictionary(true); renderDictionary(); } catch (error) { box.innerHTML = `<p class="base-status">${escape(error.message)}</p>`; }
   }
   function renderDictionary() {
-    const search = ($("sofDictSearch")?.value || "").trim();
+    const search = $("sofDictSearch")?.value || "";
     const onlyMixed = $("sofDictMixed")?.checked || false;
     const key = S.normalizeDescription(search);
     const entries = Object.entries(state.dictionary).map(([id, entry]) => ({ id, entry, rank: S.ranking(entry) }))
@@ -368,11 +368,11 @@
     const box = $("sofDictionary");
     const keepFocus = document.activeElement?.id === "sofDictSearch";
     box.innerHTML = `<div class="sof-upload-head"><div><p class="eyebrow">DICIONÁRIO DE RESPONSÁVEIS</p><h3>${int.format(Object.keys(state.dictionary).length)} descrições conhecidas</h3></div><button type="button" class="base-reset" data-sof-dict-close>Fechar</button></div>
-      <p class="base-footnote">Cada descrição guarda quantas vezes recebeu cada responsável. Acima de ${int.format(S.AUTO_SHARE * 100)}% para o mesmo responsável, ele é aplicado automaticamente. “Fixar” vale sempre, mesmo com histórico dividido.</p>
+      <p class="base-footnote">Cada descrição guarda quantas vezes recebeu cada responsável. Acima de ${int.format(S.AUTO_SHARE * 100)}% para o mesmo responsável, ele é aplicado automaticamente. “Fixar” vale sempre, mesmo com histórico dividido. Descrição ligada a um motivo padrão segue sempre o responsável do motivo.</p>
       <div class="base-filters"><label class="base-search">Buscar descrição<input id="sofDictSearch" type="search" value="${escape(search)}" placeholder="Ex.: awaiting trucks"></label><label class="sof-check"><input type="checkbox" id="sofDictMixed" ${onlyMixed ? "checked" : ""}> Só as divididas (sem fixar)</label></div>
       <div class="base-table-scroll"><table class="base-table sof-choices"><thead><tr><th>Descrição</th><th>Registros</th><th>Histórico</th><th>Usado hoje</th><th>Fixar</th></tr></thead><tbody>
-      ${shown.map(({ id, entry, rank }) => `<tr><th><strong>${escape(entry.text)}</strong>${entry.fixed && entry.fixedBy ? `<small>fixado por ${escape(entry.fixedBy)}</small>` : ""}</th><td>${int.format(rank.total)}</td><td>${rank.counts.slice(0, 4).map(([n, c]) => `${label(n)} ${int.format(c)}`).join(" · ") || "—"}</td><td>${entry.fixed ? `<span class="sof-tag auto">${label(entry.fixed)} (fixo)</span>` : rank.share >= S.AUTO_SHARE ? `<span class="sof-tag auto">${label(rank.top)}</span>` : `<span class="sof-tag confirmar">confirmar</span>`}</td>
-        <td><select data-sof-fix="${escape(id)}"><option value="">${entry.fixed ? "Soltar" : "—"}</option>${S.RESPONSIBLES.map(n => `<option value="${n}" ${entry.fixed === n ? "selected" : ""}>${label(n)}</option>`).join("")}</select></td></tr>`).join("") || '<tr><td colspan="5" class="base-empty">Nenhuma descrição encontrada.</td></tr>'}
+      ${shown.map(({ id, entry, rank }) => `<tr><th><strong>${escape(entry.text)}</strong>${entry.reason ? `<small>motivo padrão: ${escape(entry.reasonText)}</small>` : entry.fixed && entry.fixedBy ? `<small>fixado por ${escape(entry.fixedBy)}</small>` : ""}</th><td>${int.format(rank.total)}</td><td>${rank.counts.slice(0, 4).map(([n, c]) => `${label(n)} ${int.format(c)}`).join(" · ") || "—"}</td><td>${entry.reason ? `<span class="sof-tag auto">${label(entry.fixed)} (motivo)</span>` : entry.fixed ? `<span class="sof-tag auto">${label(entry.fixed)} (fixo)</span>` : rank.share >= S.AUTO_SHARE ? `<span class="sof-tag auto">${label(rank.top)}</span>` : `<span class="sof-tag confirmar">confirmar</span>`}</td>
+        <td>${entry.reason ? "—" : `<select data-sof-fix="${escape(id)}"><option value="">${entry.fixed ? "Soltar" : "—"}</option>${S.RESPONSIBLES.map(n => `<option value="${n}" ${entry.fixed === n ? "selected" : ""}>${label(n)}</option>`).join("")}</select>`}</td></tr>`).join("") || '<tr><td colspan="5" class="base-empty">Nenhuma descrição encontrada.</td></tr>'}
       </tbody></table></div>${entries.length > shown.length ? `<p class="base-footnote">Mostrando ${shown.length} de ${int.format(entries.length)}. Use a busca para achar as demais.</p>` : ""}`;
     if (keepFocus) { const input = $("sofDictSearch"); input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   }
@@ -412,7 +412,7 @@
       const book = XLSX.utils.book_new();
       // Colunas calculadas saem como fórmula do Excel (com o valor do painel já preenchido, para abrir pronto).
       // Navios: A ID … H Atracação, I Início, J Fim, K Desatracação, L Toneladas, M–O tempos, P–V horas por responsável, W–Y pranchas, Z ocorrências.
-      // Ocorrências: A ID do navio, E Início, F Fim, G Duração (min), L Responsável.
+      // Ocorrências: A ID do navio, E Início, F Fim, G Duração (min), L Responsável, O código do motivo padrão.
       const last = 1 + body.vessels.reduce((sum, v) => sum + v.events.length, 0);
       const occ = column => `'Ocorrências'!$${column}$2:$${column}$${last}`;
       const respColumn = S.RESPONSIBLES.map((_, i) => String.fromCharCode(80 + i)); // P…V
@@ -440,25 +440,35 @@
         [16, 12, 26, 13, 18, 22, 12, 16, 16, 16, 16, 12, 11, 11, 11, ...S.RESPONSIBLES.map(() => 11), 12, 12, 12, 11, 11, 30, 18, 16]), "Navios");
       let row = 1;
       XLSX.utils.book_append_sheet(book, sheet(
-        ["ID do navio", "Navio", "Origem", "Data", "Início", "Fim", "Duração (min)", "Período", "Terno", "Porão", "Descrição", "Responsável", "Volume", "Peso (t)"],
+        ["ID do navio", "Navio", "Origem", "Data", "Início", "Fim", "Duração (min)", "Período", "Terno", "Porão", "Descrição", "Responsável", "Volume", "Peso (t)", "Código do motivo", "Motivo padrão"],
         body.vessels.flatMap(v => v.events.map(e => {
           row++;
           return [v.id, v.vessel, origin(v), xlDay(e.date), xlDate(e.start), formula(xlDate(e.end), `E${row}+G${row}/1440`), e.minutes, e.period || "", e.gang || "", e.hold || "",
-            e.description, label(e.responsible), xlNum(e.volume, "#,##0"), xlNum(e.weight, "#,##0.000")];
+            e.description, label(e.responsible), xlNum(e.volume, "#,##0"), xlNum(e.weight, "#,##0.000"), e.reason || "", e.reasonText || ""];
         })),
-        [16, 24, 12, 11, 16, 16, 10, 9, 8, 8, 70, 14, 9, 10]), "Ocorrências");
+        [16, 24, 12, 11, 16, 16, 10, 9, 8, 8, 70, 14, 9, 10, 10, 50]), "Ocorrências");
+      // Motivos: horas e ocorrências de cada motivo padrão somadas da aba Ocorrências (O = código, G = duração).
+      XLSX.utils.book_append_sheet(book, sheet(
+        ["Código", "Responsável", "Motivo padrão", "Ocorrências", "Horas"],
+        body.reasons.map((reason, i) => {
+          const r = i + 2, events = body.vessels.flatMap(v => v.events).filter(e => e.reason === reason.code);
+          return [reason.code, label(reason.responsible), reason.text,
+            formula({ t: "n", v: events.length }, `COUNTIF(${occ("O")},A${r})`),
+            formula(xlNum(events.reduce((sum, e) => sum + (e.minutes || 0), 0) / 60, "#,##0.0"), `SUMIFS(${occ("G")},${occ("O")},A${r})/60`)];
+        }),
+        [10, 14, 60, 12, 10]), "Motivos");
       // Dicionário: F…L são as contagens por responsável; total, mais usado e % saem delas.
       XLSX.utils.book_append_sheet(book, sheet(
-        ["Descrição", "Responsável fixado", "Responsável mais usado", "% do mais usado", "Vezes usada", ...S.RESPONSIBLES.map(label)],
+        ["Descrição", "Responsável fixado", "Responsável mais usado", "% do mais usado", "Vezes usada", ...S.RESPONSIBLES.map(label), "Motivo padrão"],
         Object.values(body.dictionary).map(entry => ({ entry, rank: S.ranking(entry) })).sort((a, b) => b.rank.total - a.rank.total).map(({ entry, rank }, i) => {
           const r = i + 2, counts = `F${r}:L${r}`;
           return [entry.text, entry.fixed ? label(entry.fixed) : "",
             formula({ t: "s", v: rank.top ? label(rank.top) : "" }, `IF(E${r}=0,"",INDEX($F$1:$L$1,MATCH(MAX(${counts}),${counts},0)))`),
             formula(xlNum(rank.share, "0%"), `IFERROR(MAX(${counts})/E${r},"")`),
             formula({ t: "n", v: rank.total }, `SUM(${counts})`),
-            ...S.RESPONSIBLES.map(n => entry.counts[n] || null)];
+            ...S.RESPONSIBLES.map(n => entry.counts[n] || null), entry.reasonText || ""];
         }),
-        [70, 14, 16, 10, 10, ...S.RESPONSIBLES.map(() => 10)]), "Dicionário");
+        [70, 14, 16, 10, 10, ...S.RESPONSIBLES.map(() => 10), 50]), "Dicionário");
       XLSX.writeFile(book, `base-sof-${new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10)}.xlsx`, { compression: true });
       $("sofStatus").textContent = "";
     } catch (error) {

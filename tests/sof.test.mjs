@@ -136,14 +136,14 @@ test("SOF enviado substitui o do histórico, aprende o responsável e é complet
     { id: "base-002", source: "base", vessel: "OUTRO", operationStart: "2026-09-01T05:00:00.000Z", operationEnd: "2026-09-02T02:00:00.000Z", tons: 1, events: [] }], dictionary: {} });
   const store = memoryStore();
   const { vessel } = sof.validateVessel({ vessel: "Navio", cargo: "Tarugo", operation: "EXPORTAÇÃO", tons: 100, operationStart: "2026-10-22T04:50:00.000Z", operationEnd: "2026-10-23T02:50:00.000Z",
-    events: [{ date: "2026-10-22", start: "2026-10-22T04:00:00.000Z", minutes: 50, description: "awaiting TechnipFMC team", responsible: "Client" }] });
+    events: [{ date: "2026-10-22", start: "2026-10-22T04:00:00.000Z", minutes: 50, description: "awaiting harbour master visit", responsible: "Client" }] });
   await store.set(sof.VESSELS, sof.vesselId(vessel), { ...vessel, id: sof.vesselId(vessel) });
   await sof.learnFrom(store, vessel.events);
   const all = await sof.allVessels(store);
   assert.deepEqual(all.map(v => [v.vessel, v.source]), [["OUTRO", "base"], ["NAVIO", "sof"]]);
-  assert.equal(S.suggest({ description: "Not worked due to awaiting TechnipFMC team." }, await sof.dictionary(store)).responsible, "Client");
-  await sof.fixResponsible(store, "awaiting technipfmc team", "Others", { name: "Teste" });
-  assert.equal((await sof.dictionary(store))["awaiting technipfmc team"].fixed, "Others");
+  assert.equal(S.suggest({ description: "Not worked due to awaiting harbour master visit." }, await sof.dictionary(store)).responsible, "Client");
+  await sof.fixResponsible(store, "awaiting harbour master visit", "Others", { name: "Teste" });
+  assert.equal((await sof.dictionary(store))["awaiting harbour master visit"].fixed, "Others");
   const enriched = sof.enrich(all[1], [{ vessel: "MV NAVIO", berthStart: "2026-10-22T02:00:00.000Z", berthEnd: "2026-10-23T09:00:00.000Z", berth: "PÁTIO 9", client: "Cliente" }]);
   assert.deepEqual([enriched.matched, enriched.berthEnd, enriched.berth], [true, "2026-10-23T09:00:00.000Z", "PÁTIO 9"]);
   sof.useSeed(null);
@@ -164,5 +164,37 @@ test("exportação: navio com resumo calculado e ocorrências sem campos interno
   assert.equal(row.events.length, vessel.events.length);
   assert.equal(row.savedBy, "Equipe");
   assert.ok(row.summary.operationDays > 0 && row.summary.grossRate > 0);
-  assert.deepEqual(Object.keys(row.events[0]).sort(), ["date", "description", "end", "gang", "hold", "minutes", "period", "responsible", "start", "volume", "weight"].sort());
+  assert.deepEqual(Object.keys(row.events[0]).sort(), ["date", "description", "end", "gang", "hold", "minutes", "period", "reason", "reasonText", "responsible", "start", "volume", "weight"].sort());
+});
+
+test("padrões: a descrição conhecida recebe o motivo, e o motivo define o responsável", async () => {
+  const event = sof.expandEvent({ date: "2026-10-22", start: "2026-10-22T04:00:00.000Z", minutes: 30, description: "Awaiting Cargo in transit.", responsible: "Others" });
+  assert.deepEqual([event.reason, event.responsible, event.reasonText], ["C01", "Client", "Not worked due to awaiting cargo."]);
+  assert.equal(sof.expandEvent({ start: "2026-10-22T04:00:00.000Z", minutes: 5, description: "Something never seen", responsible: "Port" }).responsible, "Port");
+  const store = memoryStore();
+  assert.match((await sof.fixResponsible(store, "awaiting cargo transit", "Others", { name: "Teste" })).error, /motivo padrão/);
+  assert.equal((await sof.dictionary(store))["awaiting cargo transit"].fixed, "Client");
+  const s = S.vesselSummary({ operationStart: "2026-01-01T03:00:00.000Z", operationEnd: "2026-01-02T03:00:00.000Z", events: [
+    sof.expandEvent({ start: "2026-01-01T03:00:00.000Z", minutes: 60, description: "Not worked due to rain." }),
+    sof.expandEvent({ start: "2026-01-01T04:00:00.000Z", minutes: 60, description: "Not work due to rain." })] });
+  assert.deepEqual(s.stoppages.map(x => [x.key, x.count]), [["R01", 2]]);
+});
+
+test("descrição: conserta o localizar/substituir antigo da Base SOF", () => {
+  assert.equal(S.cleanDescription("Not worked due to Not worked due to awaiting stevedores.."), "Not worked due to awaiting stevedores.");
+  assert.equal(S.cleanDescription("Discharging..general Cargo"), "Discharging general Cargo");
+  assert.equal(S.cleanDescription("Discharging. potash in bulk."), "Discharging potash in bulk.");
+  assert.equal(S.cleanDescription("Discharging.."), "Discharging.");
+  assert.equal(S.cleanDescription("Not worked due to Not worked due to shifting gang.ing from hold 2 to hold 3."), "Not worked due to shifting gang from hold 2 to hold 3.");
+  assert.equal(S.cleanDescription("Shifting gang from Hold No. 1. to Hold No. 6."), "Shifting gang from Hold No. 1. to Hold No. 6.");
+  assert.ok(!sof.seed().vessels.some(v => v.events.some(e => /[^.]\.\.$|due to not worked due/i.test(e.description))));
+});
+
+test("padrões: nome do navio, duplicados, berço, cliente e carga", () => {
+  const vessels = sof.seed().vessels;
+  assert.ok(!vessels.some(v => ["base-073", "base-122"].includes(v.id)));
+  const hobart = vessels.find(v => v.originalName === "INDUSTRIAL HOBART EXPORTAÇÃO");
+  assert.equal(hobart.vessel, "INDUSTRIAL HOBART");
+  const enriched = sof.enrich({ ...hobart, cargo: "CARRETEL / CAIXA" }, [{ vessel: "INDUSTRIAL HOBART EXPORTACAO", berthStart: hobart.berthStart || hobart.operationStart, berth: "Terminal 30 - 209 - 215", client: "SUBSEA7" }]);
+  assert.deepEqual([enriched.matched, enriched.berth, enriched.client, enriched.cargo], [true, "ARMAZÉM 30", "SUBSEA 7", "CARRETEL"]);
 });

@@ -69,7 +69,7 @@ for (const visit of visits.values()) {
     target.events.push({
       date, from, minutes: to >= from ? to - from : to + 1440 - from,
       gang: blank(cell(row, "AS")) ? "" : text(cell(row, "AS")), hold: blank(cell(row, "AT")) ? "" : text(cell(row, "AT")),
-      description: text(cell(row, "AV")), volume: number(cell(row, "AX")), weight: number(cell(row, "AY")),
+      description: Sof.cleanDescription(cell(row, "AV")), volume: number(cell(row, "AX")), weight: number(cell(row, "AY")),
       responsible: Sof.canonicalResponsible(cell(row, "AW"))
     });
   }

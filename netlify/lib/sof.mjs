@@ -1,9 +1,12 @@
 /* Base SOF do painel: histórico fixo (initial-sof.json, gerado por scripts/import-base-sof.mjs a partir da
    aba "Base SOF", 2025 e 2026) + SOFs enviados pela equipe (Firestore, coleção sofVessels).
    O dicionário de responsáveis começa com o histórico e aprende com cada SOF salvo (documento sofConfig/dictionary).
-   A desatracação, o berço e o cliente vêm da planilha de navios sempre que o navio for encontrado nela. */
-// O JSON entra no pacote da função: ler o arquivo pelo caminho falhava no Netlify, onde import.meta.url aponta para a função.
+   A desatracação, o berço e o cliente vêm da planilha de navios sempre que o navio for encontrado nela.
+   Padrões (sof-standards.json): cada descrição conhecida aponta para um motivo padrão, e o motivo define o responsável;
+   nomes de navios, berços, clientes e cargas passam por um de-para. O texto original de cada ocorrência é mantido. */
+// Os JSON entram no pacote da função: ler o arquivo pelo caminho falhava no Netlify, onde import.meta.url aponta para a função.
 import initialSof from "./initial-sof.json" with { type: "json" };
+import standards from "./sof-standards.json" with { type: "json" };
 import "../../public/sof-core.js";
 
 export const Sof = globalThis.TpsSof;
@@ -12,22 +15,43 @@ export const CONFIG = "sofConfig";
 const MAX_EVENTS = 4000;
 const MAX_TEXT = 400;
 
+export const REASONS = standards.reasons;
+const reasonByCode = new Map(REASONS.map(r => [r.code, r]));
+const removedIds = new Set(standards.removed);
+
+/** Motivo padrão de uma descrição (pela chave), ou null quando ainda não está no de-para. */
+export function reasonOf(key) {
+  return reasonByCode.get(standards.descriptions[key]) || null;
+}
+
+/** Valor padronizado por um de-para (comparação em maiúsculas); sem entrada, fica o próprio valor. */
+const mapped = (map, value) => { const v = String(value ?? "").trim(); return v.toUpperCase() in map ? map[v.toUpperCase()] : v; };
+
 let seedCache = null;
-/** Histórico da Base SOF, com a chave de cada descrição já calculada. */
+/** Histórico da Base SOF, com a chave de cada descrição já calculada e os nomes de navio padronizados. */
 export function seed() {
   if (seedCache) return seedCache;
   const raw = initialSof;
-  return seedCache = { ...raw, vessels: raw.vessels.map(vessel => ({ ...vessel, events: vessel.events.map(expandEvent) })) };
+  return seedCache = { ...raw, vessels: raw.vessels.filter(v => !removedIds.has(v.id)).map(vessel => ({ ...renamed(vessel), events: vessel.events.map(expandEvent) })) };
 }
 export function useSeed(value) { seedCache = value; }
 
-/** Ocorrência guardada (data + minuto de início + duração) → com início, fim, período e chave da descrição. */
+/** Nome padronizado; o nome antigo fica em originalName para achar o navio na planilha de navios. */
+function renamed(vessel) {
+  const name = standards.vessels[vessel.vessel];
+  return name ? { ...vessel, vessel: name, originalName: vessel.vessel } : vessel;
+}
+
+/** Ocorrência guardada (data + minuto de início + duração) → com início, fim, período, chave e motivo padrão. */
 export function expandEvent(event) {
   const start = event.start || Sof.localIso(event.date, event.from || 0);
   const from = event.from ?? Math.round(((Date.parse(start) / 60000 - 180) % 1440 + 1440) % 1440);
+  const key = Sof.normalizeDescription(event.description);
+  const reason = reasonOf(key);
   return {
     ...event, from, start, end: new Date(Date.parse(start) + (event.minutes || 0) * 60000).toISOString(),
-    period: event.period || Sof.periodOf(from), key: Sof.normalizeDescription(event.description)
+    period: event.period || Sof.periodOf(from), key,
+    ...(reason ? { reason: reason.code, reasonText: reason.text, responsible: reason.responsible } : {})
   };
 }
 
@@ -82,8 +106,9 @@ export function vesselId(vessel) {
 export async function allVessels(store) {
   const sent = store ? await store.list(VESSELS) : [];
   const removed = new Set(sent.filter(v => v.deleted && v.replaces).map(v => v.replaces));
-  const uploaded = sent.filter(v => !v.deleted).map(v => ({ ...v, source: "sof", events: (v.events || []).map(expandEvent) }));
-  const replaced = vessel => uploaded.some(u => Sof.vesselKey(u.vessel) === Sof.vesselKey(vessel.vessel) && Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
+  const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), source: "sof", events: (v.events || []).map(expandEvent) }));
+  const sameName = (a, b) => [a.vessel, a.originalName].some(x => x && [b.vessel, b.originalName].some(y => y && Sof.vesselKey(x) === Sof.vesselKey(y)));
+  const replaced = vessel => uploaded.some(u => sameName(u, vessel) &&Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
   const history = seed().vessels.filter(v => !removed.has(v.id) && !replaced(v));
   return [...history, ...uploaded].sort((a, b) => a.operationStart.localeCompare(b.operationStart));
 }
@@ -92,6 +117,8 @@ export async function allVessels(store) {
 export function matchOperation(vessel, records) {
   const key = Sof.vesselKey(vessel.vessel);
   if (!key) return null;
+  // A planilha de navios pode ainda usar o nome antigo (com operação, mês ou erro de digitação).
+  if (vessel.originalName) return matchOperation({ ...vessel, originalName: "" }, records) || matchOperation({ ...vessel, vessel: vessel.originalName, originalName: "" }, records);
   const when = Date.parse(vessel.berthStart || vessel.operationStart);
   const near = records.filter(r => {
     const k = Sof.vesselKey(r.vessel);
@@ -101,17 +128,17 @@ export function matchOperation(vessel, records) {
   return near[0]?.r || null;
 }
 
-/** Completa com a planilha de navios: desatracação (sempre preferida), berço, cliente e atracação. */
+/** Completa com a planilha de navios (desatracação sempre preferida, berço, cliente e atracação) e padroniza berço, cliente e carga. */
 export function enrich(vessel, records) {
   const match = matchOperation(vessel, records);
-  if (!match) return { ...vessel, matched: false };
-  return {
+  const full = !match ? { ...vessel, matched: false } : {
     ...vessel, matched: true,
     berthEnd: match.berthEnd || vessel.berthEnd || null,
     berthStart: vessel.berthStart || match.berthStart || null,
     berth: match.berth && match.berth !== "Não informado" ? match.berth : vessel.berth || "",
     client: match.client && match.client !== "Não informado" ? match.client : vessel.client || ""
   };
+  return { ...full, berth: mapped(standards.berths, full.berth), client: mapped(standards.clients, full.client), cargo: mapped(standards.cargos, full.cargo) };
 }
 
 /** Resumo para os indicadores (sem a lista de ocorrências, que vem só no detalhe). */
@@ -124,14 +151,14 @@ export function summaryOf(vessel) {
 /** Navio completo para a exportação: resumo calculado + ocorrências sem os campos internos. */
 export function exportOf(vessel) {
   const { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } = Sof.vesselSummary(vessel);
-  const events = vessel.events.map(({ date, start, end, minutes, period, gang, hold, description, volume, weight, responsible }) =>
-    ({ date, start, end, minutes, period, gang, hold, description, volume, weight, responsible }));
+  const events = vessel.events.map(({ date, start, end, minutes, period, gang, hold, description, reason = "", reasonText = "", volume, weight, responsible }) =>
+    ({ date, start, end, minutes, period, gang, hold, description, reason, reasonText, volume, weight, responsible }));
   return { ...vessel, savedBy: vessel.savedBy?.name || "", events, summary: { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } };
 }
 
 /* ---------- Dicionário ---------- */
 
-/** Histórico + o que foi aprendido/fixado no painel. */
+/** Histórico + o que foi aprendido/fixado no painel. Descrição com motivo padrão fica fixa no responsável do motivo. */
 export async function dictionary(store) {
   const saved = store ? await store.get(CONFIG, "dictionary") : null;
   const merged = JSON.parse(JSON.stringify(seed().dictionary));
@@ -139,6 +166,10 @@ export async function dictionary(store) {
     const target = merged[key] ||= { counts: {}, text: entry.text || key };
     for (const [name, count] of Object.entries(entry.counts || {})) target.counts[name] = (target.counts[name] || 0) + count;
     if (entry.fixed) { target.fixed = entry.fixed; target.fixedBy = entry.fixedBy; target.fixedAt = entry.fixedAt; }
+  }
+  for (const [key, entry] of Object.entries(merged)) {
+    const reason = reasonOf(key);
+    if (reason) Object.assign(entry, { fixed: reason.responsible, reason: reason.code, reasonText: reason.text, fixedBy: "", fixedAt: "" });
   }
   return merged;
 }
@@ -162,6 +193,8 @@ export async function fixResponsible(store, key, responsible, actor) {
   if (responsible && !name) return { error: "Responsável inválido." };
   const clean = Sof.normalizeDescription(key) === key ? key : null;
   if (!clean) return { error: "Descrição inválida." };
+  const reason = reasonOf(clean);
+  if (reason) return { error: `Essa descrição segue o motivo padrão "${reason.text}", que é sempre ${Sof.RESPONSIBLE_LABELS[reason.responsible]}.` };
   const saved = (await store.get(CONFIG, "dictionary")) || { entries: {} };
   const entries = saved.entries || {};
   const entry = entries[clean] ||= { counts: {}, text: seed().dictionary[clean]?.text || clean };

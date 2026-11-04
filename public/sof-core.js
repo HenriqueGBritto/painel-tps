@@ -3,7 +3,7 @@
    Testado em tests/sof.test.mjs. */
 (function (root) {
   const RESPONSIBLES = ["Terminal", "Cargo", "Vessel", "Client", "Rain", "Others", "Port"];
-  const RESPONSIBLE_LABELS = { Terminal: "Terminal", Cargo: "Operação (carga)", Vessel: "Navio", Client: "Cliente", Rain: "Chuva", Others: "Outros", Port: "Porto" };
+  const RESPONSIBLE_LABELS = { Terminal: "Terminal", Cargo: "Carga", Vessel: "Navio", Client: "Cliente", Rain: "Chuva", Others: "Outros", Port: "Porto" };
   const PERIODS = ["07x13", "13x19", "19x01", "01x07"];
   const OPERATIONS = ["IMPORTAÇÃO", "EXPORTAÇÃO", "CABOTAGEM"];
   const DAY = 86400000;
@@ -20,6 +20,18 @@
   function normalizeDescription(value) {
     return text(value).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
       .replace(/\b[a-z]*\d[\w-]*\b/g, " ").replace(/[^a-z ]+/g, " ").replace(STOPWORDS, " ").replace(/\s+/g, " ").trim();
+  }
+
+  /**
+   * Conserta o texto deixado por um localizar/substituir antigo na Base SOF:
+   * "Not worked due to Not worked due to …", "Discharging..general Cargo", "awaiting stevedores..", "shifting gang.ing".
+   */
+  function cleanDescription(value) {
+    return text(value)
+      .replace(/(not worked due to\s+){2,}/gi, match => match.match(/not worked due to\s+/i)[0])
+      .replace(/\b(discharging|loading pig iron in bulk|unlashing cargo)\.{1,2}\s*(?=[a-zà-ÿ])/gi, "$1 ")
+      .replace(/\bshifting gang\.ing\b/gi, "shifting gang")
+      .replace(/([^.])\.\.$/, "$1.");
   }
 
   /** "others", "TERMINAL", "Ship" → nome padrão; vazio quando não reconhece. */
@@ -326,8 +338,10 @@
       const value = (e.minutes || 0) * scale;
       if (responsible) totals[responsible] += value;
       if (responsible && responsible !== "Cargo" && value > 0) {
-        const id = `${e.key}|${responsible}`;
-        const item = stoppages.get(id) || { key: e.key, text: e.description, responsible, days: 0, count: 0 };
+        // Com motivo padrão, as paralisações se somam pelo motivo; sem ele, pela descrição.
+        const key = e.reason || e.key;
+        const id = `${key}|${responsible}`;
+        const item = stoppages.get(id) || { key, text: e.reasonText || e.description, responsible, days: 0, count: 0 };
         item.days += value; item.count++;
         stoppages.set(id, item);
       }
@@ -456,7 +470,7 @@
 
   root.TpsSof = {
     RESPONSIBLES, RESPONSIBLE_LABELS, PERIODS, OPERATIONS, AUTO_SHARE,
-    normalizeDescription, canonicalResponsible, vesselKey, periodOf, serialDate, serialIso, timeMinutes, localIso,
+    normalizeDescription, cleanDescription, canonicalResponsible, vesselKey, periodOf, serialDate, serialIso, timeMinutes, localIso,
     parseSofWorkbook, learn, ranking, suggest, vesselSummary, vesselMonth, filterVessels, totals, topStoppages,
     monthlyComparison, occupancy, occupancyFor
   };
