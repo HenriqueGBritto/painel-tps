@@ -4,7 +4,6 @@
   const S = window.TpsSof;
   const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  const STATUS_LABEL = { sof: "do SOF", auto: "automático", confirmar: "confirmar", nova: "nova" };
   const int = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
   const one = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const two = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,6 +29,7 @@
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Não foi possível ler a Base SOF.");
       state.vessels = body.vessels;
+      $("sofOpenStandardize").hidden = !body.canStandardize;
       // Última data com SOF: o ano em andamento só é comparado (e a ocupação só é medida) até ela.
       state.lastData = Math.min(Date.now(), Math.max(0, ...body.vessels.map(v => Date.parse(v.operationEnd || "") || 0)));
       state.loaded = true;
@@ -263,8 +263,18 @@
     const response = await fetch("/api/sof/dicionario");
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || "Não foi possível ler o dicionário de responsáveis.");
+    state.reasons = body.reasons || [];
+    state.canStandardize = Boolean(body.canStandardize);
     return state.dictionary = body.dictionary;
   }
+
+  /* Motivos padrão: o texto sem o "Not worked due to", e a lista agrupada por responsável para os seletores. */
+  const reasonOf = code => (state.reasons || []).find(r => r.code === code);
+  const reasonName = reason => reason ? reason.text.replace(/^Not worked due to /, "").replace(/\.$/, "") : "";
+  const reasonOptions = (selected = "") => S.RESPONSIBLES.map(name => {
+    const list = (state.reasons || []).filter(r => r.responsible === name && !r.milestone);
+    return list.length ? `<optgroup label="${label(name)}">${list.map(r => `<option value="${r.code}" ${r.code === selected ? "selected" : ""}>${escape(reasonName(r))}</option>`).join("")}</optgroup>` : "";
+  }).join("");
 
   const toLocalInput = iso => { if (!iso) return ""; const d = new Date(Date.parse(iso) - 3 * 3600000); return d.toISOString().slice(0, 16); };
   const fromLocalInput = value => value ? new Date(`${value}:00-03:00`).toISOString() : null;
@@ -278,18 +288,22 @@
       const workbook = XLSX.read(buffer, { type: "array", cellDates: false, cellFormula: false, cellHTML: false, cellText: false });
       const parsed = S.parseSofWorkbook(XLSX, workbook, file.name);
       const dict = await dictionary();
+      // Descrição já ligada a um motivo entra sozinha; a nova mostra os 3 motivos mais parecidos para escolher.
+      const known = Object.entries(dict).filter(([, entry]) => entry.reason).map(([key, entry]) => [key, entry.reason]);
       const groups = new Map();
       for (const event of parsed.events) {
-        const suggestion = S.suggest(event, dict);
-        event.suggestion = suggestion;
         const id = event.key || event.description;
-        if (!groups.has(id)) groups.set(id, { id, text: event.description, suggestion, events: [], choice: suggestion.responsible });
+        if (!groups.has(id)) {
+          const reason = (event.key && dict[event.key]?.reason) || "";
+          groups.set(id, { id, text: event.description, events: [], status: reason ? "padrao" : "nova", reason,
+            suggestions: reason ? [] : S.similarReasons(event.description, known, state.reasons) });
+        }
         groups.get(id).events.push(event);
       }
       // Navio da planilha de navios: carga, berço, cliente e desatracação.
-      const known = state.vessels.find(v => S.vesselKey(v.vessel) === S.vesselKey(parsed.vessel) && Math.abs(Date.parse(v.operationStart) - Date.parse(parsed.operationStart)) < 2 * 86400000);
+      const knownVessel = state.vessels.find(v => S.vesselKey(v.vessel) === S.vesselKey(parsed.vessel) && Math.abs(Date.parse(v.operationStart) - Date.parse(parsed.operationStart)) < 2 * 86400000);
       const sheet = await fetch(`/api/sof/planilha?navio=${encodeURIComponent(parsed.vessel)}&inicio=${encodeURIComponent(parsed.berthStart || parsed.operationStart)}`).then(r => r.ok ? r.json() : {}).catch(() => ({}));
-      state.upload = { parsed, groups: [...groups.values()], sheet: sheet.match || null, known, showAll: false };
+      state.upload = { parsed, groups: [...groups.values()], sheet: sheet.match || null, known: knownVessel, showAll: false, creating: null };
       renderUpload();
     } catch (error) {
       box.innerHTML = `<div class="sof-upload-head"><h3>Não foi possível ler o arquivo</h3><button type="button" class="base-reset" data-sof-cancel>Fechar</button></div><p class="base-status">${escape(error.message)}</p>`;
@@ -299,11 +313,8 @@
   function renderUpload() {
     const u = state.upload, p = u.parsed, sheet = u.sheet || {};
     const cargos = [...new Set([...state.vessels.map(v => v.cargo), sheet.cargo].filter(Boolean))].sort();
-    const count = status => u.groups.filter(g => g.suggestion.status === status).reduce((n, g) => n + g.events.length, 0);
-    const pending = u.groups.filter(g => !g.choice).length;
-    const visible = u.groups.filter(g => u.showAll || g.suggestion.status === "confirmar" || g.suggestion.status === "nova" || !g.choice);
+    const count = status => u.groups.filter(g => g.status === status).reduce((n, g) => n + g.events.length, 0);
     const operation = p.operation || sheet.operation || "";
-    const options = choice => `<option value="">Escolha…</option>${S.RESPONSIBLES.map(n => `<option value="${n}" ${n === choice ? "selected" : ""}>${label(n)}</option>`).join("")}`;
     $("sofUpload").innerHTML = `<div class="sof-upload-head"><div><p class="eyebrow">ENVIAR SOF · ${escape(p.model)} · ${escape(p.fileName)}</p><h3>${escape(p.vessel)}</h3></div><button type="button" class="base-reset" data-sof-cancel>Cancelar</button></div>
       ${u.known ? `<p class="sof-warn">Este navio já está na base (${u.known.source === "sof" ? "SOF enviado" : "Base SOF"}). Ao salvar, este SOF substitui o registro atual.</p>` : ""}
       ${p.warnings.map(w => `<p class="sof-warn">${escape(w)}</p>`).join("")}
@@ -319,25 +330,62 @@
         <label>Berço<input id="sofFBerth" value="${escape(sheet.berth || p.berth)}"></label>
         <label>Cliente<input id="sofFClient" value="${escape(sheet.client || p.client)}"></label>
       </div>
-      <div class="sof-upload-stats"><span><b>${p.events.length}</b> ocorrências</span><span><b>${count("auto") + count("sof")}</b> com responsável automático</span><span class="${count("confirmar") ? "is-attention" : ""}"><b>${count("confirmar")}</b> para confirmar</span><span class="${count("nova") ? "is-attention" : ""}"><b>${count("nova")}</b> descrições novas</span></div>
-      <div class="sof-upload-tools"><label><input type="checkbox" id="sofShowAll" ${u.showAll ? "checked" : ""}> Mostrar também as automáticas</label><span>${pending ? `${pending} ${pending === 1 ? "descrição sem responsável" : "descrições sem responsável"}` : "Todas as ocorrências têm responsável."}</span></div>
-      <div class="base-table-scroll"><table class="base-table sof-choices"><thead><tr><th>Descrição</th><th>Vezes</th><th>Situação</th><th>Histórico</th><th>Responsável</th></tr></thead><tbody>
-      ${visible.length ? visible.map(g => `<tr class="is-${g.suggestion.status}"><th><strong>${escape(g.text)}</strong></th><td>${g.events.length}</td><td><span class="sof-tag ${g.suggestion.status}">${STATUS_LABEL[g.suggestion.status]}</span></td><td>${g.suggestion.options.length ? g.suggestion.options.slice(0, 3).map(o => `${label(o.name)} ${o.count}`).join(" · ") : "—"}</td><td><select data-sof-group="${escape(g.id)}">${options(g.choice)}</select></td></tr>`).join("")
-        : '<tr><td colspan="5" class="base-empty">Nada para revisar: todas as descrições são conhecidas.</td></tr>'}
-      </tbody></table></div>
-      <p class="base-footnote">As escolhas feitas aqui ficam guardadas: no próximo SOF, a mesma descrição já vem com o responsável sugerido.</p>
-      <div class="sof-upload-actions"><p id="sofSaveStatus" class="base-status" role="status"></p><button type="button" class="sof-primary" id="sofSave" ${pending ? "disabled" : ""}>Salvar na Base SOF</button></div>`;
+      <div class="sof-upload-stats"><span><b>${p.events.length}</b> ocorrências</span><span><b>${count("padrao")}</b> com motivo padrão</span><span class="${count("nova") ? "is-attention" : ""}"><b>${u.groups.filter(g => g.status === "nova").length}</b> descrições fora do padrão</span></div>
+      <div id="sofChoices"></div>
+      <p class="base-footnote">A escolha fica guardada: no próximo SOF, a mesma descrição já entra com o motivo. ${state.canStandardize ? "Para mudar depois, use Padronizar." : "Se faltar um motivo na lista, peça ao administrador do painel."}</p>
+      <div class="sof-upload-actions"><p id="sofSaveStatus" class="base-status" role="status"></p><button type="button" class="sof-primary" id="sofSave">Salvar na Base SOF</button></div>`;
+    renderChoices();
+  }
+
+  /** Tabela das descrições (redesenhada sozinha, para não apagar o que foi digitado nos campos do navio). */
+  function renderChoices() {
+    const u = state.upload;
+    const pending = u.groups.filter(g => !g.reason).length;
+    const visible = u.groups.map((g, i) => ({ g, i })).filter(({ g }) => u.showAll || g.status === "nova");
+    const row = ({ g, i }) => {
+      if (g.status === "padrao") {
+        const reason = reasonOf(g.reason);
+        return `<tr><th><strong>${escape(g.text)}</strong></th><td>${g.events.length}</td><td><span class="sof-tag auto">padrão</span></td><td>${escape(reasonName(reason))} <small>${reason ? label(reason.responsible) : ""}</small></td></tr>`;
+      }
+      const suggested = g.suggestions.map(s => reasonOf(s.code)).filter(Boolean);
+      const creating = u.creating === i;
+      return `<tr class="is-nova"><th><strong>${escape(g.text)}</strong></th><td>${g.events.length}</td><td><span class="sof-tag ${g.reason ? "auto" : "nova"}">${g.reason ? "escolhido" : "escolher"}</span></td><td>
+        <div class="sof-suggest" role="radiogroup" aria-label="Motivos parecidos">${suggested.map(r => `<label class="${g.reason === r.code ? "is-on" : ""}"><input type="radio" name="sofPick${i}" value="${r.code}" data-sof-pick="${i}" ${g.reason === r.code ? "checked" : ""}>${escape(reasonName(r))} <small>${label(r.responsible)}</small></label>`).join("")}</div>
+        <select data-sof-reason="${i}" aria-label="Outro motivo"><option value="">${g.reason && !suggested.some(r => r.code === g.reason) ? "" : "Outro motivo…"}</option>${reasonOptions(suggested.some(r => r.code === g.reason) ? "" : g.reason)}${state.canStandardize ? '<option value="__new">+ Criar motivo novo…</option>' : ""}</select>
+        ${creating ? `<div class="sof-new-reason"><span>Not worked due to</span><input id="sofNewText" placeholder="Ex.: awaiting tug" value="${escape(u.newText || "")}"><select id="sofNewResp">${S.RESPONSIBLES.map(n => `<option value="${n}" ${n === u.newResp ? "selected" : ""}>${label(n)}</option>`).join("")}</select><button type="button" class="sof-primary" data-sof-create="${i}">Criar</button><button type="button" class="base-reset" data-sof-create-cancel>Cancelar</button><p id="sofNewStatus" class="base-status" role="status"></p></div>` : ""}
+      </td></tr>`;
+    };
+    $("sofChoices").innerHTML = `<div class="sof-upload-tools"><label><input type="checkbox" id="sofShowAll" ${u.showAll ? "checked" : ""}> Mostrar também as que já têm motivo</label><span>${pending ? `${pending} ${pending === 1 ? "descrição sem motivo" : "descrições sem motivo"}` : "Todas as ocorrências têm motivo."}</span></div>
+      <div class="base-table-scroll"><table class="base-table sof-choices"><thead><tr><th>Descrição</th><th>Vezes</th><th>Situação</th><th>Motivo</th></tr></thead><tbody>
+      ${visible.length ? visible.map(row).join("") : '<tr><td colspan="4" class="base-empty">Nada para escolher: todas as descrições estão no padrão.</td></tr>'}
+      </tbody></table></div>`;
+    $("sofSave").disabled = Boolean(pending);
+  }
+
+  async function createReason(index) {
+    const u = state.upload;
+    u.newText = $("sofNewText").value; u.newResp = $("sofNewResp").value;
+    const response = await fetch("/api/sof/motivos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: u.newText, responsible: u.newResp }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) { $("sofNewStatus").textContent = body.error || "Não foi possível criar o motivo."; return; }
+    state.reasons = [...state.reasons, body.reason];
+    u.groups[index].reason = body.reason.code;
+    u.creating = null; u.newText = "";
+    renderChoices();
   }
 
   async function saveUpload() {
     const u = state.upload, p = u.parsed;
-    const choice = new Map(u.groups.map(g => [g.id, g.choice]));
+    const choice = new Map(u.groups.map(g => [g.id, g.reason]));
     const body = {
       vessel: $("sofFVessel").value, cargo: $("sofFCargo").value, operation: $("sofFOperation").value, tons: Number($("sofFTons").value),
       berthStart: fromLocalInput($("sofFBerthStart").value), operationStart: fromLocalInput($("sofFStart").value), operationEnd: fromLocalInput($("sofFEnd").value),
       berthEnd: fromLocalInput($("sofFBerthEnd").value), berth: $("sofFBerth").value, client: $("sofFClient").value,
       arrival: p.arrival, invoiceTons: p.invoiceTons, cargoDescription: p.cargoDescription, fileName: p.fileName, model: p.model,
-      events: p.events.map(e => ({ date: e.date, start: e.start, minutes: e.minutes, gang: e.gang, hold: e.hold, description: e.description, volume: e.volume, weight: e.weight, responsible: choice.get(e.key || e.description) }))
+      events: p.events.map(e => {
+        const reason = reasonOf(choice.get(e.key || e.description));
+        return { date: e.date, start: e.start, minutes: e.minutes, gang: e.gang, hold: e.hold, description: e.description, volume: e.volume, weight: e.weight, reason: reason?.code || "", responsible: reason?.responsible || "" };
+      })
     };
     $("sofSave").disabled = true;
     $("sofSaveStatus").textContent = "Salvando…";
@@ -383,6 +431,98 @@
     const entry = state.dictionary[id];
     if (responsible) entry.fixed = responsible; else delete entry.fixed;
     renderDictionary();
+  }
+
+  /* ---------- Padronizar (administrador): cada descrição da base → motivo padrão ---------- */
+
+  const STD_STATUS = { conferida: "conferida", importacao: "da importação", automatica: "automática", "sem-motivo": "sem motivo" };
+
+  async function openStandardize() {
+    const box = $("sofStandardize");
+    box.hidden = false;
+    box.innerHTML = '<p class="base-status">Lendo as descrições da base…</p>';
+    const response = await fetch("/api/sof/padronizar");
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) { box.innerHTML = `<div class="sof-upload-head"><h3>Padronizar</h3><button type="button" class="base-reset" data-sof-std-close>Fechar</button></div><p class="base-status">${escape(body.error || "Não foi possível ler as descrições.")}</p>`; return; }
+    state.reasons = body.reasons;
+    state.std = { items: body.descriptions, selected: new Set(), status: "pendentes", reason: "", search: "", operation: false, changed: false };
+    box.innerHTML = `<div class="sof-upload-head"><div><p class="eyebrow">PADRONIZAR PARALISAÇÕES</p><h3 id="sofStdTitle"></h3></div><button type="button" class="base-reset" data-sof-std-close>Fechar</button></div>
+      <div class="sof-std-progress"><span id="sofStdBar"></span></div>
+      <p class="base-footnote">Cada descrição da base aponta para um motivo padrão, e o motivo define o responsável. Trocar o motivo vale para todas as ocorrências daquela descrição, inclusive as já salvas, e marca a descrição como conferida.</p>
+      <div class="base-filters">
+        <label class="base-search">Buscar descrição<input id="sofStdSearch" type="search" placeholder="Ex.: crane"></label>
+        <label>Situação<select id="sofStdStatus"><option value="pendentes">Para conferir</option><option value="conferida">Conferidas</option><option value="">Todas</option></select></label>
+        <label>Motivo<select id="sofStdReason"><option value="">Todos</option>${reasonOptions()}</select></label>
+        <label class="sof-check"><input type="checkbox" id="sofStdOperation"> Incluir operação e marcos</label>
+      </div>
+      <div class="sof-std-bulk"><span id="sofStdCount"></span><select id="sofStdMoveTo" aria-label="Mover para o motivo"><option value="">Mover para…</option>${reasonOptions()}</select><button type="button" class="base-upload" id="sofStdMove">Mover</button><button type="button" class="base-upload" id="sofStdConfirm">Marcar como conferidas</button><span id="sofStdStatusText" class="base-status" role="status"></span></div>
+      <details class="sof-std-new"><summary>Criar motivo novo</summary><div class="sof-new-reason"><span>Not worked due to</span><input id="sofStdNewText" placeholder="Ex.: awaiting tug"><select id="sofStdNewResp">${S.RESPONSIBLES.map(n => `<option value="${n}">${label(n)}</option>`).join("")}</select><button type="button" class="sof-primary" id="sofStdCreate">Criar</button></div><p class="sof-note">Para criar um motivo de Carga (operação), o texto entra sem o "Not worked due to".</p></details>
+      <div id="sofStdTable"></div>`;
+    renderStandardize();
+  }
+
+  const isOperation = item => reasonOf(item.reason)?.responsible === "Cargo";
+  function stdVisible() {
+    const s = state.std, key = S.normalizeDescription(s.search);
+    return s.items.filter(item => (s.operation || !isOperation(item)) &&
+      (!s.status || (s.status === "pendentes" ? item.status !== "conferida" : item.status === s.status)) &&
+      (!s.reason || item.reason === s.reason) && (!key || item.key.includes(key) || S.normalizeDescription(item.text).includes(key)));
+  }
+
+  function renderStandardize() {
+    const s = state.std;
+    const stops = s.items.filter(item => !isOperation(item));
+    const total = stops.reduce((sum, item) => sum + item.minutes, 0);
+    const done = stops.filter(item => item.status === "conferida").reduce((sum, item) => sum + item.minutes, 0);
+    const share = total ? done / total : 0;
+    $("sofStdTitle").textContent = `${int.format(stops.length)} descrições de paralisação · ${int.format(share * 100)}% das horas conferidas`;
+    $("sofStdBar").style.width = `${share * 100}%`;
+    const visible = stdVisible(), shown = visible.slice(0, 200);
+    $("sofStdCount").textContent = `${int.format(s.selected.size)} ${s.selected.size === 1 ? "selecionada" : "selecionadas"}`;
+    const hours = minutes => `${minutes >= 600 ? int.format(minutes / 60) : (minutes / 60).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} h`;
+    $("sofStdTable").innerHTML = `<div class="base-table-scroll"><table class="base-table sof-choices sof-std"><thead><tr><th><input type="checkbox" id="sofStdAll" aria-label="Selecionar todas as mostradas" ${shown.length && shown.every(i => s.selected.has(i.key)) ? "checked" : ""}></th><th>Descrição</th><th>Vezes</th><th>Horas</th><th>Navios</th><th>Motivo</th><th>Situação</th></tr></thead><tbody>
+      ${shown.map(item => `<tr><td><input type="checkbox" data-sof-std-pick="${escape(item.key)}" ${s.selected.has(item.key) ? "checked" : ""} aria-label="Selecionar"></td>
+        <th><strong>${escape(item.text)}</strong>${item.variants > 1 ? `<small>${item.variants} jeitos de escrever</small>` : ""}</th><td>${int.format(item.count)}</td><td>${hours(item.minutes)}</td><td>${int.format(item.vessels)}</td>
+        <td><select data-sof-std-reason="${escape(item.key)}" aria-label="Motivo">${item.reason ? "" : '<option value="">Escolha…</option>'}${reasonOptions(item.reason)}</select><small>${label(reasonOf(item.reason)?.responsible || "")}</small></td>
+        <td><span class="sof-tag ${item.status === "conferida" ? "auto" : item.status === "sem-motivo" ? "nova" : "confirmar"}">${STD_STATUS[item.status]}</span>${item.status !== "conferida" && item.reason ? `<button type="button" class="sof-std-ok" data-sof-std-ok="${escape(item.key)}">Conferir</button>` : ""}</td></tr>`).join("")
+        || '<tr><td colspan="7" class="base-empty">Nenhuma descrição com esses filtros.</td></tr>'}
+      </tbody></table></div>${visible.length > shown.length ? `<p class="base-footnote">Mostrando ${shown.length} de ${int.format(visible.length)}, das que têm mais horas para as que têm menos. Use a busca ou os filtros para achar as demais.</p>` : ""}`;
+  }
+
+  /** Grava o motivo (ou só confere, sem reason) das descrições e atualiza a lista sem recarregar. */
+  async function applyStandard(keys, reason) {
+    if (!keys.length) { $("sofStdStatusText").textContent = "Selecione pelo menos uma descrição."; return; }
+    $("sofStdStatusText").textContent = "Gravando…";
+    const response = await fetch("/api/sof/padronizar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keys, reason }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) { $("sofStdStatusText").textContent = body.error || "Não foi possível gravar."; renderStandardize(); return; }
+    const set = new Set(keys);
+    for (const item of state.std.items) if (set.has(item.key)) { if (reason) item.reason = reason; item.status = "conferida"; }
+    state.std.selected.clear();
+    state.std.changed = true; state.dictionary = null;
+    $("sofStdStatusText").textContent = `${int.format(keys.length)} ${keys.length === 1 ? "descrição gravada" : "descrições gravadas"}.`;
+    renderStandardize();
+  }
+
+  async function createStdReason() {
+    const response = await fetch("/api/sof/motivos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: $("sofStdNewText").value, responsible: $("sofStdNewResp").value }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) { $("sofStdStatusText").textContent = body.error || "Não foi possível criar o motivo."; return; }
+    state.reasons = [...state.reasons, body.reason];
+    $("sofStdNewText").value = "";
+    $("sofStdStatusText").textContent = `Motivo criado: ${body.reason.text}`;
+    // Os seletores de motivo passam a ter o novo.
+    $("sofStdReason").innerHTML = `<option value="">Todos</option>${reasonOptions(state.std.reason)}`;
+    $("sofStdMoveTo").innerHTML = `<option value="">Mover para…</option>${reasonOptions(body.reason.code)}`;
+    renderStandardize();
+  }
+
+  async function closeStandardize() {
+    const box = $("sofStandardize");
+    box.hidden = true; box.innerHTML = "";
+    const changed = state.std?.changed;
+    state.std = null;
+    if (changed) await load(true);
   }
 
   /* ---------- Exportação para Excel ---------- */
@@ -488,6 +628,7 @@
     $("sofStopFilter").addEventListener("click", event => { const b = event.target.closest("[data-resp]"); if (!b) return; state.stopResponsible = b.dataset.resp; render(); });
     $("sofFile").addEventListener("change", event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) readFile(file); });
     $("sofOpenDictionary").addEventListener("click", openDictionary);
+    $("sofOpenStandardize").addEventListener("click", openStandardize);
     $("sofExport").addEventListener("click", exportBase);
     $("sofVesselRows").addEventListener("click", event => { const row = event.target.closest("[data-sof-id]"); if (row) openVessel(row.dataset.sofId); });
     $("sofVesselRows").addEventListener("keydown", event => { const row = event.target.closest("[data-sof-id]"); if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openVessel(row.dataset.sofId); } });
@@ -496,16 +637,48 @@
     upload.addEventListener("click", event => {
       if (event.target.closest("[data-sof-cancel]")) { state.upload = null; upload.hidden = true; upload.innerHTML = ""; }
       if (event.target.closest("#sofSave")) saveUpload();
+      const create = event.target.closest("[data-sof-create]");
+      if (create) createReason(Number(create.dataset.sofCreate));
+      if (event.target.closest("[data-sof-create-cancel]")) { state.upload.creating = null; renderChoices(); }
     });
     upload.addEventListener("change", event => {
-      if (event.target.id === "sofShowAll") { state.upload.showAll = event.target.checked; renderUpload(); return; }
-      const select = event.target.closest("[data-sof-group]");
+      const u = state.upload;
+      if (!u) return;
+      if (event.target.id === "sofShowAll") { u.showAll = event.target.checked; renderChoices(); return; }
+      const pick = event.target.closest("[data-sof-pick]");
+      if (pick) { u.groups[Number(pick.dataset.sofPick)].reason = pick.value; u.creating = null; renderChoices(); return; }
+      const select = event.target.closest("[data-sof-reason]");
       if (!select) return;
-      const group = state.upload.groups.find(g => g.id === select.dataset.sofGroup);
-      if (group) group.choice = select.value;
-      const pending = state.upload.groups.filter(g => !g.choice).length;
-      $("sofSave").disabled = Boolean(pending);
-      upload.querySelector(".sof-upload-tools span").textContent = pending ? `${pending} ${pending === 1 ? "descrição sem responsável" : "descrições sem responsável"}` : "Todas as ocorrências têm responsável.";
+      const index = Number(select.dataset.sofReason);
+      if (select.value === "__new") { u.creating = index; u.newResp ||= "Terminal"; renderChoices(); $("sofNewText").focus(); return; }
+      if (select.value) { u.groups[index].reason = select.value; u.creating = null; renderChoices(); }
+    });
+    const std = $("sofStandardize");
+    std.addEventListener("click", event => {
+      if (event.target.closest("[data-sof-std-close]")) { closeStandardize(); return; }
+      const ok = event.target.closest("[data-sof-std-ok]");
+      if (ok) { applyStandard([ok.dataset.sofStdOk], ""); return; }
+      if (event.target.id === "sofStdMove") {
+        const to = $("sofStdMoveTo").value;
+        if (!to) { $("sofStdStatusText").textContent = "Escolha o motivo de destino."; return; }
+        applyStandard([...state.std.selected], to);
+        return;
+      }
+      if (event.target.id === "sofStdConfirm") { applyStandard([...state.std.selected], ""); return; }
+      if (event.target.id === "sofStdCreate") createStdReason();
+    });
+    std.addEventListener("input", event => { if (event.target.id === "sofStdSearch") { state.std.search = event.target.value; renderStandardize(); } });
+    std.addEventListener("change", event => {
+      const s = state.std, t = event.target;
+      if (!s) return;
+      if (t.id === "sofStdStatus") s.status = t.value;
+      else if (t.id === "sofStdReason") s.reason = t.value;
+      else if (t.id === "sofStdOperation") s.operation = t.checked;
+      else if (t.id === "sofStdAll") { for (const item of stdVisible().slice(0, 200)) { if (t.checked) s.selected.add(item.key); else s.selected.delete(item.key); } }
+      else if (t.dataset.sofStdPick !== undefined) { if (t.checked) s.selected.add(t.dataset.sofStdPick); else s.selected.delete(t.dataset.sofStdPick); }
+      else if (t.dataset.sofStdReason !== undefined) { if (t.value) applyStandard([t.dataset.sofStdReason], t.value); return; }
+      else return;
+      renderStandardize();
     });
     const dict = $("sofDictionary");
     dict.addEventListener("click", event => { if (event.target.closest("[data-sof-dict-close]")) { dict.hidden = true; dict.innerHTML = ""; } });

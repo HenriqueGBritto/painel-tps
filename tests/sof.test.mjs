@@ -126,7 +126,7 @@ test("validação do SOF enviado: exige responsável em todas as ocorrências", 
   const base = { vessel: "Navio", cargo: "Tarugo", operation: "EXPORTAÇÃO", tons: 100, operationStart: "2026-10-22T04:50:00.000Z", operationEnd: "2026-10-23T02:50:00.000Z",
     events: [{ date: "2026-10-22", start: "2026-10-22T04:00:00.000Z", minutes: 50, description: "Not worked due to rain.", responsible: "Rain" }] };
   assert.equal(sof.validateVessel(base).vessel.vessel, "NAVIO");
-  assert.match(sof.validateVessel({ ...base, events: [{ ...base.events[0], responsible: "" }] }).error, /responsável/);
+  assert.match(sof.validateVessel({ ...base, events: [{ ...base.events[0], responsible: "" }] }).error, /motivo/);
   assert.match(sof.validateVessel({ ...base, operationEnd: base.operationStart }).error, /término/);
   assert.match(sof.validateVessel({ ...base, operation: "OUTRA" }).error, /operação/);
 });
@@ -197,4 +197,58 @@ test("padrões: nome do navio, duplicados, berço, cliente e carga", () => {
   assert.equal(hobart.vessel, "INDUSTRIAL HOBART");
   const enriched = sof.enrich({ ...hobart, cargo: "CARRETEL / CAIXA" }, [{ vessel: "INDUSTRIAL HOBART EXPORTACAO", berthStart: hobart.berthStart || hobart.operationStart, berth: "Terminal 30 - 209 - 215", client: "SUBSEA7" }]);
   assert.deepEqual([enriched.matched, enriched.berth, enriched.client, enriched.cargo], [true, "ARMAZÉM 30", "SUBSEA 7", "CARRETEL"]);
+});
+
+test("motivos parecidos: erro de digitação e palavras em comum; paralisação não sugere Carga", () => {
+  const std = sof.buildStandards();
+  const known = Object.entries(std.descriptions);
+  const top = text => S.similarReasons(text, known, std.reasons).map(x => x.code);
+  assert.equal(top("Waiting for trucks from client")[0], "C04");
+  assert.equal(top("Crane no. 2 breakdown")[0], "N01");
+  assert.ok(top("Not worked due to stevedors shortage").includes("T01"));
+  assert.ok(!top("Not worked due to discharging delay").some(code => std.byCode.get(code).responsible === "Cargo"));
+  assert.ok(S.similarity("awaiting stevedores", "awaiting stevedeores") > S.similarity("awaiting stevedores", "awaiting trucks"));
+});
+
+test("importação: descrição nova recebe o motivo escolhido e passa a valer nos próximos SOFs", async () => {
+  sof.useSeed({ source: "teste", vessels: [], dictionary: {} });
+  const store = memoryStore();
+  const base = { vessel: "Navio", cargo: "Tarugo", operation: "EXPORTAÇÃO", tons: 100, operationStart: "2026-10-22T04:50:00.000Z", operationEnd: "2026-10-23T02:50:00.000Z" };
+  const event = { date: "2026-10-22", start: "2026-10-22T04:00:00.000Z", minutes: 50, description: "Not worked due to tug unavailability." };
+  assert.match(sof.validateVessel({ ...base, events: [{ ...event, reason: "ZZ9" }] }).error, /Motivo desconhecido/);
+  const { vessel } = sof.validateVessel({ ...base, events: [{ ...event, reason: "O03", responsible: "Terminal" }] }, await sof.standardsOf(store));
+  assert.deepEqual([vessel.events[0].reason, vessel.events[0].responsible], ["O03", "Others"]);
+  await store.set(sof.VESSELS, sof.vesselId(vessel), { ...vessel, id: sof.vesselId(vessel) });
+  await sof.learnStandards(store, vessel.events);
+  const std = await sof.standardsOf(store);
+  assert.equal(sof.reasonOf("tug unavailability", std).code, "O03");
+  assert.equal((await sof.dictionary(store)).stevedores, undefined);
+  const [saved] = await sof.allVessels(store);
+  assert.deepEqual([saved.events[0].reason, saved.events[0].responsible], ["O03", "Others"]);
+  // Descrição que já tinha motivo não muda pela importação.
+  await sof.learnStandards(store, [{ description: "Not worked due to rain.", reason: "T01" }]);
+  assert.equal(sof.reasonOf("rain", await sof.standardsOf(store)).code, "R01");
+  sof.useSeed(null);
+});
+
+test("padronizar: criar motivo, mover descrições e conferir", async () => {
+  sof.useSeed({ source: "teste", vessels: [{ id: "base-001", source: "base", vessel: "NAVIO", operationStart: "2026-10-22T05:00:00.000Z", operationEnd: "2026-10-23T05:00:00.000Z", tons: 1,
+    events: [{ date: "2026-10-22", from: 120, minutes: 60, description: "Awaiting barges." }, { date: "2026-10-22", from: 180, minutes: 30, description: "Not worked due to awaiting tug." }].map(e => sof.expandEvent(e)) }], dictionary: {} });
+  const store = memoryStore();
+  const actor = { name: "Henrique" };
+  assert.match((await sof.createReason(store, { responsible: "Others", text: "awaiting berth" }, actor)).error, /já existe/);
+  const { reason } = await sof.createReason(store, { responsible: "Others", text: "not worked due to awaiting tug." }, actor);
+  assert.deepEqual([reason.code, reason.text, reason.responsible], ["O11", "Not worked due to awaiting tug.", "Others"]);
+  assert.equal((await sof.createReason(store, { responsible: "Cargo", text: "loading containers" }, actor)).reason.text, "Loading containers.");
+  let std = await sof.standardsOf(store);
+  let list = sof.descriptionList(await sof.allVessels(store, std), std);
+  assert.deepEqual(list.map(x => [x.key, x.status]), [["awaiting barges", "conferida"], ["awaiting tug", "sem-motivo"]]);
+  assert.match((await sof.setDescriptions(store, ["awaiting tug"], "", actor)).error, /Escolha um motivo/);
+  assert.ok((await sof.setDescriptions(store, ["awaiting tug", "awaiting barges"], "O11", actor)).ok);
+  std = await sof.standardsOf(store);
+  const [vessel] = await sof.allVessels(store, std);
+  assert.deepEqual(vessel.events.map(e => [e.reason, e.responsible]), [["O11", "Others"], ["O11", "Others"]]);
+  list = sof.descriptionList([vessel], std);
+  assert.ok(list.every(x => x.status === "conferida" && x.reason === "O11"));
+  sof.useSeed(null);
 });

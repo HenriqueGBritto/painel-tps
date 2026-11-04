@@ -3,12 +3,15 @@
    GET    /api/sof/navio?id=       um navio com todas as ocorrências
    GET    /api/sof/exportar        todos os navios com as ocorrências, o dicionário e os motivos padrão (exportação para Excel)
    GET    /api/sof/planilha?navio=&inicio=   navio correspondente na planilha de navios
-   GET    /api/sof/dicionario      dicionário de responsáveis (descrição → contagens e responsável fixo)
+   GET    /api/sof/dicionario      dicionário de responsáveis (descrição → contagens e responsável fixo) e motivos padrão
    POST   /api/sof/dicionario      { key, responsible } fixa o responsável de uma descrição (vazio solta)
-   POST   /api/sof/navios          salva um SOF lido no navegador (public/sof-core.js) com os responsáveis escolhidos
+   POST   /api/sof/navios          salva um SOF lido no navegador (public/sof-core.js) com o motivo de cada ocorrência
+   POST   /api/sof/motivos         { responsible, text } cria um motivo padrão (administrador)
+   GET    /api/sof/padronizar      todas as descrições da base com o motivo atual (administrador)
+   POST   /api/sof/padronizar      { keys, reason } liga descrições a um motivo e marca como conferidas; sem reason, só confere
    DELETE /api/sof/navios?id=      apaga um SOF enviado
    Regras em netlify/lib/sof.mjs. */
-import { authorize, actorOf, denied, ACTIONS } from "../lib/access.mjs";
+import { authorize, actorOf, can, denied, ACTIONS } from "../lib/access.mjs";
 import { activitiesStore } from "../lib/activities-store.mjs";
 import { loadForServing } from "../lib/snapshots.mjs";
 import * as sof from "../lib/sof.mjs";
@@ -36,13 +39,15 @@ export default async function handler(request) {
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/sof\/?/, "");
   const reading = request.method === "GET";
-  const access = await authorize(request, reading ? ACTIONS.readSof : ACTIONS.sendSof);
+  const standardsRoute = route === "padronizar" || (route === "motivos" && !reading);
+  const access = await authorize(request, standardsRoute ? ACTIONS.manageSofStandards : reading ? ACTIONS.readSof : ACTIONS.sendSof);
   if (!access.allowed) return denied(access, headers);
   const store = activitiesStore();
+  const canStandardize = can(access.user, ACTIONS.manageSofStandards);
 
   if (reading && route === "") {
     const [vessels, records] = await Promise.all([sof.allVessels(store), operations()]);
-    return json({ vessels: vessels.map(v => sof.summaryOf(sof.enrich(v, records))), source: sof.seed().source, operationsAvailable: records.length > 0 });
+    return json({ vessels: vessels.map(v => sof.summaryOf(sof.enrich(v, records))), source: sof.seed().source, operationsAvailable: records.length > 0, canStandardize });
   }
   if (reading && route === "navio") {
     const id = url.searchParams.get("id");
@@ -54,7 +59,14 @@ export default async function handler(request) {
     const [vessels, records, dictionary] = await Promise.all([sof.allVessels(store), operations(), sof.dictionary(store)]);
     return json({ vessels: vessels.map(v => sof.exportOf(sof.enrich(v, records))), dictionary, reasons: sof.REASONS });
   }
-  if (reading && route === "dicionario") return json({ dictionary: await sof.dictionary(store), autoShare: sof.Sof.AUTO_SHARE });
+  if (reading && route === "dicionario") {
+    const std = await sof.standardsOf(store);
+    return json({ dictionary: await sof.dictionary(store, std), reasons: std.reasons, autoShare: sof.Sof.AUTO_SHARE, canStandardize });
+  }
+  if (reading && route === "padronizar") {
+    const std = await sof.standardsOf(store);
+    return json({ descriptions: sof.descriptionList(await sof.allVessels(store, std), std), reasons: std.reasons });
+  }
   if (reading && route === "planilha") {
     // Navio na planilha de navios, para completar o SOF antes de salvar (carga, berço, cliente, desatracação).
     const match = sof.matchOperation({ vessel: url.searchParams.get("navio") || "", berthStart: url.searchParams.get("inicio") || "" }, await operations());
@@ -69,14 +81,24 @@ export default async function handler(request) {
   }
   if (request.method === "POST" && route === "navios") {
     const body = await readBody(request);
-    const { vessel, error } = sof.validateVessel(body);
+    const { vessel, error } = sof.validateVessel(body, await sof.standardsOf(store));
     if (error) return json({ error }, 400);
     const id = sof.vesselId(vessel);
     const previous = await store.get(sof.VESSELS, id);
     await store.set(sof.VESSELS, id, { ...vessel, id, savedAt: new Date().toISOString(), savedBy: actorOf(access) });
     // Reenvio do mesmo SOF não conta as escolhas duas vezes no dicionário.
     if (!previous) await sof.learnFrom(store, vessel.events);
+    await sof.learnStandards(store, vessel.events);
     return json({ ok: true, id, replaced: Boolean(previous) });
+  }
+  if (request.method === "POST" && route === "motivos") {
+    const result = await sof.createReason(store, await readBody(request), actorOf(access));
+    return result.error ? json(result, 400) : json(result);
+  }
+  if (request.method === "POST" && route === "padronizar") {
+    const body = await readBody(request);
+    const result = await sof.setDescriptions(store, body?.keys, body?.reason ? String(body.reason) : "", actorOf(access));
+    return result.error ? json(result, 400) : json(result);
   }
   if (request.method === "DELETE" && route === "navios") {
     const id = url.searchParams.get("id") || "";

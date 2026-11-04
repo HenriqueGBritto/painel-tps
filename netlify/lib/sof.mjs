@@ -15,13 +15,38 @@ export const CONFIG = "sofConfig";
 const MAX_EVENTS = 4000;
 const MAX_TEXT = 400;
 
-export const REASONS = standards.reasons;
-const reasonByCode = new Map(REASONS.map(r => [r.code, r]));
 const removedIds = new Set(standards.removed);
 
+/**
+ * Padrões em uso: os do arquivo + o que foi salvo no painel (sofConfig/standards):
+ * motivos criados, descrições ligadas na importação de SOF ou na tela Padronizar, e descrições conferidas.
+ */
+export function buildStandards(saved = {}) {
+  const reasons = [...standards.reasons, ...(saved.reasons || [])];
+  return {
+    reasons, byCode: new Map(reasons.map(r => [r.code, r])),
+    descriptions: { ...standards.descriptions, ...(saved.descriptions || {}) },
+    confirmed: new Set([...standards.reviewed, ...Object.keys(saved.confirmed || {})]),
+    learned: new Set(Object.keys(saved.descriptions || {}))
+  };
+}
+const BASE = buildStandards();
+export const REASONS = BASE.reasons;
+
+export async function standardsOf(store) {
+  const saved = store ? await store.get(CONFIG, "standards") : null;
+  return saved ? buildStandards(saved) : BASE;
+}
+
 /** Motivo padrão de uma descrição (pela chave), ou null quando ainda não está no de-para. */
-export function reasonOf(key) {
-  return reasonByCode.get(standards.descriptions[key]) || null;
+export function reasonOf(key, std = BASE) {
+  return std.byCode.get(std.descriptions[key]) || null;
+}
+
+/** O motivo da descrição vale primeiro; o escolhido na ocorrência só conta quando a descrição não tem chave. */
+function withReason(event, std) {
+  const reason = reasonOf(event.key, std) || std.byCode.get(event.reason);
+  return reason ? { ...event, reason: reason.code, reasonText: reason.text, responsible: reason.responsible } : event;
 }
 
 /** Valor padronizado por um de-para (comparação em maiúsculas); sem entrada, fica o próprio valor. */
@@ -32,7 +57,7 @@ let seedCache = null;
 export function seed() {
   if (seedCache) return seedCache;
   const raw = initialSof;
-  return seedCache = { ...raw, vessels: raw.vessels.filter(v => !removedIds.has(v.id)).map(vessel => ({ ...renamed(vessel), events: vessel.events.map(expandEvent) })) };
+  return seedCache = { ...raw, vessels: raw.vessels.filter(v => !removedIds.has(v.id)).map(vessel => ({ ...renamed(vessel), events: vessel.events.map(e => expandEvent(e)) })) };
 }
 export function useSeed(value) { seedCache = value; }
 
@@ -43,16 +68,13 @@ function renamed(vessel) {
 }
 
 /** Ocorrência guardada (data + minuto de início + duração) → com início, fim, período, chave e motivo padrão. */
-export function expandEvent(event) {
+export function expandEvent(event, std = BASE) {
   const start = event.start || Sof.localIso(event.date, event.from || 0);
   const from = event.from ?? Math.round(((Date.parse(start) / 60000 - 180) % 1440 + 1440) % 1440);
-  const key = Sof.normalizeDescription(event.description);
-  const reason = reasonOf(key);
-  return {
+  return withReason({
     ...event, from, start, end: new Date(Date.parse(start) + (event.minutes || 0) * 60000).toISOString(),
-    period: event.period || Sof.periodOf(from), key,
-    ...(reason ? { reason: reason.code, reasonText: reason.text, responsible: reason.responsible } : {})
-  };
+    period: event.period || Sof.periodOf(from), key: Sof.normalizeDescription(event.description)
+  }, std);
 }
 
 /* ---------- Validação do que chega do navegador ---------- */
@@ -61,8 +83,11 @@ const str = (value, max = 120) => String(value ?? "").replace(/\s+/g, " ").trim(
 const iso = value => { const t = Date.parse(value || ""); return Number.isFinite(t) && t > Date.UTC(2020, 0) && t < Date.UTC(2040, 0) ? new Date(t).toISOString() : null; };
 const num = value => typeof value === "number" && Number.isFinite(value) ? value : null;
 
-/** Confere e limpa um SOF pronto para salvar. Devolve { vessel } ou { error }. */
-export function validateVessel(input) {
+/**
+ * Confere e limpa um SOF pronto para salvar. Devolve { vessel } ou { error }.
+ * Cada ocorrência traz o motivo padrão (o responsável sai dele) ou, sem motivo, o responsável escolhido.
+ */
+export function validateVessel(input, std = BASE) {
   if (!input || typeof input !== "object") return { error: "Dados do SOF ausentes." };
   const vessel = str(input.vessel, 80).toUpperCase();
   if (!vessel) return { error: "Informe o nome do navio." };
@@ -80,10 +105,12 @@ export function validateVessel(input) {
     const start = iso(e?.start);
     const minutes = num(e?.minutes);
     const description = str(e?.description, MAX_TEXT);
-    const responsible = Sof.canonicalResponsible(e?.responsible);
+    const reason = e?.reason ? std.byCode.get(str(e.reason, 8)) : null;
+    if (e?.reason && !reason) return { error: `Motivo desconhecido na ocorrência ${index + 1}.` };
+    const responsible = reason?.responsible || Sof.canonicalResponsible(e?.responsible);
     if (!start || minutes === null || minutes < 0 || minutes > 2880 || !description) return { error: `Ocorrência ${index + 1} inválida.` };
-    if (!responsible) return { error: `Escolha o responsável da ocorrência ${index + 1} ("${description.slice(0, 50)}").` };
-    events.push({ date: str(e.date, 10), start, minutes, gang: str(e.gang, 12), hold: str(e.hold, 12), description, volume: num(e.volume), weight: num(e.weight), responsible });
+    if (!responsible) return { error: `Escolha o motivo da ocorrência ${index + 1} ("${description.slice(0, 50)}").` };
+    events.push({ date: str(e.date, 10), start, minutes, gang: str(e.gang, 12), hold: str(e.hold, 12), description, volume: num(e.volume), weight: num(e.weight), responsible, ...(reason ? { reason: reason.code } : {}) });
   }
   return {
     vessel: {
@@ -103,13 +130,16 @@ export function vesselId(vessel) {
 /* ---------- Leitura ---------- */
 
 /** Histórico + enviados. Um enviado com o mesmo navio e início (±2 dias) de um do histórico o substitui. */
-export async function allVessels(store) {
+export async function allVessels(store, std) {
+  std ||= await standardsOf(store);
   const sent = store ? await store.list(VESSELS) : [];
   const removed = new Set(sent.filter(v => v.deleted && v.replaces).map(v => v.replaces));
-  const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), source: "sof", events: (v.events || []).map(expandEvent) }));
+  const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), source: "sof", events: (v.events || []).map(e => expandEvent(e, std)) }));
   const sameName = (a, b) => [a.vessel, a.originalName].some(x => x && [b.vessel, b.originalName].some(y => y && Sof.vesselKey(x) === Sof.vesselKey(y)));
-  const replaced = vessel => uploaded.some(u => sameName(u, vessel) &&Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
-  const history = seed().vessels.filter(v => !removed.has(v.id) && !replaced(v));
+  const replaced = vessel => uploaded.some(u => sameName(u, vessel) && Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
+  let history = seed().vessels.filter(v => !removed.has(v.id) && !replaced(v));
+  // O histórico já vem com os padrões do arquivo; o que foi mudado no painel é aplicado por cima.
+  if (std !== BASE) history = history.map(v => ({ ...v, events: v.events.map(e => withReason(e, std)) }));
   return [...history, ...uploaded].sort((a, b) => a.operationStart.localeCompare(b.operationStart));
 }
 
@@ -159,7 +189,8 @@ export function exportOf(vessel) {
 /* ---------- Dicionário ---------- */
 
 /** Histórico + o que foi aprendido/fixado no painel. Descrição com motivo padrão fica fixa no responsável do motivo. */
-export async function dictionary(store) {
+export async function dictionary(store, std) {
+  std ||= await standardsOf(store);
   const saved = store ? await store.get(CONFIG, "dictionary") : null;
   const merged = JSON.parse(JSON.stringify(seed().dictionary));
   for (const [key, entry] of Object.entries(saved?.entries || {})) {
@@ -168,7 +199,7 @@ export async function dictionary(store) {
     if (entry.fixed) { target.fixed = entry.fixed; target.fixedBy = entry.fixedBy; target.fixedAt = entry.fixedAt; }
   }
   for (const [key, entry] of Object.entries(merged)) {
-    const reason = reasonOf(key);
+    const reason = reasonOf(key, std);
     if (reason) Object.assign(entry, { fixed: reason.responsible, reason: reason.code, reasonText: reason.text, fixedBy: "", fixedAt: "" });
   }
   return merged;
@@ -193,7 +224,7 @@ export async function fixResponsible(store, key, responsible, actor) {
   if (responsible && !name) return { error: "Responsável inválido." };
   const clean = Sof.normalizeDescription(key) === key ? key : null;
   if (!clean) return { error: "Descrição inválida." };
-  const reason = reasonOf(clean);
+  const reason = reasonOf(clean, await standardsOf(store));
   if (reason) return { error: `Essa descrição segue o motivo padrão "${reason.text}", que é sempre ${Sof.RESPONSIBLE_LABELS[reason.responsible]}.` };
   const saved = (await store.get(CONFIG, "dictionary")) || { entries: {} };
   const entries = saved.entries || {};
@@ -202,4 +233,81 @@ export async function fixResponsible(store, key, responsible, actor) {
   else { delete entry.fixed; delete entry.fixedBy; delete entry.fixedAt; }
   await store.set(CONFIG, "dictionary", { entries, updatedAt: new Date().toISOString() });
   return { ok: true };
+}
+
+/* ---------- Motivos padrão (só quem tem o acesso de administrador muda) ---------- */
+
+const PREFIX = { Terminal: "T", Vessel: "N", Client: "C", Rain: "R", Port: "P", Others: "O", Cargo: "L" };
+const savedStandards = async store => (await store.get(CONFIG, "standards")) || {};
+const saveStandards = (store, saved) => store.set(CONFIG, "standards", { ...saved, updatedAt: new Date().toISOString() });
+
+/** Descrição nova escolhida na importação de um SOF passa a valer para os próximos (não muda o que já estava ligado). */
+export async function learnStandards(store, events) {
+  const std = await standardsOf(store);
+  const fresh = {};
+  for (const event of events) {
+    const key = Sof.normalizeDescription(event.description);
+    if (key && event.reason && !std.descriptions[key] && std.byCode.has(event.reason)) fresh[key] = event.reason;
+  }
+  if (!Object.keys(fresh).length) return;
+  const saved = await savedStandards(store);
+  await saveStandards(store, { ...saved, descriptions: { ...(saved.descriptions || {}), ...fresh } });
+}
+
+/** Cria um motivo padrão. Paralisação sempre começa com "Not worked due to". */
+export async function createReason(store, input, actor) {
+  const responsible = Sof.canonicalResponsible(input?.responsible);
+  if (!responsible) return { error: "Escolha o responsável do motivo." };
+  let text = str(input?.text, 160).replace(/\.+$/, "");
+  if (responsible !== "Cargo") text = text.replace(/^not worked due to\s*/i, "");
+  if (text.length < 3) return { error: "Escreva o motivo." };
+  text = `${responsible === "Cargo" ? text.charAt(0).toUpperCase() + text.slice(1) : `Not worked due to ${text}`}.`;
+  const std = await standardsOf(store);
+  const same = std.reasons.find(r => Sof.normalizeDescription(r.text) === Sof.normalizeDescription(text));
+  if (same) return { error: `Esse motivo já existe: "${same.text}" (${Sof.RESPONSIBLE_LABELS[same.responsible]}).` };
+  const prefix = PREFIX[responsible];
+  const next = 1 + Math.max(0, ...std.reasons.filter(r => r.code.startsWith(prefix)).map(r => Number(r.code.slice(1)) || 0));
+  const reason = { code: `${prefix}${String(next).padStart(2, "0")}`, responsible, text, createdBy: actor?.name || "", createdAt: new Date().toISOString() };
+  const saved = await savedStandards(store);
+  await saveStandards(store, { ...saved, reasons: [...(saved.reasons || []), reason] });
+  return { reason };
+}
+
+/** Liga descrições a um motivo (ou só confirma o motivo atual, sem reason) e marca como conferidas. */
+export async function setDescriptions(store, keys, code, actor) {
+  const std = await standardsOf(store);
+  const list = [...new Set((Array.isArray(keys) ? keys : []).map(k => String(k)))].slice(0, 2000);
+  if (!list.length || list.some(k => !k || Sof.normalizeDescription(k) !== k)) return { error: "Descrição inválida." };
+  if (code && !std.byCode.has(code)) return { error: "Motivo desconhecido." };
+  if (!code && list.some(k => !std.descriptions[k])) return { error: "Escolha um motivo para as descrições sem motivo." };
+  const saved = await savedStandards(store);
+  const stamp = { by: actor?.name || "", at: new Date().toISOString() };
+  const descriptions = { ...(saved.descriptions || {}) }, confirmed = { ...(saved.confirmed || {}) };
+  for (const key of list) {
+    if (code) descriptions[key] = code;
+    confirmed[key] = stamp;
+  }
+  await saveStandards(store, { ...saved, descriptions, confirmed });
+  return { ok: true, count: list.length };
+}
+
+/**
+ * Todas as descrições da base com o motivo atual, para a tela Padronizar.
+ * status: "conferida" (revisada por você), "importacao" (escolhida ao enviar um SOF), "automatica" (ligada por regra) ou "sem-motivo".
+ */
+export function descriptionList(vessels, std) {
+  const map = new Map();
+  for (const v of vessels) for (const e of v.events) {
+    const id = e.key || e.description;
+    const item = map.get(id) || { key: e.key, texts: new Map(), count: 0, minutes: 0, vessels: new Set() };
+    item.count++; item.minutes += e.minutes || 0; item.vessels.add(v.id);
+    item.texts.set(e.description, (item.texts.get(e.description) || 0) + 1);
+    map.set(id, item);
+  }
+  return [...map.values()].map(item => {
+    const reason = reasonOf(item.key, std);
+    const status = !reason ? "sem-motivo" : std.confirmed.has(item.key) ? "conferida" : std.learned.has(item.key) ? "importacao" : "automatica";
+    const texts = [...item.texts].sort((a, b) => b[1] - a[1]);
+    return { key: item.key, text: texts[0][0], variants: texts.length, count: item.count, minutes: item.minutes, vessels: item.vessels.size, reason: reason?.code || "", status };
+  }).sort((a, b) => b.minutes - a.minutes);
 }

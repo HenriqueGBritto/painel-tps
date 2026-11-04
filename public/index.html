@@ -204,9 +204,10 @@
 
       <section id="sof" class="tab-panel operational-base-panel sof-panel">
         <div class="base-heading"><div><p class="eyebrow">INDICADORES · BASE SOF</p><h2 id="sofTitle">Operacional</h2><p>Statement of Facts de 2025 e 2026. Desatracação e berço vêm da planilha de navios.</p></div>
-          <div class="sof-actions"><button type="button" class="base-upload" id="sofExport">Exportar Excel <span aria-hidden="true">↓</span></button><button type="button" class="base-upload" id="sofOpenDictionary">Responsáveis</button><label class="base-upload sof-file">Enviar SOF <span aria-hidden="true">↑</span><input type="file" id="sofFile" accept=".xlsx,.xlsm,.xls"></label></div></div>
+          <div class="sof-actions"><button type="button" class="base-upload" id="sofExport">Exportar Excel <span aria-hidden="true">↓</span></button><button type="button" class="base-upload" id="sofOpenStandardize" hidden>Padronizar</button><button type="button" class="base-upload" id="sofOpenDictionary">Responsáveis</button><label class="base-upload sof-file">Enviar SOF <span aria-hidden="true">↑</span><input type="file" id="sofFile" accept=".xlsx,.xlsm,.xls"></label></div></div>
         <section class="base-sheet sof-upload" id="sofUpload" aria-live="polite" hidden></section>
         <section class="base-sheet sof-upload" id="sofDictionary" hidden></section>
+        <section class="base-sheet sof-upload" id="sofStandardize" hidden></section>
         <div class="base-filters" aria-label="Filtros da Base SOF"><label>Ano<select id="sofYear"></select></label><label>Mês<select id="sofMonth"></select></label><label>Carga<select id="sofCargo"></select></label><label>Operação<select id="sofOperation"></select></label><label>Berço<select id="sofBerth"></select></label><label class="base-search">Navio<input id="sofVessel" type="search" list="sofVesselList" placeholder="Buscar navio" autocomplete="off" spellcheck="false"><datalist id="sofVesselList"></datalist></label><button type="button" id="sofClear" class="base-reset">Limpar filtros</button></div>
         <p class="base-status" id="sofStatus" role="status" aria-live="polite"></p>
         <p class="sof-summary" id="sofSummary"></p>

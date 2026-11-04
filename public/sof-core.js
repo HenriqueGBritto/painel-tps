@@ -318,6 +318,37 @@
     return { status: "nova", responsible: "", options };
   }
 
+  /* ---------- Motivos parecidos ---------- */
+
+  const trigrams = key => { const t = ` ${key} `, set = new Set(); for (let i = 0; i < t.length - 2; i++) set.add(t.slice(i, i + 3)); return set; };
+  const stems = key => new Set(key.split(" ").filter(Boolean).map(w => w.replace(/(ies|es|s)$/, "")));
+  const overlap = (a, b) => { let n = 0; for (const x of a) if (b.has(x)) n++; return n; };
+
+  /** Semelhança entre duas chaves de descrição (0 a 1): metade pelas letras em comum (pega erro de digitação), metade pelas palavras. */
+  function similarity(a, b) {
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const ta = trigrams(a), tb = trigrams(b), wa = stems(a), wb = stems(b);
+    const dice = 2 * overlap(ta, tb) / (ta.size + tb.size);
+    const words = overlap(wa, wb) / Math.max(wa.size, wb.size);
+    return (dice + words) / 2;
+  }
+
+  /**
+   * Os motivos mais parecidos com uma descrição nova: compara com o texto de cada motivo
+   * e com as descrições já ligadas a ele (known: [chave, código]). Devolve [{ code, score }].
+   */
+  function similarReasons(description, known, reasons, limit = 3) {
+    const key = normalizeDescription(description);
+    // "Not worked due to …" é sempre paralisação: os motivos de Carga (loading, discharging) ficam de fora.
+    const allowed = new Set(reasons.filter(r => !/^\s*not work/i.test(description) || r.responsible !== "Cargo").map(r => r.code));
+    const best = new Map();
+    const consider = (code, other) => { if (!allowed.has(code)) return; const score = similarity(key, other); if (score > (best.get(code) || 0)) best.set(code, score); };
+    for (const reason of reasons) consider(reason.code, normalizeDescription(reason.text));
+    for (const [other, code] of known) consider(code, other);
+    return [...best].map(([code, score]) => ({ code, score })).sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
   /* ---------- Indicadores por navio ---------- */
 
   const days = (start, end) => { const a = Date.parse(start || ""), b = Date.parse(end || ""); return Number.isFinite(a) && Number.isFinite(b) && b > a ? (b - a) / DAY : 0; };
@@ -470,7 +501,7 @@
 
   root.TpsSof = {
     RESPONSIBLES, RESPONSIBLE_LABELS, PERIODS, OPERATIONS, AUTO_SHARE,
-    normalizeDescription, cleanDescription, canonicalResponsible, vesselKey, periodOf, serialDate, serialIso, timeMinutes, localIso,
+    normalizeDescription, cleanDescription, similarity, similarReasons, canonicalResponsible, vesselKey, periodOf, serialDate, serialIso, timeMinutes, localIso,
     parseSofWorkbook, learn, ranking, suggest, vesselSummary, vesselMonth, filterVessels, totals, topStoppages,
     monthlyComparison, occupancy, occupancyFor
   };
