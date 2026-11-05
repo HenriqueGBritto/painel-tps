@@ -30,11 +30,15 @@
       if (!response.ok) throw new Error(body.error || "Não foi possível ler a Base SOF.");
       state.vessels = body.vessels;
       $("sofOpenStandardize").hidden = !body.canStandardize;
+      const mirror = body.mirror || {};
+      $("sofMirror").hidden = !mirror.url;
+      $("sofMirror").href = mirror.url || "#";
+      $("sofMirror").title = mirror.syncedAt ? `Cópia só para consulta, atualizada em ${fmtDate(mirror.syncedAt)}` : "Cópia só para consulta (ainda não atualizada)";
       // Última data com SOF: o ano em andamento só é comparado (e a ocupação só é medida) até ela.
       state.lastData = Math.min(Date.now(), Math.max(0, ...body.vessels.map(v => Date.parse(v.operationEnd || "") || 0)));
       state.loaded = true;
       setupFilters();
-      $("sofStatus").textContent = body.operationsAvailable ? "" : "Planilha de navios indisponível agora: desatracação e berço vêm só do SOF.";
+      $("sofStatus").textContent = [body.operationsAvailable ? "" : "Planilha de navios indisponível agora: desatracação e berço vêm só do SOF.", body.mirror?.error ? `Espelho no Google Planilhas não atualizou: ${body.mirror.error}` : ""].filter(Boolean).join(" ");
       render();
     }).catch(error => { $("sofStatus").textContent = error.message; }).finally(() => { state.loading = null; });
     return state.loading;

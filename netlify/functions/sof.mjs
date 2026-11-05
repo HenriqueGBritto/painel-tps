@@ -11,11 +11,13 @@
    GET    /api/sof/padronizar      todas as descrições da base com o motivo atual (administrador)
    POST   /api/sof/padronizar      { keys, reason } liga descrições a um motivo e marca como conferidas; sem reason, só confere
    DELETE /api/sof/navios?id=      apaga um SOF enviado
+   Toda gravação marca o espelho no Google Planilhas como desatualizado (netlify/lib/sof-mirror.mjs).
    Regras em netlify/lib/sof.mjs. */
 import { authorize, actorOf, can, denied, ACTIONS } from "../lib/access.mjs";
 import { activitiesStore } from "../lib/activities-store.mjs";
 import { loadForServing } from "../lib/snapshots.mjs";
 import * as sof from "../lib/sof.mjs";
+import { markMirrorDirty, mirrorId } from "../lib/sof-mirror.mjs";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Type": "application/json; charset=utf-8" };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers });
@@ -47,10 +49,14 @@ export default async function handler(request) {
   const store = activitiesStore();
   const canStandardize = can(access.user, ACTIONS.manageSofStandards);
   const canEdit = can(access.user, ACTIONS.editSof);
+  /** Resposta de uma gravação que deu certo: o espelho no Google Planilhas fica para a próxima rodada. */
+  const saved = async (result, status = 200) => { await markMirrorDirty(store).catch(error => console.error("Espelho SOF:", error)); return json(result, status); };
 
   if (reading && route === "") {
     const [vessels, records] = await Promise.all([sof.allVessels(store), operations()]);
-    return json({ vessels: vessels.map(v => sof.summaryOf(sof.enrich(v, records))), source: sof.seed().source, operationsAvailable: records.length > 0, canStandardize });
+    const mirror = store ? (await store.get(sof.CONFIG, "mirror")) || {} : {};
+    return json({ vessels: vessels.map(v => sof.summaryOf(sof.enrich(v, records))), source: sof.seed().source, operationsAvailable: records.length > 0, canStandardize,
+      mirror: { url: `https://docs.google.com/spreadsheets/d/${mirrorId()}/edit`, syncedAt: mirror.syncedAt || null, ...(canStandardize ? { error: mirror.error || "" } : {}) } });
   }
   if (reading && route === "navio") {
     const id = url.searchParams.get("id");
@@ -92,20 +98,20 @@ export default async function handler(request) {
     // Reenvio do mesmo SOF não conta as escolhas duas vezes no dicionário.
     if (!previous) await sof.learnFrom(store, vessel.events);
     await sof.learnStandards(store, vessel.events);
-    return json({ ok: true, id, replaced: Boolean(previous) });
+    return saved({ ok: true, id, replaced: Boolean(previous) });
   }
   if (editRoute) {
     const result = await sof.saveEdit(store, url.searchParams.get("id") || "", await readBody(request), await operations(), actorOf(access));
-    return result.error ? json({ error: result.error }, result.status || 400) : json(result);
+    return result.error ? json({ error: result.error }, result.status || 400) : saved(result);
   }
   if (request.method === "POST" && route === "motivos") {
     const result = await sof.createReason(store, await readBody(request), actorOf(access));
-    return result.error ? json(result, 400) : json(result);
+    return result.error ? json(result, 400) : saved(result);
   }
   if (request.method === "POST" && route === "padronizar") {
     const body = await readBody(request);
     const result = await sof.setDescriptions(store, body?.keys, body?.reason ? String(body.reason) : "", actorOf(access));
-    return result.error ? json(result, 400) : json(result);
+    return result.error ? json(result, 400) : saved(result);
   }
   if (request.method === "DELETE" && route === "navios") {
     const id = url.searchParams.get("id") || "";
@@ -114,7 +120,7 @@ export default async function handler(request) {
     // Desfazer a edição de um navio do histórico é do administrador, como a própria edição.
     if (current.origin === "base" && !canEdit) return json({ error: "Só o administrador desfaz edições." }, 403);
     await store.remove(sof.VESSELS, id);
-    return json({ ok: true });
+    return saved({ ok: true });
   }
   return json({ error: "Rota não encontrada." }, 404);
 }
