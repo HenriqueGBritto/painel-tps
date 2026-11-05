@@ -227,32 +227,179 @@
     }).join("") : '<tr><td colspan="10" class="base-empty">Nenhum navio nos filtros.</td></tr>';
   }
 
-  /* ---------- Detalhe do navio ---------- */
+  /* ---------- Página do navio ---------- */
+
+  const RESP_COLORS = { Cargo: "#5b6470", Terminal: "#c8102e", Vessel: "#1f5fae", Client: "#c27a00", Rain: "#1a8fa3", Port: "#7a4bb3", Others: "#9aa1a9" };
+  const localParts = iso => { const t = Date.parse(iso || ""); if (!Number.isFinite(t)) return { date: "", time: "" }; const d = new Date(t - 3 * 3600000).toISOString(); return { date: d.slice(0, 10), time: d.slice(11, 16) }; };
+  const shortDate = iso => { const { date, time } = localParts(iso); return date ? `${date.slice(8, 10)}/${date.slice(5, 7)} ${time}` : "—"; };
+  const minutesText = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${String(m % 60).padStart(2, "0")}min` : ""}` : `${int.format(m)} min`;
 
   async function openVessel(id) {
-    const summaryRow = state.vessels.find(v => v.id === id);
-    if (!summaryRow) return;
-    window.showDrawer?.(summaryRow.vessel, "", '<div class="empty">Lendo as ocorrências…</div>');
+    const page = $("sofVesselPage");
+    $("sof").classList.add("is-vessel");
+    page.hidden = false;
+    page.innerHTML = '<p class="base-status">Lendo o navio…</p>';
+    window.scrollTo({ top: $("sof").offsetTop - 70 });
     const response = await fetch(`/api/sof/navio?id=${encodeURIComponent(id)}`);
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) { $("vesselList").innerHTML = `<div class="empty">${escape(body.error || "Não foi possível abrir o navio.")}</div>`; return; }
-    const v = body.vessel, s = summaryRow.summary;
-    const stat = (title, value) => `<div class="drawer-stat"><span>${title}</span><strong>${value}</strong></div>`;
-    $("drawerSummary").innerHTML = stat("Volume", `${int.format(v.tons)} t`) + stat("Prancha bruta", rate(s.grossRate)) + stat("Prancha líquida", rate(s.netRate)) + stat("Operação", daysText(s.operationDays));
-    const resp = S.RESPONSIBLES.filter(n => s.byResponsible[n] > 0).map(n => `<span>${label(n)}: ${hours(s.byResponsible[n])}</span>`).join("");
-    const remove = v.source === "sof" ? `<button type="button" class="sof-danger" data-sof-delete="${escape(v.id)}">Apagar este SOF enviado</button>` : "";
-    $("vesselList").innerHTML = `<article class="vessel-item"><div class="vessel-meta"><span>${escape(v.cargo)}</span><span>${escape(v.operation)}</span><span>${escape(v.berth || "berço não informado")}</span>${v.client ? `<span>${escape(v.client)}</span>` : ""}</div>
-      <div class="vessel-meta"><span>Atracação: ${fmtDate(v.berthStart)}</span><span>Início: ${fmtDate(v.operationStart)}</span><span>Término: ${fmtDate(v.operationEnd)}</span><span>Desatracação: ${fmtDate(v.berthEnd)}${v.matched ? " (planilha de navios)" : ""}</span></div>
-      <div class="vessel-meta">${resp}</div>${v.source === "sof" ? `<p class="sof-note">SOF enviado${v.savedBy?.name ? ` por ${escape(v.savedBy.name)}` : ""} em ${fmtDate(v.savedAt)}${v.fileName ? ` · ${escape(v.fileName)}` : ""}.</p>${remove}` : '<p class="sof-note">Histórico da Base SOF (planilha de indicadores).</p>'}</article>
-      <div class="sof-events">${v.events.map(e => `<div class="sof-event${e.responsible === "Cargo" ? "" : " is-stop"}"><time>${e.date.slice(8, 10)}/${e.date.slice(5, 7)} ${String(Math.floor(e.from / 60)).padStart(2, "0")}:${String(e.from % 60).padStart(2, "0")}</time><div><strong>${escape(e.description)}</strong><small>${label(e.responsible)} · ${e.minutes} min${e.gang ? ` · ${escape(e.gang)} terno` : ""}${e.hold ? ` · porão ${escape(e.hold)}` : ""}${e.weight ? ` · ${two.format(e.weight)} t` : ""}</small></div></div>`).join("")}</div>`;
+    if (!response.ok) { page.innerHTML = `<button type="button" class="base-reset" data-sof-back>← Voltar aos navios</button><p class="base-status">${escape(body.error || "Não foi possível abrir o navio.")}</p>`; return; }
+    state.page = { vessel: body.vessel, canEdit: body.canEdit, draft: null };
+    renderVesselPage();
   }
 
-  async function deleteVessel(id) {
-    if (!confirm("Apagar este SOF enviado? Os indicadores voltam a usar a Base SOF (se houver) para este navio.")) return;
+  function closeVesselPage() {
+    $("sof").classList.remove("is-vessel");
+    const page = $("sofVesselPage");
+    page.hidden = true; page.innerHTML = "";
+    state.page = null;
+    $("sofVesselRows").closest("section").scrollIntoView({ block: "start" });
+  }
+
+  /** Linha do tempo: atracado, operação e uma faixa por responsável com as ocorrências no horário real. */
+  function timeline(v) {
+    const valid = v.events.filter(e => e.minutes > 0 && Number.isFinite(Date.parse(e.start)));
+    // A janela é a estadia do navio (com folga de 6 h); ocorrência com data fora dela costuma ser erro de digitação no SOF.
+    const stay = [v.berthStart, v.operationStart, v.operationEnd, v.berthEnd].map(x => Date.parse(x || "")).filter(Number.isFinite);
+    const times = stay.length >= 2 ? [Math.min(...stay) - 6 * 3600000, Math.max(...stay) + 6 * 3600000] : valid.flatMap(e => [Date.parse(e.start), Date.parse(e.end)]);
+    const a = Math.min(...times), b = Math.max(...times);
+    if (!(b > a)) return '<p class="base-empty">Sem horários para montar a linha do tempo.</p>';
+    const events = valid.filter(e => Date.parse(e.end) > a && Date.parse(e.start) < b);
+    const outside = valid.filter(e => !events.includes(e));
+    const span = (start, end) => [Date.parse(start || ""), Date.parse(end || "")];
+    const rows = [
+      ["Atracado", [[...span(v.berthStart, v.berthEnd), `Atracado: ${fmtDate(v.berthStart)} → ${fmtDate(v.berthEnd)}`]], "#d6d9dd"],
+      ["Operação", [[...span(v.operationStart, v.operationEnd), `Operação: ${fmtDate(v.operationStart)} → ${fmtDate(v.operationEnd)}`]], "#aab0b7"],
+      ...S.RESPONSIBLES.filter(n => events.some(e => e.responsible === n)).map(n => [label(n),
+        events.filter(e => e.responsible === n).map(e => [...span(e.start, e.end), `${shortDate(e.start)} → ${shortDate(e.end)} (${minutesText(e.minutes)}) · ${e.description}`]), RESP_COLORS[n]])
+    ];
+    const W = 1000, L = 96, R = 8, H = 22, TOP = 22;
+    const x = t => L + (Math.min(Math.max(t, a), b) - a) / (b - a) * (W - L - R);
+    const height = TOP + rows.length * H + 4;
+    const step = Math.max(1, Math.ceil((b - a) / 86400000 / 16));
+    const ticks = [];
+    for (let t = Date.parse(`${localParts(new Date(a).toISOString()).date}T00:00:00-03:00`) + 86400000; t < b; t += step * 86400000) ticks.push(t);
+    return `<svg viewBox="0 0 ${W} ${height}" role="img" aria-label="Linha do tempo do navio por responsável">
+      ${ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${TOP - 6}" y2="${height}" class="sof-tl-grid"/><text x="${x(t) + 3}" y="${TOP - 9}" class="sof-tl-day">${shortDate(new Date(t).toISOString()).slice(0, 5)}</text>`).join("")}
+      ${rows.map(([name, spans, color], i) => `<text x="0" y="${TOP + i * H + 15}" class="sof-tl-label">${escape(name)}</text>
+        ${spans.filter(([s, e]) => Number.isFinite(s) && Number.isFinite(e) && e > s).map(([s, e, title]) => `<rect x="${x(s)}" y="${TOP + i * H + 4}" width="${Math.max(1.5, x(e) - x(s))}" height="${H - 8}" rx="2" fill="${color}"><title>${escape(title)}</title></rect>`).join("")}`).join("")}
+    </svg>${outside.length ? `<p class="sof-warn">${outside.length === 1 ? "1 ocorrência está" : `${outside.length} ocorrências estão`} com data fora da estadia do navio e não ${outside.length === 1 ? "aparece" : "aparecem"} na linha do tempo: ${outside.slice(0, 3).map(e => `${shortDate(e.start)} · ${escape(e.description)}`).join("; ")}${outside.length > 3 ? "…" : ""}. Confira a data no SOF.</p>` : ""}`;
+  }
+
+  function renderVesselPage() {
+    const { vessel: v, canEdit, draft } = state.page;
+    const s = S.vesselSummary(v);
+    const stopped = s.operationDays ? (s.operationDays - s.byResponsible.Cargo) / s.operationDays * 100 : null;
+    const edited = v.source === "sof" && v.origin === "base";
+    const origin = v.source !== "sof" ? "Histórico da Base SOF (planilha de indicadores)."
+      : edited ? `Histórico da Base SOF, editado no painel${v.editedBy?.name ? ` por ${escape(v.editedBy.name)}` : ""} em ${fmtDate(v.editedAt)}.`
+      : `SOF enviado${v.savedBy?.name ? ` por ${escape(v.savedBy.name)}` : ""} em ${fmtDate(v.savedAt)}${v.fileName ? ` · ${escape(v.fileName)}` : ""}${v.editedAt ? ` · editado em ${fmtDate(v.editedAt)}` : ""}.`;
+    const undo = !draft && (edited ? (canEdit ? `<button type="button" class="sof-danger" data-sof-delete="${escape(v.id)}" data-sof-undo>Desfazer edições</button>` : "")
+      : v.source === "sof" ? `<button type="button" class="sof-danger" data-sof-delete="${escape(v.id)}">Apagar este SOF enviado</button>` : "");
+    const fromSheet = field => v.matched && !(v.locked || []).includes(field) ? ' <small title="Da planilha de navios">(planilha)</small>' : "";
+    const head = `<div class="sof-page-head"><button type="button" class="base-reset" data-sof-back>← Voltar aos navios</button>
+        <div class="sof-page-actions">${canEdit && !draft ? '<button type="button" class="base-upload" data-sof-edit>Editar</button>' : ""}${undo || ""}</div></div>
+      <p class="eyebrow">NAVIO · ${escape(v.operation)} · ${escape(v.cargo)}</p><h2 class="sof-page-title">${escape(v.vessel)}</h2><p class="sof-note">${origin}</p>`;
+    if (draft) { $("sofVesselPage").innerHTML = head + editorHtml(v); renderDraftRows(); return; }
+    const stops = s.stoppages;
+    const stopTotal = stops.reduce((sum, x) => sum + x.days, 0);
+    $("sofVesselPage").innerHTML = `${head}
+      <div class="sof-meta"><span><b>Berço</b> ${escape(v.berth || "—")}${fromSheet("berth")}</span><span><b>Cliente</b> ${escape(v.client || "—")}${fromSheet("client")}</span>
+        <span><b>Atracação</b> ${fmtDate(v.berthStart)}</span><span><b>Início</b> ${fmtDate(v.operationStart)}</span><span><b>Término</b> ${fmtDate(v.operationEnd)}</span><span><b>Desatracação</b> ${fmtDate(v.berthEnd)}${fromSheet("berthEnd")}</span></div>
+      <div class="base-kpis sof-kpis">${[
+        kpi("VOLUME", `${int.format(v.tons)} t`, escape(v.cargo)),
+        kpi("TEMPO ATRACADO", daysText(s.berthDays || null), `espera até operar: ${s.waitDays ? hours(s.waitDays) : "—"}`),
+        kpi("TEMPO DE OPERAÇÃO", daysText(s.operationDays), "início → término"),
+        kpi("PRANCHA BRUTA", rate(s.grossRate), `líquida ${rate(s.netRate)}`),
+        kpi("PRANCHA TRIUNFO", rate(s.triunfoRate), "volume ÷ (operando + terminal)"),
+        kpi("TEMPO PARADO", pct(stopped), `${hours(s.operationDays - s.byResponsible.Cargo)} sem operar`)].join("")}</div>
+      <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">LINHA DO TEMPO</p><h3>Quem estava com a operação</h3></div><span>passe o mouse numa faixa para ver a ocorrência</span></div>
+        <div class="base-chart-scroll sof-timeline">${timeline(v)}</div>
+        <div class="sof-legend-row">${S.RESPONSIBLES.filter(n => s.byResponsible[n] > 0).map(n => `<span><i class="sof-dot" style="background:${RESP_COLORS[n]}"></i>${label(n)}</span>`).join("")}</div></section>
+      <div class="sof-grid">
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">TEMPO DE OPERAÇÃO</p><h3>Por responsável</h3></div></div><div class="sof-resp-list">
+          ${S.RESPONSIBLES.filter(n => s.byResponsible[n] > 0).map(n => { const share = s.operationDays ? s.byResponsible[n] / s.operationDays * 100 : 0; return `<div class="sof-resp${n === "Cargo" ? " is-work" : ""}"><div><strong>${label(n)}</strong><small>${hours(s.byResponsible[n])}</small></div><div class="sof-track"><i style="width:${Math.min(100, share)}%;background:${RESP_COLORS[n]}"></i></div><span>${pct(share)}</span></div>`; }).join("")}
+        </div></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PARALISAÇÕES</p><h3>Por motivo</h3></div><span>${hours(stopTotal)}</span></div>
+          <div class="base-table-scroll"><table class="base-table sof-stop-table"><thead><tr><th>Motivo</th><th>Responsável</th><th>Vezes</th><th>Tempo</th></tr></thead><tbody>
+          ${stops.map(x => `<tr><th>${escape(x.text)}</th><td><i class="sof-dot" style="background:${RESP_COLORS[x.responsible]}"></i>${label(x.responsible)}</td><td>${int.format(x.count)}</td><td>${hours(x.days)}</td></tr>`).join("") || '<tr><td colspan="4" class="base-empty">Nenhuma paralisação.</td></tr>'}
+          </tbody></table></div></section>
+      </div>
+      <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">OCORRÊNCIAS</p><h3>${int.format(v.events.length)} registros do SOF</h3></div><span>tempos como no SOF; nos indicadores, proporcionais ao tempo de operação</span></div>
+        <div class="base-table-scroll"><table class="base-table sof-event-table"><thead><tr><th>Início</th><th>Fim</th><th>Duração</th><th>Período</th><th>Terno</th><th>Porão</th><th>Descrição</th><th>Motivo</th><th>Peso (t)</th></tr></thead><tbody>
+        ${v.events.map(e => `<tr class="${e.responsible === "Cargo" ? "" : "is-stop"}"><td>${shortDate(e.start)}</td><td>${shortDate(e.end)}</td><td>${minutesText(e.minutes)}</td><td>${escape(e.period || "")}</td><td>${escape(e.gang || "")}</td><td>${escape(e.hold || "")}</td>
+          <th>${escape(e.description)}</th><td><i class="sof-dot" style="background:${RESP_COLORS[e.responsible] || "#ccc"}"></i>${escape((e.reasonText || "").replace(/^Not worked due to /, "").replace(/\.$/, "") || "—")}<small>${label(e.responsible)}${e.reasonFixed ? " · motivo fixado nesta ocorrência" : ""}</small></td><td>${e.weight ? two.format(e.weight) : ""}</td></tr>`).join("")}
+        </tbody></table></div></section>
+      <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">HISTÓRICO</p><h3>Alterações feitas no painel</h3></div></div>
+        ${(v.changes || []).length ? `<ol class="sof-history">${[...v.changes].reverse().map(c => `<li><p><b>${fmtDate(c.at)}</b> · ${escape(c.by || "—")}</p><ul>${c.items.map(item => `<li>${escape(item)}</li>`).join("")}</ul></li>`).join("")}</ol>` : '<p class="base-empty">Nenhuma alteração: os dados estão como vieram do SOF.</p>'}
+      </section>`;
+  }
+
+  /* Edição: campos do navio em cima e a tabela de ocorrências (redesenhada sozinha ao incluir ou tirar linhas). */
+  async function startEdit() {
+    try { await dictionary(); } catch (error) { alert(error.message); return; }
+    const v = state.page.vessel;
+    state.page.draft = { events: v.events.map(e => ({ id: e.id, ...localParts(e.start), minutes: e.minutes, gang: e.gang || "", hold: e.hold || "", description: e.description, reason: e.reason || "", volume: e.volume ?? "", weight: e.weight ?? "" })) };
+    renderVesselPage();
+  }
+
+  function editorHtml(v) {
+    return `<div class="sof-form">
+        <label>Navio<input id="sofEVessel" value="${escape(v.vessel)}"></label>
+        <label>Carga<input id="sofECargo" value="${escape(v.cargo)}"></label>
+        <label>Operação<select id="sofEOperation">${S.OPERATIONS.map(o => `<option ${o === v.operation ? "selected" : ""}>${o}</option>`).join("")}</select></label>
+        <label>Volume (t)<input id="sofETons" type="number" step="0.001" min="0" value="${v.tons}"></label>
+        <label>Berço<input id="sofEBerth" value="${escape(v.berth || "")}"></label>
+        <label>Cliente<input id="sofEClient" value="${escape(v.client || "")}"></label>
+        <label>Atracação<input id="sofEBerthStart" type="datetime-local" value="${toLocalInput(v.berthStart)}"></label>
+        <label>Início da operação<input id="sofEStart" type="datetime-local" value="${toLocalInput(v.operationStart)}"></label>
+        <label>Término da operação<input id="sofEEnd" type="datetime-local" value="${toLocalInput(v.operationEnd)}"></label>
+        <label>Desatracação<input id="sofEBerthEnd" type="datetime-local" value="${toLocalInput(v.berthEnd)}"></label>
+      </div>
+      <p class="sof-note">Berço, cliente, atracação e desatracação vêm da planilha de navios; mudados aqui, passam a valer o que você digitou. Trocar o motivo de uma ocorrência vale só para ela; para mudar todas as da mesma descrição, use Padronizar.</p>
+      <div class="base-table-scroll"><table class="base-table sof-edit-table"><thead><tr><th>Data</th><th>Hora</th><th>Minutos</th><th>Terno</th><th>Porão</th><th>Descrição</th><th>Motivo</th><th>Peso (t)</th><th></th></tr></thead><tbody id="sofEditRows"></tbody></table></div>
+      <div class="sof-upload-actions"><button type="button" class="base-upload" data-sof-add-event>+ Incluir ocorrência</button><p id="sofEditStatus" class="base-status" role="status"></p>
+        <button type="button" class="base-reset" data-sof-cancel-edit>Cancelar</button><button type="button" class="sof-primary" data-sof-save-edit>Salvar alterações</button></div>`;
+  }
+
+  function renderDraftRows() {
+    const cell = (i, field, value, attrs = "") => `<td><input data-ev="${i}" data-field="${field}" value="${escape(value)}" ${attrs}></td>`;
+    $("sofEditRows").innerHTML = state.page.draft.events.map((e, i) => `<tr>
+      ${cell(i, "date", e.date, 'type="date"')}${cell(i, "time", e.time, 'type="time"')}${cell(i, "minutes", e.minutes, 'type="number" min="0" max="2880" step="1"')}
+      ${cell(i, "gang", e.gang)}${cell(i, "hold", e.hold)}${cell(i, "description", e.description, 'class="is-wide"')}
+      <td><select data-ev="${i}" data-field="reason" aria-label="Motivo">${e.reason ? "" : '<option value="">Escolha…</option>'}${reasonOptions(e.reason)}</select></td>
+      ${cell(i, "weight", e.weight, 'type="number" step="0.001" min="0"')}
+      <td><button type="button" class="sof-std-ok" data-sof-remove-event="${i}" aria-label="Tirar esta ocorrência">Tirar</button></td></tr>`).join("");
+  }
+
+  async function saveVesselEdit() {
+    const p = state.page, status = $("sofEditStatus");
+    const number = value => value === "" || value === null || value === undefined ? null : Number(value);
+    const events = [];
+    for (const [i, e] of p.draft.events.entries()) {
+      const start = Date.parse(`${e.date}T${e.time || "00:00"}:00-03:00`);
+      if (!Number.isFinite(start)) { status.textContent = `Confira a data e a hora da ocorrência ${i + 1}.`; return; }
+      if (!e.reason) { status.textContent = `Escolha o motivo da ocorrência ${i + 1}.`; return; }
+      events.push({ id: e.id || "", date: e.date, start: new Date(start).toISOString(), minutes: Number(e.minutes) || 0, gang: e.gang, hold: e.hold, description: e.description, reason: e.reason, volume: number(e.volume), weight: number(e.weight) });
+    }
+    const body = { vessel: $("sofEVessel").value, cargo: $("sofECargo").value, operation: $("sofEOperation").value, tons: Number($("sofETons").value), berth: $("sofEBerth").value, client: $("sofEClient").value,
+      berthStart: fromLocalInput($("sofEBerthStart").value), operationStart: fromLocalInput($("sofEStart").value), operationEnd: fromLocalInput($("sofEEnd").value), berthEnd: fromLocalInput($("sofEBerthEnd").value), events };
+    status.textContent = "Salvando…";
+    const response = await fetch(`/api/sof/navio?id=${encodeURIComponent(p.vessel.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { status.textContent = result.error || "Não foi possível salvar."; return; }
+    if (!result.changes.length) { status.textContent = "Nada mudou."; return; }
+    state.dictionary = null;
+    await load(true);
+    await openVessel(result.id);
+  }
+
+  async function deleteVessel(id, undo) {
+    const question = undo ? "Desfazer as edições deste navio? Ele volta a ser como está no histórico da Base SOF, e o registro das alterações é apagado." : "Apagar este SOF enviado? Os indicadores voltam a usar a Base SOF (se houver) para este navio.";
+    if (!confirm(question)) return;
     const response = await fetch(`/api/sof/navios?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) { alert(body.error || "Não foi possível apagar."); return; }
-    window.closeDrawer?.();
+    closeVesselPage();
     await load(true);
   }
 
@@ -632,7 +779,27 @@
     $("sofExport").addEventListener("click", exportBase);
     $("sofVesselRows").addEventListener("click", event => { const row = event.target.closest("[data-sof-id]"); if (row) openVessel(row.dataset.sofId); });
     $("sofVesselRows").addEventListener("keydown", event => { const row = event.target.closest("[data-sof-id]"); if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openVessel(row.dataset.sofId); } });
-    $("vesselList").addEventListener("click", event => { const b = event.target.closest("[data-sof-delete]"); if (b) deleteVessel(b.dataset.sofDelete); });
+    const page = $("sofVesselPage");
+    page.addEventListener("click", event => {
+      const t = event.target;
+      if (t.closest("[data-sof-back]")) { closeVesselPage(); return; }
+      if (t.closest("[data-sof-edit]")) { startEdit(); return; }
+      if (t.closest("[data-sof-cancel-edit]")) { state.page.draft = null; renderVesselPage(); return; }
+      if (t.closest("[data-sof-save-edit]")) { saveVesselEdit(); return; }
+      const del = t.closest("[data-sof-delete]");
+      if (del) { deleteVessel(del.dataset.sofDelete, del.hasAttribute("data-sof-undo")); return; }
+      if (t.closest("[data-sof-add-event]")) {
+        const list = state.page.draft.events, last = list[list.length - 1];
+        list.push({ id: "", date: last?.date || localParts(state.page.vessel.operationStart).date, time: "", minutes: 0, gang: "", hold: "", description: "", reason: "", volume: "", weight: "" });
+        renderDraftRows();
+        return;
+      }
+      const remove = t.closest("[data-sof-remove-event]");
+      if (remove) { state.page.draft.events.splice(Number(remove.dataset.sofRemoveEvent), 1); renderDraftRows(); }
+    });
+    const editField = event => { const t = event.target; if (t.dataset.ev === undefined || !state.page?.draft) return; state.page.draft.events[Number(t.dataset.ev)][t.dataset.field] = t.value; };
+    page.addEventListener("input", editField);
+    page.addEventListener("change", editField);
     const upload = $("sofUpload");
     upload.addEventListener("click", event => {
       if (event.target.closest("[data-sof-cancel]")) { state.upload = null; upload.hidden = true; upload.innerHTML = ""; }

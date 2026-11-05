@@ -252,3 +252,34 @@ test("padronizar: criar motivo, mover descrições e conferir", async () => {
   assert.ok(list.every(x => x.status === "conferida" && x.reason === "O11"));
   sof.useSeed(null);
 });
+
+test("edição: navio do histórico vira cópia editada, guarda o que mudou e pode ser desfeita", async () => {
+  sof.useSeed({ source: "teste", vessels: [{ id: "base-001", source: "base", vessel: "NAVIO", cargo: "TARUGO", operation: "EXPORTAÇÃO", tons: 1000, berth: "PÁTIO 9",
+    operationStart: "2026-10-22T05:00:00.000Z", operationEnd: "2026-10-23T05:00:00.000Z",
+    events: [{ date: "2026-10-22", from: 120, minutes: 60, description: "Not worked due to rain." }, { date: "2026-10-22", from: 180, minutes: 600, description: "Loading steel billets." }].map(e => sof.expandEvent(e)) }], dictionary: {} });
+  const store = memoryStore();
+  const actor = { name: "Henrique", uid: "u1" };
+  const sheet = [{ vessel: "NAVIO", berthStart: "2026-10-22T03:00:00.000Z", berthEnd: "2026-10-23T09:00:00.000Z", berth: "PÁTIO 9", client: "CLIENTE" }];
+  const [original] = await sof.allVessels(store);
+  const events = sof.withIds(original.events).map(e => ({ id: e.id, date: e.date, start: e.start, minutes: e.minutes, description: e.description, reason: e.reason }));
+  events[0] = { ...events[0], minutes: 45, reason: "T09" };
+  events.push({ date: "2026-10-22", start: "2026-10-22T18:00:00.000Z", minutes: 30, description: "Not worked due to awaiting trucks.", reason: "C04" });
+  const result = await sof.saveEdit(store, "base-001", { berth: "ARMAZÉM 10", tons: 1200, events }, sheet, actor);
+  assert.equal(result.id, "edit_base-001");
+  assert.deepEqual(result.changes.slice(0, 2), ["Berço: PÁTIO 9 → ARMAZÉM 10", "Volume (t): 1.000 → 1.200"]);
+  assert.ok(result.changes.some(c => /duração 60 → 45 min; motivo rain → cleaning operational area/.test(c)));
+  assert.ok(result.changes.some(c => /^Ocorrência incluída: 22\/10\/2026 15:00/.test(c)));
+  const all = await sof.allVessels(store);
+  assert.deepEqual(all.map(v => v.id), ["edit_base-001"]);
+  const edited = sof.enrich(all[0], sheet);
+  assert.deepEqual([edited.berth, edited.client, edited.tons, edited.origin], ["ARMAZÉM 10", "CLIENTE", 1200, "base"], "berço editado vale mais que a planilha");
+  assert.deepEqual(edited.events.map(e => [e.reason, e.responsible]), [["T09", "Terminal"], ["L01", "Cargo"], ["C04", "Client"]], "motivo trocado só nesta ocorrência");
+  assert.equal(sof.reasonOf("rain").code, "R01");
+  assert.equal((await sof.saveEdit(store, "edit_base-001", { events: sof.withIds(all[0].events).map(e => ({ ...e })) }, sheet, actor)).changes.length, 0, "salvar sem mudar não grava");
+  const stored = await store.get(sof.VESSELS, "edit_base-001");
+  assert.equal(stored.changes.length, 1);
+  assert.equal(stored.changes[0].by, "Henrique");
+  await store.remove(sof.VESSELS, "edit_base-001");
+  assert.deepEqual((await sof.allVessels(store)).map(v => [v.id, v.tons]), [["base-001", 1000]]);
+  sof.useSeed(null);
+});

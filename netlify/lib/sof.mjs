@@ -43,9 +43,12 @@ export function reasonOf(key, std = BASE) {
   return std.byCode.get(std.descriptions[key]) || null;
 }
 
-/** O motivo da descrição vale primeiro; o escolhido na ocorrência só conta quando a descrição não tem chave. */
+/**
+ * O motivo da descrição vale primeiro; o escolhido na ocorrência conta quando a descrição não tem motivo
+ * ou quando foi fixado à mão na edição do navio (reasonFixed).
+ */
 function withReason(event, std) {
-  const reason = reasonOf(event.key, std) || std.byCode.get(event.reason);
+  const reason = (event.reasonFixed && std.byCode.get(event.reason)) || reasonOf(event.key, std) || std.byCode.get(event.reason);
   return reason ? { ...event, reason: reason.code, reasonText: reason.text, responsible: reason.responsible } : event;
 }
 
@@ -110,7 +113,7 @@ export function validateVessel(input, std = BASE) {
     const responsible = reason?.responsible || Sof.canonicalResponsible(e?.responsible);
     if (!start || minutes === null || minutes < 0 || minutes > 2880 || !description) return { error: `Ocorrência ${index + 1} inválida.` };
     if (!responsible) return { error: `Escolha o motivo da ocorrência ${index + 1} ("${description.slice(0, 50)}").` };
-    events.push({ date: str(e.date, 10), start, minutes, gang: str(e.gang, 12), hold: str(e.hold, 12), description, volume: num(e.volume), weight: num(e.weight), responsible, ...(reason ? { reason: reason.code } : {}) });
+    events.push({ date: str(e.date, 10), start, minutes, gang: str(e.gang, 12), hold: str(e.hold, 12), description, volume: num(e.volume), weight: num(e.weight), responsible, ...(reason ? { reason: reason.code } : {}), ...(e.id ? { id: str(e.id, 24) } : {}) });
   }
   return {
     vessel: {
@@ -137,7 +140,8 @@ export async function allVessels(store, std) {
   const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), source: "sof", events: (v.events || []).map(e => expandEvent(e, std)) }));
   const sameName = (a, b) => [a.vessel, a.originalName].some(x => x && [b.vessel, b.originalName].some(y => y && Sof.vesselKey(x) === Sof.vesselKey(y)));
   const replaced = vessel => uploaded.some(u => sameName(u, vessel) && Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
-  let history = seed().vessels.filter(v => !removed.has(v.id) && !replaced(v));
+  const edited = new Set(uploaded.map(u => u.replaces).filter(Boolean));
+  let history = seed().vessels.filter(v => !removed.has(v.id) && !edited.has(v.id) && !replaced(v));
   // O histórico já vem com os padrões do arquivo; o que foi mudado no painel é aplicado por cima.
   if (std !== BASE) history = history.map(v => ({ ...v, events: v.events.map(e => withReason(e, std)) }));
   return [...history, ...uploaded].sort((a, b) => a.operationStart.localeCompare(b.operationStart));
@@ -161,19 +165,22 @@ export function matchOperation(vessel, records) {
 /** Completa com a planilha de navios (desatracação sempre preferida, berço, cliente e atracação) e padroniza berço, cliente e carga. */
 export function enrich(vessel, records) {
   const match = matchOperation(vessel, records);
+  // Campo editado à mão no painel (locked) não é trocado pelo da planilha.
+  const locked = new Set(vessel.locked || []);
+  const pick = (field, fromSheet) => locked.has(field) ? vessel[field] ?? null : fromSheet;
   const full = !match ? { ...vessel, matched: false } : {
     ...vessel, matched: true,
-    berthEnd: match.berthEnd || vessel.berthEnd || null,
-    berthStart: vessel.berthStart || match.berthStart || null,
-    berth: match.berth && match.berth !== "Não informado" ? match.berth : vessel.berth || "",
-    client: match.client && match.client !== "Não informado" ? match.client : vessel.client || ""
+    berthEnd: pick("berthEnd", match.berthEnd || vessel.berthEnd || null),
+    berthStart: pick("berthStart", vessel.berthStart || match.berthStart || null),
+    berth: pick("berth", match.berth && match.berth !== "Não informado" ? match.berth : vessel.berth || ""),
+    client: pick("client", match.client && match.client !== "Não informado" ? match.client : vessel.client || "")
   };
   return { ...full, berth: mapped(standards.berths, full.berth), client: mapped(standards.clients, full.client), cargo: mapped(standards.cargos, full.cargo) };
 }
 
 /** Resumo para os indicadores (sem a lista de ocorrências, que vem só no detalhe). */
 export function summaryOf(vessel) {
-  const { events, ...rest } = vessel;
+  const { events, changes, ...rest } = vessel;
   const summary = Sof.vesselSummary(vessel);
   return { ...rest, events: events.length, summary: { ...summary, stoppages: summary.stoppages.slice(0, 25) } };
 }
@@ -183,7 +190,8 @@ export function exportOf(vessel) {
   const { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } = Sof.vesselSummary(vessel);
   const events = vessel.events.map(({ date, start, end, minutes, period, gang, hold, description, reason = "", reasonText = "", volume, weight, responsible }) =>
     ({ date, start, end, minutes, period, gang, hold, description, reason, reasonText, volume, weight, responsible }));
-  return { ...vessel, savedBy: vessel.savedBy?.name || "", events, summary: { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } };
+  const { changes, ...rest } = vessel;
+  return { ...rest, savedBy: vessel.savedBy?.name || "", events, summary: { operationDays, berthDays, waitDays, byResponsible, grossRate, netRate, triunfoRate } };
 }
 
 /* ---------- Dicionário ---------- */
@@ -310,4 +318,81 @@ export function descriptionList(vessels, std) {
     const texts = [...item.texts].sort((a, b) => b[1] - a[1]);
     return { key: item.key, text: texts[0][0], variants: texts.length, count: item.count, minutes: item.minutes, vessels: item.vessels.size, reason: reason?.code || "", status };
   }).sort((a, b) => b.minutes - a.minutes);
+}
+
+/* ---------- Edição de um navio (administrador) ---------- */
+
+const EDIT_FIELDS = [["vessel", "Navio"], ["cargo", "Carga"], ["operation", "Operação"], ["client", "Cliente"], ["berth", "Berço"], ["tons", "Volume (t)"],
+  ["berthStart", "Atracação"], ["operationStart", "Início da operação"], ["operationEnd", "Término da operação"], ["berthEnd", "Desatracação"]];
+/** Campos que vêm da planilha de navios: editados à mão, passam a valer o que foi digitado. */
+const SHEET_FIELDS = ["berth", "client", "berthStart", "berthEnd"];
+const isDate = field => /Start|End/.test(field);
+const sameValue = (field, a, b) => isDate(field) ? (!a && !b) || Date.parse(a || "") === Date.parse(b || "") : String(a ?? "") === String(b ?? "");
+const when = value => { const t = Date.parse(value || ""); if (!Number.isFinite(t)) return "—"; const d = new Date(t - 3 * 3600000).toISOString(); return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)} ${d.slice(11, 16)}`; };
+const shown = (field, value) => value === null || value === undefined || value === "" ? "—" : isDate(field) ? when(value) : field === "tons" ? Number(value).toLocaleString("pt-BR") : String(value);
+const eventLabel = e => `${when(e.start)} · ${String(e.description).slice(0, 60)}`;
+
+/** Ocorrências com id estável (as que ainda não têm ganham pela ordem), para comparar antes e depois da edição. */
+export const withIds = events => events.map((e, i) => e.id ? e : { ...e, id: `e${i + 1}` });
+
+/** O que mudou entre o navio mostrado no painel e o editado, em frases curtas para o histórico de alterações. */
+export function diffVessel(before, after, std = BASE) {
+  const items = [];
+  for (const [field, name] of EDIT_FIELDS) if (!sameValue(field, before[field], after[field])) items.push(`${name}: ${shown(field, before[field])} → ${shown(field, after[field])}`);
+  const old = new Map(before.events.map(e => [e.id, e]));
+  const reasonName = code => std.byCode.get(code)?.text.replace(/^Not worked due to /, "").replace(/\.$/, "") || "sem motivo";
+  for (const e of after.events) {
+    const prev = old.get(e.id);
+    old.delete(e.id);
+    if (!prev) { items.push(`Ocorrência incluída: ${eventLabel(e)} (${e.minutes} min)`); continue; }
+    const parts = [];
+    if (!sameValue("start", prev.start, e.start)) parts.push(`início ${when(prev.start)} → ${when(e.start)}`);
+    if (prev.minutes !== e.minutes) parts.push(`duração ${prev.minutes} → ${e.minutes} min`);
+    if (prev.description !== e.description) parts.push(`descrição "${prev.description}" → "${e.description}"`);
+    if ((prev.reason || "") !== (e.reason || "")) parts.push(`motivo ${reasonName(prev.reason)} → ${reasonName(e.reason)}`);
+    for (const [field, name] of [["gang", "terno"], ["hold", "porão"], ["weight", "peso"], ["volume", "volume"]])
+      if (String(prev[field] ?? "") !== String(e[field] ?? "")) parts.push(`${name} ${prev[field] ?? "—"} → ${e[field] ?? "—"}`);
+    if (parts.length) items.push(`Ocorrência ${eventLabel(prev)}: ${parts.join("; ")}`);
+  }
+  for (const e of old.values()) items.push(`Ocorrência removida: ${eventLabel(e)} (${e.minutes} min)`);
+  return items;
+}
+
+/**
+ * Salva a edição de um navio. O do histórico vira uma cópia no Firestore (id edit_<id>, replaces = id do histórico);
+ * apagar a cópia devolve o original. Cada edição entra no histórico de alterações do navio (quem, quando, o quê).
+ */
+export async function saveEdit(store, id, input, records, actor) {
+  const std = await standardsOf(store);
+  const current = (await allVessels(store, std)).find(v => v.id === id);
+  if (!current) return { error: "Navio não encontrado.", status: 404 };
+  // Campo que não veio na edição fica como aparece no painel (já completado pela planilha de navios).
+  const before = { ...enrich(current, records), events: withIds(current.events) };
+  const { vessel, error } = validateVessel({ ...before, ...input, events: input?.events }, std);
+  if (error) return { error, status: 400 };
+  const stamp = Date.now().toString(36);
+  const fresh = vessel.events.map((e, i) => ({ ...e, id: e.id || `n${i + 1}-${stamp}` })).sort((a, b) => a.start.localeCompare(b.start));
+  // Descrição nova escolhida aqui passa a valer como na importação; motivo diferente do da descrição fica só nesta ocorrência.
+  await learnStandards(store, fresh);
+  const learned = await standardsOf(store);
+  const events = fresh.map(e => {
+    const byDescription = reasonOf(Sof.normalizeDescription(e.description), learned);
+    return e.reason && byDescription && byDescription.code !== e.reason ? { ...e, reasonFixed: true } : e;
+  });
+  const after = { ...vessel, events };
+  const items = diffVessel(before, { ...after, events: events.map(e => expandEvent(e, learned)) }, learned);
+  if (!items.length) return { ok: true, id, changes: [] };
+  const locked = [...new Set([...(current.locked || []), ...SHEET_FIELDS.filter(f => !sameValue(f, before[f], after[f]))])];
+  const docId = current.source === "sof" ? current.id : `edit_${current.id}`;
+  const stored = current.source === "sof" ? (await store.get(VESSELS, docId)) || {} : {};
+  const now = new Date().toISOString();
+  await store.set(VESSELS, docId, {
+    ...stored, ...after, id: docId,
+    origin: current.origin || current.source, ...(current.source === "base" ? { replaces: current.id } : {}),
+    ...(current.originalName ? { originalName: current.originalName } : {}),
+    savedAt: stored.savedAt || now, savedBy: stored.savedBy || actor || null,
+    locked, editedAt: now, editedBy: actor || null,
+    changes: [...(stored.changes || []), { at: now, by: actor?.name || "", items }].slice(-200)
+  });
+  return { ok: true, id: docId, changes: items };
 }

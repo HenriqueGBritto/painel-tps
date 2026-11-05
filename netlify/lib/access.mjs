@@ -23,7 +23,8 @@ export const ACTIONS = {
   configureRequisitions: "requisicoes:configurar",
   readSof: "sof:ver",
   sendSof: "sof:enviar",
-  manageSofStandards: "sof:padronizar"
+  manageSofStandards: "sof:padronizar",
+  editSof: "sof:editar"
 };
 
 /** Acessos que liberam cada ação (basta ter um). Lista vazia = qualquer pessoa logada. */
@@ -50,7 +51,9 @@ export const REQUIRED = {
   // Por enquanto qualquer pessoa logada envia SOF; os acessos serão separados depois.
   [ACTIONS.sendSof]: [],
   // Motivos padrão de paralisação e a tela Padronizar: só o administrador.
-  [ACTIONS.manageSofStandards]: ["admin"]
+  [ACTIONS.manageSofStandards]: ["admin"],
+  // Editar navio e ocorrências da Base SOF: só o administrador.
+  [ACTIONS.editSof]: ["admin"]
 };
 
 export function can(user, action) {

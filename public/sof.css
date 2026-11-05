@@ -98,6 +98,34 @@
 .sof-event.is-stop strong{color:var(--trl-vermelho)}
 .export-stage .sof-actions,.export-stage .sof-upload{display:none!important}
 @media(max-width:1250px){.sof-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.sof-form{grid-template-columns:repeat(3,minmax(0,1fr))}}
+#sof.is-vessel>:not(.base-heading):not(#sofVesselPage){display:none!important}
+.sof-page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.sof-page-actions{display:flex;gap:8px;align-items:center}
+.sof-page-actions .sof-danger{margin:0}
+.sof-page-title{margin:2px 0 4px;font-size:1.6rem}
+.sof-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;margin:10px 0 14px}
+.sof-meta b{font-weight:800;color:var(--trl-cinza-600);font-size:.76rem;text-transform:uppercase;letter-spacing:.03em;margin-right:4px}
+.sof-meta small{color:var(--trl-cinza-600)}
+.sof-timeline svg{display:block;width:100%;min-width:640px;height:auto}
+.sof-tl-label{font-size:12px;font-weight:700;fill:var(--trl-cinza-800)}
+.sof-tl-day{font-size:11px;fill:var(--trl-cinza-600)}
+.sof-tl-grid{stroke:var(--trl-cinza-100);stroke-width:1}
+.sof-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+.sof-legend-row span{display:inline-flex;align-items:center}
+.sof-stop-table{min-width:0}
+.sof-stop-table th,.sof-event-table th{white-space:normal;text-align:left;font-weight:600}
+.sof-event-table td small{display:block;color:var(--trl-cinza-600);font-size:.74rem}
+.sof-event-table tr.is-stop{background:#fdf6f6}
+.sof-history{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.sof-history>li{border-left:3px solid var(--trl-cinza-300);padding:2px 0 2px 12px}
+.sof-history p{margin:0 0 4px;font-size:.84rem;color:var(--trl-cinza-600)}
+.sof-history ul{margin:0;padding-left:18px;font-size:.86rem}
+.sof-edit-table{min-width:1100px}
+.sof-edit-table input,.sof-edit-table select{width:100%;min-height:32px;border:1px solid var(--trl-cinza-300);border-radius:4px;padding:3px 6px;font:inherit;font-size:.84rem;background:var(--trl-branco);box-sizing:border-box}
+.sof-edit-table input[type=number]{width:84px}
+.sof-edit-table input.is-wide{min-width:260px}
+.sof-edit-table select{min-width:200px}
+.sof-edit-table td{padding:4px}
 @media(max-width:900px){.sof-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.sof-kpis{grid-template-columns:1fr 1fr}.sof-form{grid-template-columns:1fr 1fr}.sof-resp{grid-template-columns:minmax(0,1fr) 80px}.sof-resp .sof-track{grid-column:1/-1;grid-row:2}}
 .sof-panel [data-sof-view][hidden]{display:none!important}

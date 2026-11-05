@@ -1,6 +1,7 @@
 /* API da Base SOF (indicadores Operacional e Ocupação).
    GET    /api/sof                 navios (histórico + enviados) com o resumo de cada um, para os indicadores
-   GET    /api/sof/navio?id=       um navio com todas as ocorrências
+   GET    /api/sof/navio?id=       um navio com todas as ocorrências e o histórico de alterações
+   PUT    /api/sof/navio?id=       edita o navio e as ocorrências (administrador); grava o que mudou
    GET    /api/sof/exportar        todos os navios com as ocorrências, o dicionário e os motivos padrão (exportação para Excel)
    GET    /api/sof/planilha?navio=&inicio=   navio correspondente na planilha de navios
    GET    /api/sof/dicionario      dicionário de responsáveis (descrição → contagens e responsável fixo) e motivos padrão
@@ -40,10 +41,12 @@ export default async function handler(request) {
   const route = url.pathname.replace(/^\/api\/sof\/?/, "");
   const reading = request.method === "GET";
   const standardsRoute = route === "padronizar" || (route === "motivos" && !reading);
-  const access = await authorize(request, standardsRoute ? ACTIONS.manageSofStandards : reading ? ACTIONS.readSof : ACTIONS.sendSof);
+  const editRoute = route === "navio" && request.method === "PUT";
+  const access = await authorize(request, editRoute ? ACTIONS.editSof : standardsRoute ? ACTIONS.manageSofStandards : reading ? ACTIONS.readSof : ACTIONS.sendSof);
   if (!access.allowed) return denied(access, headers);
   const store = activitiesStore();
   const canStandardize = can(access.user, ACTIONS.manageSofStandards);
+  const canEdit = can(access.user, ACTIONS.editSof);
 
   if (reading && route === "") {
     const [vessels, records] = await Promise.all([sof.allVessels(store), operations()]);
@@ -53,7 +56,7 @@ export default async function handler(request) {
     const id = url.searchParams.get("id");
     const [vessels, records] = await Promise.all([sof.allVessels(store), operations()]);
     const vessel = vessels.find(v => v.id === id);
-    return vessel ? json({ vessel: sof.enrich(vessel, records) }) : json({ error: "Navio não encontrado." }, 404);
+    return vessel ? json({ vessel: { ...sof.enrich(vessel, records), events: sof.withIds(vessel.events) }, canEdit }) : json({ error: "Navio não encontrado." }, 404);
   }
   if (reading && route === "exportar") {
     const [vessels, records, dictionary] = await Promise.all([sof.allVessels(store), operations(), sof.dictionary(store)]);
@@ -91,6 +94,10 @@ export default async function handler(request) {
     await sof.learnStandards(store, vessel.events);
     return json({ ok: true, id, replaced: Boolean(previous) });
   }
+  if (editRoute) {
+    const result = await sof.saveEdit(store, url.searchParams.get("id") || "", await readBody(request), await operations(), actorOf(access));
+    return result.error ? json({ error: result.error }, result.status || 400) : json(result);
+  }
   if (request.method === "POST" && route === "motivos") {
     const result = await sof.createReason(store, await readBody(request), actorOf(access));
     return result.error ? json(result, 400) : json(result);
@@ -104,6 +111,8 @@ export default async function handler(request) {
     const id = url.searchParams.get("id") || "";
     const current = await store.get(sof.VESSELS, id);
     if (!current || current.deleted) return json({ error: "SOF enviado não encontrado." }, 404);
+    // Desfazer a edição de um navio do histórico é do administrador, como a própria edição.
+    if (current.origin === "base" && !canEdit) return json({ error: "Só o administrador desfaz edições." }, 403);
     await store.remove(sof.VESSELS, id);
     return json({ ok: true });
   }
