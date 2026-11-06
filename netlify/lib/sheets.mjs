@@ -1,10 +1,11 @@
 /* Leitura direta das planilhas no Google Drive.
    Cada planilha precisa estar compartilhada como "Qualquer pessoa com o link – Leitor".
    Os IDs podem ser trocados no Netlify sem novo código, pelas variáveis
-   TPS_SHEET_OPERATIONS, TPS_SHEET_LINEUP e TPS_SHEET_DISCHARGE. */
+   TPS_SHEET_OPERATIONS, TPS_SHEET_LINEUP, TPS_SHEET_DISCHARGE e TPS_SHEET_PURCHASES. */
 import { XLSX, parseOperationsWorkbook, parseDischargeWorkbook } from "./parsers.mjs";
 import { parseTeamWorkbook, TEAM_TABS } from "./team-parsers.mjs";
 import { readColumns } from "./fast-xlsx.mjs";
+import { parsePurchasesWorkbook } from "./purchases.mjs";
 
 const MAX_BYTES = 40 * 1024 * 1024;
 const CACHE_MS = 2 * 60 * 1000;
@@ -42,6 +43,15 @@ export const SHEETS = {
     tabs: Object.values(TEAM_TABS),
     readOptions: { cellDates: false },
     order: ["sheets", "drive"],
+    editUrl: true
+  },
+  // Compras: Controle de RMS (.xlsx no Drive). Lê todas as abas: a base e o orçamento são achados pelo cabeçalho.
+  purchases: {
+    env: "TPS_SHEET_PURCHASES",
+    defaultId: "1SoWGctzB4l3DmtY2H7sOdHnUgG1iogjA",
+    label: "Controle de RMS",
+    fileName: "Controle_RMS_2025_2026_classificado.xlsx",
+    readOptions: { cellDates: false },
     editUrl: true
   }
 };
@@ -142,7 +152,7 @@ export function parseSheet(kind, bytes, fetchedAt = new Date(), { lineupBytes = 
     ? readColumns(bytes, config.columns, { cellDates: false })
     : XLSX.read(bytes, { type: "array", sheets: lineupBytes || !config.lineup ? config.tabs : [...config.tabs, config.lineup.tab], cellText: false, cellHTML: false, cellFormula: false, ...config.readOptions });
   const source = `${config.label} (Google Planilhas)`;
-  const data = kind === "team" ? parseTeamWorkbook(workbook, source) : kind === "operations"
+  const data = kind === "purchases" ? parsePurchasesWorkbook(workbook, source) : kind === "team" ? parseTeamWorkbook(workbook, source) : kind === "operations"
     ? parseOperationsWorkbook(attachLineup(workbook, lineupBytes), source)
     : parseDischargeWorkbook(workbook, source, fetchedAt.getTime());
   if (kind === "discharge" && !data.dischargeDays.length) throw new Error("Nenhuma descarga concluída foi encontrada na planilha.");

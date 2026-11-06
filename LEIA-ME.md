@@ -13,6 +13,7 @@ O painel lê as duas bases **direto do Google Drive** a cada acesso. Não existe
 | Indicadores | `Base - Indicadores Operacionais TPS.xlsx` (ID `12ionZt6pJ7yeX59EUX-rppOCugcvp9F7`) | Descarga e Pesagem |
 | Base SOF | Histórico fixo `netlify/lib/initial-sof.json` (aba Base SOF, 2025–2026) + SOFs enviados no painel (Firestore) | Operacional e Ocupação |
 | Equipe | Planilha da equipe TPS (arquivo .xlsx no Drive, ID `1qeQgIOmbg9jW1l0id6Sgt39y657PTzbM`) | Aba Equipe (somente leitura) |
+| Compras | `Controle_RMS_2025_2026_classificado.xlsx` (ID `1SoWGctzB4l3DmtY2H7sOdHnUgG1iogjA`, trocável por `TPS_SHEET_PURCHASES`) | Aba Compras |
 
 - As planilhas precisam estar compartilhadas como **"Qualquer pessoa com o link – Leitor"**.
 - O site guarda a última leitura das duas planilhas no Netlify Blobs e entrega essa cópia a quem abre o painel, sem esperar o download do Drive.
@@ -55,6 +56,12 @@ Os indicadores Operacional e Ocupação vêm dos Statement of Facts (SOF), não 
 - **Exportar Excel:** baixa a base inteira (histórico + SOFs enviados, já com desatracação/berço/cliente da planilha de navios) em quatro abas: Navios (tempos por responsável e pranchas), Ocorrências (uma linha por evento, com o motivo padrão), Motivos (horas e ocorrências de cada motivo) e Dicionário. As colunas calculadas saem como fórmulas do Excel (tempos, horas por responsável via SOMASES nas Ocorrências, pranchas, fim da ocorrência e totais do dicionário), já com os valores do painel. Dados de `/api/sof/exportar`; o arquivo é montado no navegador.
 - **Comparação:** com um ano escolhido, cada indicador mostra a variação contra o ano anterior. No ano do último SOF, a comparação usa de janeiro até o mês desse SOF.
 - Rotas: `netlify/functions/sof.mjs`; regras do servidor: `netlify/lib/sof.mjs`; testes: `tests/sof.test.mjs`.
+
+## Aba Compras (Controle de RMS)
+
+- **Leitura:** `netlify/lib/purchases.mjs` acha a aba da base pelo cabeçalho (colunas RMS e Produto) e o orçamento pela aba que tem "Tipo de Despesa" e os meses. As colunas são achadas pelo nome, então a planilha pode ganhar colunas. Na leitura, status, fornecedor e aplicação são padronizados (espaços, maiúsculas, "FINALIZDO", "MV" na frente). Relida a cada 6 horas com as outras bases e pelo botão "Atualizar dados" na própria aba (`/api/refresh?base=compras`). Quem vê os Indicadores vê Compras, por enquanto.
+- **Contas (`public/purchases-core.js`, regras combinadas com o setor de Compras em 06/11/2026):** gasto = valor da NF baixada quando houver (sem NF, o valor final da RMS), sem as canceladas; mês e ano pela data de término (material entregue e pago), sem término pela abertura. Prazo: compra cotada 30 dias, compra direta 15 dias, pela coluna "Tipo de compra" (sem a coluna, 30 dias para todas); o cartão mostra a parte das finalizadas dentro do prazo e a lista de abertas marca as fora do prazo. Orçado × realizado: de janeiro até o último mês com gasto no ano (ou o mês escolhido); rebocadores e pesagem são pagos pela Controladoria (estão no nosso centro de custo) e ficam fora do cartão. Tipos sem orçamento entram no gasto total e aparecem separados como ponto de atenção. NF: o combinado é o valor de cada item; nas linhas antigas com o total da nota repetido em todos os itens, a nota vale uma vez e é dividida entre os itens pelo valor da RMS (e vira pendência).
+- **Navios, preços e pendências:** custo por escala = RMS cuja aplicação é o nome de um navio da Base SOF, ligada à escala com início de operação mais perto da abertura (até 60 dias), dividido pelas toneladas da escala. Preço dos itens comprados 3 vezes ou mais pelo nome do item (preço até R$ 1 fica de fora). Pendências: finalizada sem NF ou sem término, em aberto com término ou há mais de 90 dias, valor zerado, sem status, RMS ou fornecedor, texto fora do padrão e tipo de despesa a definir ou de confiança baixa.
 
 ## Aba Descarga
 

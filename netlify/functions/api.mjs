@@ -144,11 +144,12 @@ export default async function handler(request) {
     const allowedHosts = [url.host, request.headers.get("host"), request.headers.get("x-forwarded-host")].filter(Boolean);
     if (origin && !allowedHosts.includes(new URL(origin).host)) return json({ error: "Origem não permitida." }, 403);
     try {
-      // ?base=equipe relê só a planilha da equipe (botão na aba Equipe); sem parâmetro, navios e indicadores.
-      const team = url.searchParams.get("base") === "equipe";
-      const access = await authorize(request, team ? ACTIONS.refreshTeam : ACTIONS.refreshData);
+      // ?base=equipe relê só a planilha da equipe e ?base=compras só o Controle de RMS (botão na própria aba); sem parâmetro, navios e indicadores.
+      const base = url.searchParams.get("base");
+      const own = { equipe: { kind: "team", action: ACTIONS.refreshTeam }, compras: { kind: "purchases", action: ACTIONS.readPurchases } }[base];
+      const access = await authorize(request, own ? own.action : ACTIONS.refreshData);
       if (!access.allowed) return denied(access, headers);
-      const result = await requestRefresh({ kinds: team ? ["team"] : FREQUENT_KINDS });
+      const result = await requestRefresh({ kinds: own ? [own.kind] : FREQUENT_KINDS });
       const status = result.status === "refreshed" || result.status === "recent" ? 200 : result.status === "running" ? 409 : 502;
       return json(result, status);
     } catch (error) {
@@ -157,6 +158,16 @@ export default async function handler(request) {
     }
   }
   if (request.method === "GET" && path === "/api/equipe") return teamData(request);
+  if (request.method === "GET" && path === "/api/compras") {
+    const access = await authorize(request, ACTIONS.readPurchases);
+    if (!access.allowed) return denied(access, headers);
+    try {
+      return json({ ...(await loadForServing("purchases")), files: sourceFiles("purchases") });
+    } catch (error) {
+      console.error("Falha ao ler o Controle de RMS no Google:", error);
+      return json({ error: `Não foi possível ler o Controle de RMS: ${error.message}` }, 502);
+    }
+  }
   if (request.method === "GET" && path === "/api/alertas") {
     const access = await authorize(request, ACTIONS.readAlerts);
     if (!access.allowed) return denied(access, headers);
@@ -166,4 +177,4 @@ export default async function handler(request) {
   return json({ error: "Rota não encontrada." }, 404);
 }
 
-export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh", "/api/equipe", "/api/alertas"] };
+export const config = { path: ["/api/data", "/api/discharge", "/api/production-workbook", "/api/refresh", "/api/equipe", "/api/alertas", "/api/compras"] };

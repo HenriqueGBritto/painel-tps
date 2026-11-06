@@ -24,7 +24,8 @@ export const ACTIONS = {
   readSof: "sof:ver",
   sendSof: "sof:enviar",
   manageSofStandards: "sof:padronizar",
-  editSof: "sof:editar"
+  editSof: "sof:editar",
+  readPurchases: "compras:ver"
 };
 
 /** Acessos que liberam cada ação (basta ter um). Lista vazia = qualquer pessoa logada. */
@@ -53,7 +54,9 @@ export const REQUIRED = {
   // Motivos padrão de paralisação e a tela Padronizar: só o administrador.
   [ACTIONS.manageSofStandards]: ["admin"],
   // Editar navio e ocorrências da Base SOF: só o administrador.
-  [ACTIONS.editSof]: ["admin"]
+  [ACTIONS.editSof]: ["admin"],
+  // Compras: por enquanto, quem vê os indicadores (o usuário vai separar os acessos depois).
+  [ACTIONS.readPurchases]: ["indicadores"]
 };
 
 export function can(user, action) {

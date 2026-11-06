@@ -107,10 +107,10 @@ test("equipe: a cópia vale por um dia (a rotina relê 1 vez por dia)", async ()
   assert.deepEqual(calls, ["team"], "31 horas depois relê");
 });
 
-test("rotina agendada: equipe só na rodada das 06h UTC", async () => {
+test("rotina agendada: equipe só na rodada das 06h UTC; Controle de RMS em todas", async () => {
   const { kindsForHour } = await import("../netlify/functions/refresh-scheduled.mjs");
-  assert.deepEqual(kindsForHour(6), ["operations", "discharge", "team"]);
-  assert.deepEqual(kindsForHour(12), ["operations", "discharge"]);
+  assert.deepEqual(kindsForHour(6), ["operations", "discharge", "team", "purchases"]);
+  assert.deepEqual(kindsForHour(12), ["operations", "discharge", "purchases"]);
 });
 
 test("API /api/equipe: entrega a cópia guardada da planilha da equipe com o link do arquivo", async () => {

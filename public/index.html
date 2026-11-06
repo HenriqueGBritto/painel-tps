@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="auth.css">
   <link rel="stylesheet" href="alerts.css">
   <link rel="stylesheet" href="requisitions.css">
+  <link rel="stylesheet" href="purchases.css">
 </head>
 <body class="auth-locked">
   <div class="app-shell">
@@ -33,6 +34,12 @@
             <button type="button" class="side-link" data-menu="producao"><span aria-hidden="true">▥</span> Produção</button>
             <button type="button" class="side-link" data-menu="atividades"><span aria-hidden="true">▧</span> Atividades</button>
             <button type="button" class="side-link" data-menu="requisicoes"><span aria-hidden="true">▤</span> Requisições</button>
+          </div>
+        </div>
+        <div class="side-group" data-group="compras">
+          <button type="button" class="side-group-toggle" aria-expanded="false" aria-controls="sideGroupCompras">Compras<i aria-hidden="true"></i></button>
+          <div class="side-group-items" id="sideGroupCompras" hidden>
+            <button type="button" class="side-link" data-menu="compras"><span aria-hidden="true">▣</span> Indicadores de compras</button>
           </div>
         </div>
         <div class="side-group" data-group="rh">
@@ -300,6 +307,52 @@
           <details class="req-holidays-box" id="requisitionsHolidays"></details>
         </div>
       </section>
+      <section id="compras" class="tab-panel operational-base-panel sof-panel purchases-panel">
+        <div class="base-heading"><div><p class="eyebrow">COMPRAS · CONTROLE DE RMS</p><h2>Compras</h2><p>RMS do TPS (centro de custo 02.01) pela data de término (material entregue e pago); sem término, pela abertura. Gasto = valor da NF quando houver; sem NF, o valor final da RMS. Sem as canceladas.</p></div>
+          <div class="sof-actions"><a class="base-upload" id="purchasesSheet" target="_blank" rel="noopener" hidden>Abrir planilha <span aria-hidden="true">↗</span></a></div></div>
+        <div class="base-filters" aria-label="Filtros de compras"><label>Ano<select id="purchasesYear"></select></label><label>Mês<select id="purchasesMonth"></select></label><label>Tipo de despesa<select id="purchasesType"></select></label><label>Responsável<select id="purchasesBuyer"></select></label><label>Status<select id="purchasesStatusFilter"></select></label><label class="base-search">Fornecedor<input id="purchasesSupplier" type="search" list="purchasesSupplierList" placeholder="Ex.: MSE"><datalist id="purchasesSupplierList"></datalist></label><button type="button" class="base-reset" id="purchasesClear">Limpar filtros</button></div>
+        <p class="base-status" id="purchasesStatus" role="status" aria-live="polite"></p>
+        <p class="sof-summary" id="purchasesSummary"></p>
+        <div class="base-kpis sof-kpis" id="purchasesKpis" aria-label="Indicadores de compras"></div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">COMPARAÇÃO ANUAL</p><h3 id="purchasesChartTitle">Mês a mês</h3></div><div class="base-chart-tools"><div class="sof-legend-row" id="purchasesChartLegend"></div><label class="sof-metric">Indicador<select id="purchasesMetric"><option value="value">Gasto</option><option value="count">Quantidade de RMS</option></select></label></div></div>
+          <div class="base-chart-scroll"><div class="sof-chart" id="purchasesChart"></div></div>
+          <p class="base-footnote">Mês pela data de término da RMS (sem término, pela abertura). Passe o mouse numa coluna para ver o valor.</p>
+          <details class="chart-data"><summary>Ver valores em tabela</summary><div class="chart-data-scroll"><table><thead id="purchasesChartHead"></thead><tbody id="purchasesChartRows"></tbody></table></div></details></section>
+        <div class="sof-grid">
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">ORÇAMENTO</p><h3>Orçado × realizado por categoria</h3></div><span id="purchasesBudgetPeriod"></span></div><div id="purchasesBudget" class="sof-resp-list"></div></section>
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">GASTO</p><h3>Por tipo de despesa</h3></div><span>cinza = tipo sem orçamento no TPS</span></div><div id="purchasesTypes" class="sof-resp-list purchases-types"></div></section>
+        </div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PONTO DE ATENÇÃO</p><h3>Gasto em tipos sem orçamento no TPS</h3></div><span id="purchasesAttentionTotal"></span></div>
+          <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>Tipo de despesa</th><th>RMS</th><th>Valor</th><th>% do gasto</th></tr></thead><tbody id="purchasesAttention"></tbody></table></div>
+          <p class="base-footnote">Entram no gasto total, mas ficam separados para avaliar se devem passar a ter orçamento no TPS.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">FORNECEDORES</p><h3>Quem mais vendeu no período</h3></div><span id="purchasesSupplierCount"></span></div>
+          <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>Fornecedor</th><th>RMS</th><th>Valor</th><th>% do gasto</th><th>Prazo (mediana)</th></tr></thead><tbody id="purchasesSuppliers"></tbody></table></div>
+          <button type="button" class="base-reset purchases-more" id="purchasesSuppliersMore" hidden></button></section>
+        <div class="sof-grid">
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">EM ABERTO</p><h3>RMS esperando atendimento</h3></div><span id="purchasesOpenCount"></span></div>
+            <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>RMS</th><th>Fornecedor</th><th>Responsável</th><th>Abertura</th><th>Aberta há</th><th>Prazo</th><th>Valor</th></tr></thead><tbody id="purchasesOpen"></tbody></table></div>
+            <p class="base-footnote" id="purchasesOpenNote"></p></section>
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">NOTA FISCAL</p><h3>NF diferente da RMS</h3></div></div><p class="sof-note" id="purchasesNfSummary"></p>
+            <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>RMS</th><th>Fornecedor</th><th>Valor RMS</th><th>Valor NF</th><th>Diferença</th></tr></thead><tbody id="purchasesNf"></tbody></table></div>
+            <p class="base-footnote">RMS com valor de NF baixada mais de 10% diferente do valor final, da maior diferença em reais para a menor.</p></section>
+        </div>
+        <div class="sof-grid">
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">APLICAÇÃO</p><h3>Para onde foi o gasto</h3></div><span id="purchasesAppCount"></span></div><div id="purchasesApps" class="sof-resp-list purchases-types"></div></section>
+          <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">NAVIOS</p><h3>Custo por escala</h3></div><span id="purchasesVesselCount"></span></div>
+            <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>Navio</th><th>RMS</th><th>Gasto</th><th>Toneladas</th><th>R$ por t</th></tr></thead><tbody id="purchasesVessels"></tbody></table></div>
+            <p class="base-footnote">RMS cuja aplicação é o nome de um navio da Base SOF, ligada à escala com início de operação mais perto da abertura (até 60 dias). Toneladas da Base SOF.</p></section>
+        </div>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PREÇOS</p><h3>Itens comprados várias vezes</h3></div><span id="purchasesPriceCount"></span></div>
+          <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>Item</th><th>Vezes</th><th>Fornecedores</th><th>Menor</th><th>Mediana</th><th>Maior</th><th>Última compra</th><th>Última × mediana</th></tr></thead><tbody id="purchasesPrices"></tbody></table></div>
+          <p class="base-footnote">Preço unitário, pelo nome do item. Preço até R$ 1 (simbólico) fica de fora. Itens genéricos, como "mão de obra terceirizada", juntam serviços diferentes e o preço varia muito.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">PREENCHIMENTO</p><h3>Pendências na planilha</h3></div><span id="purchasesIssueCount"></span></div>
+          <div id="purchasesIssues" class="purchases-issues"></div>
+          <p class="base-footnote">Conferência das linhas do período e dos filtros escolhidos. Corrija na planilha: o painel lê de novo a cada 6 horas ou pelo botão Atualizar dados.</p></section>
+        <section class="base-sheet"><div class="base-sheet-head"><div><p class="eyebrow">RMS</p><h3>Todas as RMS do período</h3></div><span id="purchasesListCount"></span></div>
+          <div class="base-filters purchases-search"><label class="base-search">Buscar<input id="purchasesSearch" type="search" placeholder="RMS, NF, produto, fornecedor ou aplicação"></label></div>
+          <div class="base-table-scroll"><table class="base-table purchases-table"><thead><tr><th>RMS</th><th>NF</th><th>Fornecedor</th><th>Aplicação</th><th>Tipo de despesa</th><th>Status</th><th>Abertura</th><th>Término</th><th>Valor</th></tr></thead><tbody id="purchasesList"></tbody></table></div>
+          <p class="base-footnote" id="purchasesListMore"></p></section>
+      </section>
       <section id="acessos" class="tab-panel activities-panel">
         <div class="base-heading"><div><p class="eyebrow">ADMINISTRAÇÃO</p><h2>Acessos</h2><p>Quem entra no painel e o que cada pessoa pode ver e fazer.</p></div></div>
         <p class="base-status act-status-line" id="accessStatus" role="status" aria-live="polite"></p>
@@ -331,6 +384,8 @@
   <script src="production.js"></script>
   <script src="discharge.js"></script>
   <script src="sof.js"></script>
+  <script src="purchases-core.js"></script>
+  <script src="purchases.js"></script>
   <script src="access-admin.js"></script>
   <script src="requisitions.js"></script>
   <script src="alerts.js"></script>

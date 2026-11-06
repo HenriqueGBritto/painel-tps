@@ -251,7 +251,8 @@ export function diffTeam(previous, next) {
 
 export function withChangeLog(kind, previous, next) {
   const log = Array.isArray(previous?.changeLog) ? previous.changeLog : [];
-  if (!previous || previous.origin === "fallback") return { ...next, changeLog: log };
+  // Compras ainda não tem o registro do que mudou entre leituras.
+  if (!previous || previous.origin === "fallback" || kind === "purchases") return { ...next, changeLog: log };
   const sections = kind === "operations" ? diffOperations(previous, next) : kind === "team" ? diffTeam(previous, next) : diffDischarge(previous, next);
   if (!sections.length) return { ...next, changeLog: log };
   const entry = { at: next.generatedAt, since: previous.generatedAt, total: sections.reduce((sum, s) => sum + s.count, 0), sections };

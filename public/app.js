@@ -331,7 +331,7 @@ function activateNavigation(){
   document.querySelectorAll("[data-activity]").forEach(button=>{const active=button.dataset.activity===state.activityView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   document.querySelectorAll("[data-team]").forEach(button=>{const active=button.dataset.team===state.teamView;button.classList.toggle("active",active);active?button.setAttribute("aria-current","page"):button.removeAttribute("aria-current")});
   const activityPanels={turno:"atividades",acompanhamento:"acompanhamento",configuracao:"configuracao"};
-  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"sof"):state.menu==="acessos"?"acessos":state.menu==="requisicoes"?"requisicoes":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
+  const visible=indicatorMenu?(["descarga","pesagem"].includes(state.indicator)?state.indicator:"sof"):state.menu==="acessos"?"acessos":state.menu==="requisicoes"?"requisicoes":state.menu==="compras"?"compras":state.menu==="producao"?"producao":state.menu==="atividades"?activityPanels[state.activityView]:state.menu==="equipe"?"equipe":(state.lineupView==="mares"?"mares":"lineup");
   document.querySelectorAll(".tab-panel").forEach(panel=>panel.classList.toggle("active",panel.id===visible));
   document.body.dataset.indicator=state.indicator;
   $("generalTitle").querySelector("h2").textContent=state.indicator==="ocupacao"?"Ocupação de berço":"Operacional";
@@ -345,6 +345,7 @@ function activateNavigation(){
   window.teamPanel?.show(state.menu==="equipe"?state.teamView:null);
   window.accessPanel?.show(state.menu==="acessos");
   window.requisitionsPanel?.show(state.menu==="requisicoes");
+  window.purchasesPanel?.show(state.menu==="compras");
   renderDataSeal();
   syncUrl();
 }
@@ -589,6 +590,7 @@ const urlState={applying:false,pending:null};
 function currentView(){
   if(state.menu==="acessos")return "acessos";
   if(state.menu==="requisicoes")return "requisicoes";
+  if(state.menu==="compras")return "compras";
   if(state.menu==="producao")return "producao";
   if(state.menu==="atividades")return state.activityView==="turno"?"atividades":state.activityView;
   if(state.menu==="equipe")return state.teamView==="resumo"?"equipe":`equipe-${state.teamView}`;
@@ -618,6 +620,7 @@ function applyUrl(search){
   try{
     if(target.view==="acessos")state.menu="acessos";
     else if(target.view==="requisicoes")state.menu="requisicoes";
+    else if(target.view==="compras")state.menu="compras";
     else if(target.view==="producao")state.menu="producao";
     else if(["atividades","acompanhamento","configuracao"].includes(target.view)){state.menu="atividades";state.activityView=target.view==="atividades"?"turno":target.view}
     else if(target.view==="equipe"||target.view.startsWith("equipe-")){state.menu="equipe";state.teamView=target.view==="equipe"?"resumo":target.view.slice(7)}
@@ -661,15 +664,16 @@ function setupRefresh(){
   button.addEventListener("click",async()=>{
     if(button.disabled)return;
     button.disabled=true;button.classList.add("is-busy");label.textContent="Lendo planilhas…";
-    // Na aba Equipe, o botão relê só a planilha da equipe e atualiza a aba sem recarregar a página.
-    const team=state.menu==="equipe";
-    announce(team?"Lendo a planilha da equipe no Google…":"Lendo as planilhas de navios e de indicadores no Google. Isso leva cerca de 20 segundos.");
+    // Nas abas Equipe e Compras, o botão relê só a planilha da aba e atualiza sem recarregar a página.
+    const own={equipe:{base:"equipe",name:"a planilha da equipe",panel:window.teamPanel,done:"Planilha da equipe atualizada."},compras:{base:"compras",name:"o Controle de RMS",panel:window.purchasesPanel,done:"Controle de RMS atualizado."}}[state.menu];
+    const team=Boolean(own);
+    announce(own?`Lendo ${own.name} no Google…`:"Lendo as planilhas de navios e de indicadores no Google. Isso leva cerca de 20 segundos.");
     try{
-      const response=await fetch(team?"/api/refresh?base=equipe":"/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"}});
+      const response=await fetch(own?`/api/refresh?base=${own.base}`:"/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"}});
       const result=await response.json().catch(()=>({}));
-      if(result.status==="refreshed"&&team){await window.teamPanel?.reload();renderDataSeal();announce("Planilha da equipe atualizada.",5000)}
+      if(result.status==="refreshed"&&team){await own.panel?.reload();renderDataSeal();announce(own.done,5000)}
       else if(result.status==="refreshed"){announce("Dados atualizados. Recarregando o painel…");setTimeout(()=>location.reload(),600);return}
-      else if(result.status==="partial"&&team)announce(Object.values(result.results||{})[0]?.error||"Não foi possível ler a planilha da equipe agora.",7000);
+      else if(result.status==="partial"&&team)announce(Object.values(result.results||{})[0]?.error||`Não foi possível ler ${own.name} agora.`,7000);
       else if(result.status==="recent"){const minutes=Math.max(1,Math.ceil((result.retryInMs||0)/60000));announce(`Os dados foram lidos há menos de 5 minutos. Tente de novo em ${minutes} ${minutes===1?"minuto":"minutos"}.`,7000)}
       else if(result.status==="running")announce("Outra atualização já está em andamento. Aguarde alguns segundos e recarregue a página.",7000);
       else if(result.status==="partial"){const failed=Object.entries(result.results||{}).filter(([,r])=>!r.ok).map(([kind])=>kind==="operations"?"navios":"indicadores");announce(`Não foi possível ler a planilha de ${failed.join(" e ")}. A outra foi atualizada; recarregando…`,7000);setTimeout(()=>location.reload(),2500);return}
@@ -704,7 +708,7 @@ function changesBaseHtml(title,meta,current){
 function renderChanges(){
   const panel=$("changesPanel");if(!panel||panel.hidden)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
-  const bases=state.menu==="equipe"?[["Planilha da equipe",window.teamPanel?.getMeta(),true]]:[["Planilha de navios",state.dataMeta,!dischargeView],["Planilha de indicadores",window.dischargePanel?.getMeta(),dischargeView]];
+  const bases=state.menu==="equipe"?[["Planilha da equipe",window.teamPanel?.getMeta(),true]]:state.menu==="compras"?[["Controle de RMS",window.purchasesPanel?.getMeta(),true]]:[["Planilha de navios",state.dataMeta,!dischargeView],["Planilha de indicadores",window.dischargePanel?.getMeta(),dischargeView]];
   if(dischargeView)bases.reverse();
   $("changesBody").innerHTML=bases.map(([title,meta,current])=>changesBaseHtml(title,meta,current)).join("");
 }
@@ -724,10 +728,17 @@ function renderDataSeal(){
   const seal=$("updatedAt");if(!seal)return;
   const dischargeView=state.menu==="indicadores"&&["descarga","pesagem"].includes(state.indicator);
   const wrap=$("dataSealWrap");
-  $("refreshData").hidden=state.menu==="acessos"||state.menu==="requisicoes"||(state.menu!=="equipe"&&!state.access.refresh);
+  $("refreshData").hidden=state.menu==="acessos"||state.menu==="requisicoes"||(state.menu!=="equipe"&&state.menu!=="compras"&&!state.access.refresh);
   if(state.menu==="producao"||state.menu==="atividades"||state.menu==="acessos"||state.menu==="requisicoes"){wrap.hidden=true;$("changesPanel").hidden=true;seal.setAttribute("aria-expanded","false");return}
   wrap.hidden=false;
   renderChanges();
+  if(state.menu==="compras"){
+    const meta=window.purchasesPanel?.getMeta();
+    if(!meta){seal.dataset.level="loading";seal.textContent="Lendo o Controle de RMS…";seal.title="";return}
+    seal.dataset.level="ok";seal.textContent=`Controle de RMS · lido em ${brDateTime(meta.generatedAt)}`;
+    seal.title="Horário em que o painel leu o Controle de RMS (a cada 6 horas ou pelo botão Atualizar dados).";
+    return;
+  }
   if(state.menu==="equipe"){
     const meta=window.teamPanel?.getMeta();
     if(!meta){seal.dataset.level="loading";seal.textContent="Lendo a planilha da equipe…";seal.title="";return}
@@ -795,12 +806,12 @@ function showNoAccess(){
 /** Abre uma tela pelo nome da aba (alertas e atalhos). */
 window.openView=view=>{if(!canView(view))return;applyUrl(`?aba=${view}`);syncUrl()};
 /* Telas de cada menu e o acesso que libera cada uma (o servidor confere de novo em cada pedido). */
-const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin",requisicoes:"requisicoes"};
+const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin",requisicoes:"requisicoes",compras:"indicadores"};
 const canView=view=>{if(view.startsWith("equipe"))return Boolean(state.access.equipe);const need=[].concat(VIEW_ACCESS[view]||[]);return need.some(key=>state.access[key])};
 /** Esconde menus, grupos e subabas sem acesso. */
 function applyAccess(){
   const has=key=>Boolean(state.access[key]);
-  document.querySelectorAll("[data-menu]").forEach(button=>{const menu=button.dataset.menu;button.hidden=menu==="atividades"?!(has("atividades")||has("atividades-config")):menu==="acessos"?!has("admin"):!has(menu)});
+  document.querySelectorAll("[data-menu]").forEach(button=>{const menu=button.dataset.menu;button.hidden=menu==="atividades"?!(has("atividades")||has("atividades-config")):menu==="acessos"?!has("admin"):menu==="compras"?!has("indicadores"):!has(menu)});
   document.querySelectorAll("[data-indicator]").forEach(button=>{button.hidden=!has("indicadores")});
   document.querySelector('[data-activity="turno"]').hidden=!has("atividades");
   document.querySelector('[data-activity="configuracao"]').hidden=!has("atividades-config");
@@ -814,6 +825,7 @@ function allowedView(){
   const target=TpsUrlState.parse(`?aba=${first}`).view;
   if(target==="acessos")state.menu="acessos";
   else if(target==="requisicoes")state.menu="requisicoes";
+  else if(target==="compras")state.menu="compras";
   else if(target==="producao")state.menu="producao";
   else if(["atividades","acompanhamento","configuracao"].includes(target)){state.menu="atividades";state.activityView=target==="atividades"?"turno":target}
   else if(target.startsWith("equipe")){state.menu="equipe";state.teamView="resumo"}

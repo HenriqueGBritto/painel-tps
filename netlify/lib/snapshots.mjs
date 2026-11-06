@@ -1,6 +1,6 @@
 /* Última leitura das planilhas, guardada no Netlify Blobs.
    - Quem abre o painel recebe essa cópia na hora, sem esperar o download do Drive.
-   - A função agendada (refresh-scheduled.mjs) relê navios e indicadores a cada 6 horas e a equipe 1 vez por dia.
+   - A função agendada (refresh-scheduled.mjs) relê navios, indicadores e compras a cada 6 horas e a equipe 1 vez por dia.
    - O botão "Atualizar dados" relê na hora, com intervalo mínimo entre leituras.
    Fora do Netlify (testes e servidor local) usa um armazenamento em memória. */
 import { getStore } from "@netlify/blobs";
@@ -10,9 +10,11 @@ import { withChangeLog } from "./changes.mjs";
 /* Sempre uma leitura nova do Drive (sem o cache curto em memória de sheets.mjs). */
 const freshSheet = kind => loadSheet(kind, { force: true });
 
-export const KINDS = ["operations", "discharge", "team"];
+export const KINDS = ["operations", "discharge", "team", "purchases"];
 /** Bases relidas a cada 6 horas e pelo botão nas abas de indicadores; a equipe tem a própria rotina (1 vez por dia). */
 export const FREQUENT_KINDS = ["operations", "discharge"];
+/** Relidas em toda rodada agendada: as do botão mais o Controle de RMS (Compras tem o botão na própria aba). */
+export const SCHEDULED_KINDS = [...FREQUENT_KINDS, "purchases"];
 /** Cliques no botão dentro deste intervalo devolvem a cópia existente. */
 export const MIN_REFRESH_MS = 5 * 60 * 1000;
 /** Se a rotina agendada falhar por muito tempo, o próprio acesso relê a planilha. */

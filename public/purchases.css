@@ -1,0 +1,23 @@
+/* Compras (Controle de RMS). Reaproveita as classes base-* (discharge.css) e sof-* (sof.css). */
+.purchases-panel .sof-resp>span small{display:block;font-weight:400;color:var(--trl-cinza-600);font-size:.72rem}
+.purchases-panel .sof-resp.is-over .sof-track i{background:var(--trl-vermelho)}
+.purchases-panel .sof-resp:not(.is-over) .sof-track i{background:var(--trl-texto)}
+.purchases-types .sof-track i{background:var(--trl-vermelho)!important}
+.purchases-types .sof-track i.is-muted{background:var(--trl-cinza-300)!important}
+.purchases-panel .sof-track b{left:100%}
+.purchases-table{min-width:0}
+.purchases-table th{white-space:normal;text-align:left;font-weight:600}
+.purchases-table th small{display:block;font-weight:400;color:var(--trl-cinza-600);font-size:.74rem;margin-top:2px}
+.purchases-table tr.is-late td,.purchases-table tr.is-late th{color:var(--trl-vermelho)}
+.purchases-more{margin-top:8px}
+.purchases-search{margin:0 0 8px}
+.purchases-status{display:inline-block;border-radius:50px;padding:2px 9px;font-size:.72rem;font-weight:800;background:var(--trl-cinza-100);color:var(--trl-cinza-800);white-space:nowrap}
+.purchases-status.s-em-aberto{background:#fff4e5;color:#92400e}
+.purchases-status.s-cancelado{background:var(--trl-cinza-100);color:var(--trl-cinza-600);text-decoration:line-through}
+.purchases-panel .sof-resp.is-outside{opacity:.55}
+.purchases-issues{display:grid;gap:6px}
+.purchases-issues details{border:1px solid var(--trl-cinza-100);border-radius:6px;padding:8px 12px;background:var(--trl-branco)}
+.purchases-issues summary{cursor:pointer;font-size:.88rem}
+.purchases-issues summary b{display:inline-block;min-width:44px;font-variant-numeric:tabular-nums;color:var(--trl-vermelho)}
+.purchases-issues .base-table-scroll{margin-top:8px}
+.purchases-table td small{display:block;color:var(--trl-cinza-600);font-size:.72rem}
