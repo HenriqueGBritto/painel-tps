@@ -10,7 +10,7 @@ import "../public/sof-core.js";
 const Sof = globalThis.TpsSof;
 const YEARS = new Set([2025, 2026]);
 const file = process.argv[2];
-const bytes = file ? await readFile(file) : await downloadWorkbook(SHEETS.discharge.defaultId);
+const bytes = file ? await readFile(file) : await downloadWorkbook(SHEETS.discharge.defaultId, fetch, SHEETS.discharge.order, 120000);
 const workbook = XLSX.read(bytes, { type: file ? "buffer" : "array", sheets: ["Base SOF"], cellDates: false, cellFormula: false, cellHTML: false, cellText: false });
 if (!workbook.Sheets["Base SOF"]) throw new Error("Aba Base SOF não encontrada.");
 const rows = XLSX.utils.sheet_to_json(workbook.Sheets["Base SOF"], { header: 1, raw: true, defval: null }).slice(2);

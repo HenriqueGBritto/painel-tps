@@ -119,7 +119,7 @@ const isZip = bytes => bytes.byteLength > 100 && bytes[0] === 0x50 && bytes[1] =
    A ordem padrão começa pelo Drive, porque as duas bases são arquivos do Excel.
    A exportação do Google Planilhas num arquivo do Excel obriga o Google a converter tudo
    e foi a causa da lentidão (cerca de 16 s). As planilhas de produção são nativas e usam ["sheets", "drive"]. */
-export async function downloadWorkbook(id, fetcher = fetch, order = ["drive", "sheets"]) {
+export async function downloadWorkbook(id, fetcher = fetch, order = ["drive", "sheets"], timeout = 8000) {
   const bucket = Math.floor(Date.now() / 60000);
   const sources = {
     drive: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`,
@@ -130,7 +130,7 @@ export async function downloadWorkbook(id, fetcher = fetch, order = ["drive", "s
   for (const url of urls) {
     try {
       const started = Date.now();
-      const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(8000) });
+      const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(timeout) });
       if (!response.ok) { lastError = `Google respondeu ${response.status}.`; continue; }
       if (Number(response.headers.get("content-length")) > MAX_BYTES) { lastError = "Planilha grande demais."; continue; }
       const bytes = new Uint8Array(await response.arrayBuffer());
@@ -183,7 +183,7 @@ export function parseWorkbook(kind, workbook, fetchedAt = new Date(), { lineupBy
 const cache = new Map();
 
 /** Lê e interpreta a planilha, com cache curto na memória da função. */
-export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force = false } = {}) {
+export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force = false, timeout } = {}) {
   const id = sourceId(kind);
   if (!id) throw new Error(`Link da planilha não configurado (${SHEETS[kind].env}).`);
   const extraId = kind === "operations" ? lineupId() : null;
@@ -198,9 +198,9 @@ export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force =
     : null;
   const [workbook, lineupBytes] = await Promise.all([
     viaApi,
-    extraId ? downloadWorkbook(extraId, fetcher, SHEETS.operations.lineup.order) : null
+    extraId ? downloadWorkbook(extraId, fetcher, SHEETS.operations.lineup.order, timeout) : null
   ]);
-  const bytes = workbook ? null : await downloadWorkbook(id, fetcher, config.order);
+  const bytes = workbook ? null : await downloadWorkbook(id, fetcher, config.order, timeout);
   const parseStarted = Date.now();
   const data = workbook ? parseWorkbook(kind, workbook, new Date(now()), { lineupBytes }) : parseSheet(kind, bytes, new Date(now()), { lineupBytes });
   console.log(`Planilha ${kind} interpretada em ${Date.now() - parseStarted} ms.`);
