@@ -6,6 +6,8 @@ import { XLSX, parseOperationsWorkbook, parseDischargeWorkbook } from "./parsers
 import { parseTeamWorkbook, TEAM_TABS } from "./team-parsers.mjs";
 import { readColumns } from "./fast-xlsx.mjs";
 import { parsePurchasesWorkbook } from "./purchases.mjs";
+import { readWorkbookViaApi } from "./sheets-api.mjs";
+import { serviceAccount } from "./google-auth.mjs";
 
 const MAX_BYTES = 40 * 1024 * 1024;
 const CACHE_MS = 2 * 60 * 1000;
@@ -13,9 +15,14 @@ const CACHE_MS = 2 * 60 * 1000;
 export const SHEETS = {
   operations: {
     env: "TPS_SHEET_OPERATIONS",
-    defaultId: "1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm", // dados_navios_dinamico_triunfo.xlsm
+    // Google Planilhas nativo desde 06/11/2026 (antes: dados_navios_dinamico_triunfo.xlsm, 1nPBFECVbRr7cYxxmGRXdT3F9f0zT_wWm).
+    defaultId: "17ntu_37jz9tdPbwRFXSFteiiCsuJR7LVpfktHxijiDU",
     label: "dados_navios_dinamico_triunfo",
-    fileName: "dados_navios_dinamico_triunfo.xlsm",
+    fileName: "dados_navios_dinamico_triunfo",
+    order: ["sheets", "drive"],
+    editUrl: true,
+    // Nativa: lida pela API com a conta de serviço (sheets-api.mjs); sem a conta (servidor local), pela exportação .xlsx.
+    api: true,
     tabs: ["2024", "2025", "2026", "BASE_GUSA_2026"],
     readOptions: { cellDates: false },
     // A aba LINEUP fica na planilha de produção "outras" (Google Planilhas nativo), com a mesma estrutura de antes.
@@ -23,9 +30,14 @@ export const SHEETS = {
   },
   discharge: {
     env: "TPS_SHEET_DISCHARGE",
-    defaultId: "12ionZt6pJ7yeX59EUX-rppOCugcvp9F7", // Base - Indicadores Operacionais TPS.xlsx
+    // Google Planilhas nativo desde 06/11/2026 (antes: Base - Indicadores Operacionais TPS.xlsx, 12ionZt6pJ7yeX59EUX-rppOCugcvp9F7).
+    // A exportação .xlsx dela leva cerca de 50 s: em produção é lida pela API, só as colunas abaixo.
+    defaultId: "1woiO6dt_Nmd6DQ6KwWiwbyXQ0T4mtYd_TTZukouSP8I",
     label: "Base - Indicadores Operacionais TPS",
-    fileName: "Base - Indicadores Operacionais TPS.xlsx",
+    fileName: "Base - Indicadores Operacionais TPS",
+    order: ["sheets", "drive"],
+    editUrl: true,
+    api: true,
     tabs: ["Base Descarga", "Base Pesagens"],
     // Colunas lidas pelo parseDischargeWorkbook (0 = A). Se o leitor passar a usar outra coluna, inclua aqui.
     columns: {
@@ -151,6 +163,12 @@ export function parseSheet(kind, bytes, fetchedAt = new Date(), { lineupBytes = 
   const workbook = config.columns
     ? readColumns(bytes, config.columns, { cellDates: false })
     : XLSX.read(bytes, { type: "array", sheets: lineupBytes || !config.lineup ? config.tabs : [...config.tabs, config.lineup.tab], cellText: false, cellHTML: false, cellFormula: false, ...config.readOptions });
+  return parseWorkbook(kind, workbook, fetchedAt, { lineupBytes });
+}
+
+/** Planilha já aberta (do .xlsx ou da API) → dados do painel. */
+export function parseWorkbook(kind, workbook, fetchedAt = new Date(), { lineupBytes = null } = {}) {
+  const config = SHEETS[kind];
   const source = `${config.label} (Google Planilhas)`;
   const data = kind === "purchases" ? parsePurchasesWorkbook(workbook, source) : kind === "team" ? parseTeamWorkbook(workbook, source) : kind === "operations"
     ? parseOperationsWorkbook(attachLineup(workbook, lineupBytes), source)
@@ -172,12 +190,19 @@ export async function loadSheet(kind, { fetcher = fetch, now = Date.now, force =
   const key = `${id}|${extraId || ""}`;
   const cached = cache.get(kind);
   if (!force && cached && cached.id === key && now() - cached.at < CACHE_MS) return cached.data;
-  const [bytes, lineupBytes] = await Promise.all([
-    downloadWorkbook(id, fetcher, SHEETS[kind].order),
+  const config = SHEETS[kind];
+  const account = config.api ? serviceAccount() : null;
+  const viaApi = account
+    ? readWorkbookViaApi(id, config.columns || Object.fromEntries(config.tabs.map(tab => [tab, null])), { account, fetchImpl: fetcher, now: now() })
+      .catch(error => { console.log(`API do Google Planilhas falhou para ${kind} (${error.message}); tentando a exportação .xlsx.`); return null; })
+    : null;
+  const [workbook, lineupBytes] = await Promise.all([
+    viaApi,
     extraId ? downloadWorkbook(extraId, fetcher, SHEETS.operations.lineup.order) : null
   ]);
+  const bytes = workbook ? null : await downloadWorkbook(id, fetcher, config.order);
   const parseStarted = Date.now();
-  const data = parseSheet(kind, bytes, new Date(now()), { lineupBytes });
+  const data = workbook ? parseWorkbook(kind, workbook, new Date(now()), { lineupBytes }) : parseSheet(kind, bytes, new Date(now()), { lineupBytes });
   console.log(`Planilha ${kind} interpretada em ${Date.now() - parseStarted} ms.`);
   cache.set(kind, { id: key, at: now(), data });
   return data;

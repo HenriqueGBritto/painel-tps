@@ -137,7 +137,8 @@ export async function allVessels(store, std) {
   std ||= await standardsOf(store);
   const sent = store ? await store.list(VESSELS) : [];
   const removed = new Set(sent.filter(v => v.deleted && v.replaces).map(v => v.replaces));
-  const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), source: "sof", events: (v.events || []).map(e => expandEvent(e, std)) }));
+  const seeded = new Map(seed().vessels.map(v => [v.id, v]));
+  const uploaded = sent.filter(v => !v.deleted && !removedIds.has(v.id)).map(v => ({ ...renamed(v), ...fixedTons(v, seeded.get(v.replaces)), source: "sof", events: (v.events || []).map(e => expandEvent(e, std)) }));
   const sameName = (a, b) => [a.vessel, a.originalName].some(x => x && [b.vessel, b.originalName].some(y => y && Sof.vesselKey(x) === Sof.vesselKey(y)));
   const replaced = vessel => uploaded.some(u => sameName(u, vessel) && Math.abs(Date.parse(u.operationStart) - Date.parse(vessel.operationStart)) < 2 * 86400000);
   const edited = new Set(uploaded.map(u => u.replaces).filter(Boolean));
@@ -145,6 +146,12 @@ export async function allVessels(store, std) {
   // O histórico já vem com os padrões do arquivo; o que foi mudado no painel é aplicado por cima.
   if (std !== BASE) history = history.map(v => ({ ...v, events: v.events.map(e => withReason(e, std)) }));
   return [...history, ...uploaded].sort((a, b) => a.operationStart.localeCompare(b.operationStart));
+}
+
+/** Navio do histórico editado no painel antes da correção do peso (scripts/fix-base-sof-tons.mjs): a cópia guardou o peso
+    errado da Base SOF; sem o usuário ter mudado o peso, vale o corrigido. */
+function fixedTons(edit, base) {
+  return base && base.tonsBase !== undefined && edit.tons === base.tonsBase ? { tons: base.tons, invoiceTons: base.invoiceTons } : {};
 }
 
 /** Navio da planilha de navios com o mesmo nome e atracação/início mais próximos (até 5 dias). */

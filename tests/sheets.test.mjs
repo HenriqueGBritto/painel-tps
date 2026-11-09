@@ -158,10 +158,11 @@ test("sem acesso à planilha, a API devolve a última base salva com aviso", asy
 });
 
 test("cada base informa o nome e o link dos arquivos lidos", () => {
-  assert.deepEqual(sourceFiles("discharge", {}).map(file => file.name), ["Base - Indicadores Operacionais TPS.xlsx"]);
+  assert.deepEqual(sourceFiles("discharge", {}).map(file => file.name), ["Base - Indicadores Operacionais TPS"]);
   const operations = sourceFiles("operations", {});
-  assert.deepEqual(operations.map(file => file.name), ["dados_navios_dinamico_triunfo.xlsm", "Planilha de produção \"outras\" (aba LINEUP)"]);
+  assert.deepEqual(operations.map(file => file.name), ["dados_navios_dinamico_triunfo", "Planilha de produção \"outras\" (aba LINEUP)"]);
+  assert.match(operations[0].url, /^https:\/\/docs\.google\.com\/spreadsheets\/d\/17ntu_/);
   assert.match(operations[1].url, /^https:\/\/docs\.google\.com\/spreadsheets\/d\/1KDStq/);
   const custom = sourceFiles("discharge", { TPS_SHEET_DISCHARGE: "https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view" });
-  assert.deepEqual(custom, [{ name: "Arquivo definido em TPS_SHEET_DISCHARGE", url: "https://drive.google.com/file/d/abcdefghijklmnopqrstuvwxyz/view" }]);
+  assert.deepEqual(custom, [{ name: "Arquivo definido em TPS_SHEET_DISCHARGE", url: "https://docs.google.com/spreadsheets/d/abcdefghijklmnopqrstuvwxyz/edit" }]);
 });

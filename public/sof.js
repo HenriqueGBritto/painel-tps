@@ -310,7 +310,7 @@
       <div class="sof-meta"><span><b>Berço</b> ${escape(v.berth || "—")}${fromSheet("berth")}</span><span><b>Cliente</b> ${escape(v.client || "—")}${fromSheet("client")}</span>
         <span><b>Atracação</b> ${fmtDate(v.berthStart)}</span><span><b>Início</b> ${fmtDate(v.operationStart)}</span><span><b>Término</b> ${fmtDate(v.operationEnd)}</span><span><b>Desatracação</b> ${fmtDate(v.berthEnd)}${fromSheet("berthEnd")}</span></div>
       <div class="base-kpis sof-kpis">${[
-        kpi("VOLUME", `${int.format(v.tons)} t`, escape(v.cargo)),
+        kpi("VOLUME", `${int.format(v.tons)} t`, v.tonsSource ? `${escape(v.cargo)} · corrigido pela ${escape(v.tonsSource)} (a Base SOF tinha ${int.format(v.tonsBase)} t)` : escape(v.cargo)),
         kpi("TEMPO ATRACADO", daysText(s.berthDays || null), `espera até operar: ${s.waitDays ? hours(s.waitDays) : "—"}`),
         kpi("TEMPO DE OPERAÇÃO", daysText(s.operationDays), "início → término"),
         kpi("PRANCHA BRUTA", rate(s.grossRate), `líquida ${rate(s.netRate)}`),

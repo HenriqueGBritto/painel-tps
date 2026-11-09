@@ -3,7 +3,7 @@
    sof-mirror-scheduled reescreve a planilha quando há mudança (ou uma vez por dia, para a desatracação da planilha de navios).
    Acesso: a mesma conta de serviço do Firebase (FIREBASE_SERVICE_ACCOUNT_JSON), com a planilha compartilhada
    com o e-mail dela como Editor e a Google Sheets API ativada no projeto. ID trocável por TPS_SOF_MIRROR_SHEET. */
-import { createSign } from "node:crypto";
+import { googleToken } from "./google-auth.mjs";
 import { loadForServing } from "./snapshots.mjs";
 import { sheetId } from "./sheets.mjs";
 import * as sof from "./sof.mjs";
@@ -71,21 +71,7 @@ export function mirrorTabs(vessels, reasons, now = new Date()) {
 
 /* ---------- Google ---------- */
 
-const base64url = value => Buffer.from(typeof value === "string" ? value : JSON.stringify(value)).toString("base64url");
-
-/** Token de acesso da conta de serviço só para planilhas (JWT assinado aqui, sem biblioteca do Google). */
-export async function googleToken(account, fetchImpl = fetch, now = Date.now()) {
-  const iat = Math.floor(now / 1000);
-  const unsigned = `${base64url({ alg: "RS256", typ: "JWT" })}.${base64url({ iss: account.client_email, scope: "https://www.googleapis.com/auth/spreadsheets", aud: "https://oauth2.googleapis.com/token", iat, exp: iat + 3600 })}`;
-  const signature = createSign("RSA-SHA256").update(unsigned).sign(account.private_key, "base64url");
-  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${signature}` })
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.access_token) throw new Error(`Google recusou a conta de serviço: ${body.error_description || body.error || response.status}`);
-  return body.access_token;
-}
+export { googleToken };
 
 async function call(fetchImpl, token, url, method = "GET", payload) {
   const response = await fetchImpl(url, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: payload ? JSON.stringify(payload) : undefined });
