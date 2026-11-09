@@ -122,6 +122,9 @@ test("explica quando a planilha não está compartilhada", async () => {
 test("guarda a leitura por alguns minutos para não consultar o Google a cada acesso", async () => {
   clearSheetCache();
   process.env.TPS_SHEET_DISCHARGE = ID;
+  // No Netlify a conta de serviço existe durante os testes; aqui a leitura é pela exportação .xlsx.
+  const account = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   let calls = 0, clock = 1_000_000;
   const options = { fetcher: async () => { calls++; return fakeResponse(toBytes(dischargeWorkbook())); }, now: () => clock };
   await loadSheet("discharge", options);
@@ -131,6 +134,7 @@ test("guarda a leitura por alguns minutos para não consultar o Google a cada ac
   await loadSheet("discharge", options);
   assert.equal(calls, 2);
   delete process.env.TPS_SHEET_DISCHARGE;
+  if (account !== undefined) process.env.FIREBASE_SERVICE_ACCOUNT_JSON = account;
   clearSheetCache();
 });
 
