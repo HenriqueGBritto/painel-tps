@@ -1,0 +1,174 @@
+{
+  "base-013": {
+    "vessel": "INDUSTRIAL HOBART",
+    "start": "30/01/2025",
+    "tons": 473.067
+  },
+  "base-104": {
+    "vessel": "BBC GANGES",
+    "start": "19/11/2025",
+    "tons": 163.727
+  },
+  "base-007": {
+    "vessel": "SEDNA DESGAGNES",
+    "start": "19/01/2025",
+    "tons": 718.427
+  },
+  "base-011": {
+    "vessel": "SPRING HONOR",
+    "start": "27/01/2025",
+    "tons": 2336.64
+  },
+  "base-012": {
+    "vessel": "INDUSTRIAL CONSTANT",
+    "start": "29/01/2025",
+    "tons": 2164.938
+  },
+  "base-014": {
+    "vessel": "INDUSTRIAL CONSTANT",
+    "start": "03/02/2025",
+    "tons": 1525.855
+  },
+  "base-016": {
+    "vessel": "BBC AUSTRIA",
+    "start": "04/02/2025",
+    "tons": 1240.53
+  },
+  "base-018": {
+    "vessel": "BBC ECHO",
+    "start": "05/02/2025",
+    "tons": 6891.183
+  },
+  "base-022": {
+    "vessel": "SPRING HONOR",
+    "start": "17/02/2025",
+    "tons": 1830.637
+  },
+  "base-053": {
+    "vessel": "UKPIK",
+    "start": "30/04/2025",
+    "tons": 307.822
+  },
+  "base-084": {
+    "vessel": "COSCO SHIPPING RUYI",
+    "start": "14/09/2025",
+    "tons": 7399.642
+  },
+  "base-128": {
+    "vessel": "TAIGA DESGAGNES",
+    "start": "15/01/2026",
+    "tons": 292.684
+  },
+  "base-043": {
+    "vessel": "INDUSTRIAL HOBART",
+    "start": "15/04/2025",
+    "tons": 5.216
+  },
+  "base-096": {
+    "vessel": "POOLGRACHT",
+    "start": "27/10/2025",
+    "tons": 2407.182
+  },
+  "base-153": {
+    "vessel": "INDUSTRIAL SONG",
+    "start": "09/04/2026",
+    "tons": 386.46
+  },
+  "base-177": {
+    "vessel": "UAL TEXAS",
+    "start": "14/07/2026",
+    "tons": 236.7
+  },
+  "base-001": {
+    "vessel": "RUKAI BENEFIT",
+    "start": "03/01/2025",
+    "tons": 1779.26
+  },
+  "base-003": {
+    "vessel": "PIETERSGRACHT",
+    "start": "10/01/2025",
+    "tons": 519.729
+  },
+  "base-008": {
+    "vessel": "BBC PEARL",
+    "start": "21/01/2025",
+    "tons": 2239.98
+  },
+  "base-019": {
+    "vessel": "STAR LAGUNA",
+    "start": "12/02/2025",
+    "tons": 369.8
+  },
+  "base-035": {
+    "vessel": "BBC EDGE",
+    "start": "28/03/2025",
+    "tons": 1306.64
+  },
+  "base-079": {
+    "vessel": "BBC BRISBANE",
+    "start": "31/08/2025",
+    "tons": 97.97
+  },
+  "base-081": {
+    "vessel": "BBC XINGANG",
+    "start": "01/09/2025",
+    "tons": 3049.216
+  },
+  "base-121": {
+    "vessel": "HAPPY DELTA",
+    "start": "29/12/2025",
+    "tons": 1125.794
+  },
+  "base-136": {
+    "vessel": "BBC FUJI",
+    "start": "17/02/2026",
+    "tons": 687.368
+  },
+  "base-076": {
+    "vessel": "INDUSTRIAL URSULA",
+    "start": "31/07/2025",
+    "tons": 907.945
+  },
+  "base-113": {
+    "vessel": "UAL MANITOBA",
+    "start": "12/12/2025",
+    "tons": 332.244
+  },
+  "base-135": {
+    "vessel": "MUNTGRACHT",
+    "start": "05/02/2026",
+    "tons": 493.642
+  },
+  "base-164": {
+    "vessel": "BBC RIO",
+    "start": "01/06/2026",
+    "tons": 406.099,
+    "repeated": true
+  },
+  "base-165": {
+    "vessel": "BBC RIO",
+    "start": "01/06/2026",
+    "tons": 406.099,
+    "repeated": true
+  },
+  "base-083": {
+    "vessel": "INDUSTRIAL SWIFT",
+    "start": "13/09/2025",
+    "tons": 606.981
+  },
+  "base-094": {
+    "vessel": "INDUSTRIAL CONSTANT",
+    "start": "13/10/2025",
+    "tons": 1491.18
+  },
+  "base-103": {
+    "vessel": "UAL BRAZIL",
+    "start": "12/11/2025",
+    "tons": 162.89
+  },
+  "base-162": {
+    "vessel": "EVA-MARIE",
+    "start": "14/05/2026",
+    "tons": 746.9
+  }
+}

@@ -3,7 +3,8 @@
    acima em vários navios de gusa: o peso do navio de gusa aparece no navio anterior (BBC DAKOTA com 28.216 t, SEA BRAVE
    com 53.544 t…) e o navio de gusa fica com outro valor. Aqui o peso passa a ser o da planilha de navios quando os dois
    discordam e um deles tem tamanho de navio de gusa (15 mil t ou mais). Nos navios menores, só quando a soma das
-   ocorrências do SOF confirma a planilha de navios. O valor antigo fica em tonsBase.
+   ocorrências do SOF confirma a planilha de navios. Os pesos conferidos pela operação (scripts/sof-pesos-conferidos.json,
+   por id do navio) valem acima das regras. O valor antigo fica em tonsBase.
    Uso: node scripts/fix-base-sof-tons.mjs   (baixa a planilha de navios; rodar de novo depois de import-base-sof.mjs) */
 process.env.TZ = "America/Sao_Paulo";
 import { readFile, writeFile } from "node:fs/promises";
@@ -33,13 +34,17 @@ const data = JSON.parse(await readFile(file, "utf8"));
 // Sem a conta de serviço (aqui no computador) a planilha vem pela exportação .xlsx, que pode passar dos 8 s do painel.
 const { records } = await loadSheet("operations", { timeout: 60000 });
 const names = JSON.parse(await readFile(new URL("../netlify/lib/sof-standards.json", import.meta.url), "utf8")).vessels;
+const confirmed = JSON.parse(await readFile(new URL("./sof-pesos-conferidos.json", import.meta.url), "utf8"));
 const changed = [];
 for (const vessel of data.vessels) {
   const base = vessel.tonsBase ?? vessel.tons;
   const name = names[vessel.vessel];
   const match = matchOperation(name ? { ...vessel, vessel: name, originalName: vessel.vessel } : vessel, records);
   const events = round(vessel.events.reduce((sum, e) => sum + (e.weight || 0), 0));
-  const fix = fixedTons(base, match ? match.tons : null, events);
+  // Peso conferido pela operação (sof-pesos-conferidos.json) vale acima das regras.
+  const checked = confirmed[vessel.id];
+  const fix = checked ? (agree(checked.tons, base) && Math.abs(checked.tons - base) < 0.001 ? null : { tons: checked.tons, why: "conferência da operação" })
+    : fixedTons(base, match ? match.tons : null, events);
   delete vessel.tonsBase; delete vessel.tonsSource;
   vessel.tons = base;
   if (!fix) continue;
