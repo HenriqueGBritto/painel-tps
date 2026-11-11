@@ -22,9 +22,9 @@ export function fixedTons(base, sheet, events) {
   const confirms = value => agree(events, value) || agree(events / 1000, value);
   if (sheet > 0 && Math.max(base || 0, sheet) < GUSA_SIZE && confirms(sheet) && !confirms(base)) return { tons: sheet, why: "planilha de navios (confirmada pelas ocorrências do SOF)" };
   if (Math.max(base || 0, sheet || 0) < GUSA_SIZE && sheet !== null) return null;
-  if (sheet >= 100) return { tons: sheet, why: "planilha de navios" };
   // Planilha de navios com o peso em milhares (53 em vez de 53.111): o da base está certo.
   if (sheet > 0 && agree(sheet * 1000, base)) return null;
+  if (sheet > 0) return { tons: sheet, why: "planilha de navios" };
   if (base >= GUSA_SIZE && events > 0 && events < base / 2) return { tons: events, why: "soma das ocorrências do SOF" };
   return null;
 }

@@ -161,11 +161,21 @@ export function matchOperation(vessel, records) {
   // A planilha de navios pode ainda usar o nome antigo (com operação, mês ou erro de digitação).
   if (vessel.originalName) return matchOperation({ ...vessel, originalName: "" }, records) || matchOperation({ ...vessel, vessel: vessel.originalName, originalName: "" }, records);
   const when = Date.parse(vessel.berthStart || vessel.operationStart);
+  // Mesma escala em duas linhas (importação e exportação): vale a de início de operação mais próximo, não a primeira.
+  // A operação escrita na Base SOF às vezes está trocada, então ela só desempata.
+  const operationWhen = Date.parse(vessel.operationStart || "");
+  const start = r => {
+    if (!Number.isFinite(operationWhen)) return 0;
+    const at = Date.parse(r.operationStart || "");
+    return Number.isFinite(at) ? Math.abs(at - operationWhen) : Infinity;
+  };
+  const other = r => vessel.operation && r.operation !== vessel.operation ? 1 : 0;
   const near = records.filter(r => {
     const k = Sof.vesselKey(r.vessel);
     return k && (k === key || (Math.min(k.length, key.length) >= 5 && (k.startsWith(key) || key.startsWith(k))));
-  }).map(r => ({ r, gap: Math.abs(Date.parse(r.berthStart || r.operationStart || "") - when) }))
-    .filter(x => Number.isFinite(x.gap) && x.gap < 5 * 86400000).sort((a, b) => a.gap - b.gap);
+  }).map(r => ({ r, gap: Math.abs(Date.parse(r.berthStart || r.operationStart || "") - when), start: start(r) }))
+    .filter(x => Number.isFinite(x.gap) && x.gap < 5 * 86400000)
+    .sort((a, b) => (a.start - b.start) || a.gap - b.gap || other(a.r) - other(b.r));
   return near[0]?.r || null;
 }
 
