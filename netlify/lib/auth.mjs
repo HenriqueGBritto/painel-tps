@@ -28,13 +28,14 @@ export const PERMISSIONS = {
   producao: "Produção",
   atividades: "Atividades (registrar no turno)",
   requisicoes: "Requisições de estiva",
+  compras: "Compras",
   "atividades-config": "Configuração das Atividades",
   equipe: "Equipe (RH)",
   admin: "Administrador (gerencia os acessos)"
 };
 export const PRESETS = {
   Assistente: ["indicadores", "lineup", "producao", "atividades", "requisicoes"],
-  "Gestão": ["indicadores", "lineup", "producao", "atividades", "requisicoes", "atividades-config", "equipe"]
+  "Gestão": ["indicadores", "lineup", "producao", "atividades", "requisicoes", "compras", "atividades-config", "equipe"]
 };
 
 export class AuthError extends Error {
@@ -173,12 +174,15 @@ const publicUser = (uid, profile) => ({
 /**
  * Acessos novos entram nos perfis antigos uma vez só (versão do perfil):
  * v2 = "Requisições de estiva" liberado para quem já tinha Atividades.
+ * v3 = "Compras" liberado para quem já tinha Indicadores (antes Compras seguia os Indicadores).
  */
-export const PROFILE_VERSION = 2;
+export const PROFILE_VERSION = 3;
 export function upgradeProfile(profile) {
-  if (!profile || (profile.profileVersion || 1) >= PROFILE_VERSION) return null;
+  const version = profile?.profileVersion || 1;
+  if (!profile || version >= PROFILE_VERSION) return null;
   const permissions = [...(profile.permissions || [])];
-  if (permissions.includes("atividades") && !permissions.includes("requisicoes")) permissions.push("requisicoes");
+  if (version < 2 && permissions.includes("atividades") && !permissions.includes("requisicoes")) permissions.push("requisicoes");
+  if (version < 3 && permissions.includes("indicadores") && !permissions.includes("compras")) permissions.push("compras");
   return { ...profile, permissions, profileVersion: PROFILE_VERSION };
 }
 

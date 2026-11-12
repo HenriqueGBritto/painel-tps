@@ -806,12 +806,12 @@ function showNoAccess(){
 /** Abre uma tela pelo nome da aba (alertas e atalhos). */
 window.openView=view=>{if(!canView(view))return;applyUrl(`?aba=${view}`);syncUrl()};
 /* Telas de cada menu e o acesso que libera cada uma (o servidor confere de novo em cada pedido). */
-const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin",requisicoes:"requisicoes",compras:"indicadores"};
+const VIEW_ACCESS={operacional:"indicadores",ocupacao:"indicadores",descarga:"indicadores",pesagem:"indicadores",lineup:"lineup",mares:"lineup",producao:"producao",atividades:"atividades",acompanhamento:["atividades","atividades-config"],configuracao:"atividades-config",acessos:"admin",requisicoes:"requisicoes",compras:"compras"};
 const canView=view=>{if(view.startsWith("equipe"))return Boolean(state.access.equipe);const need=[].concat(VIEW_ACCESS[view]||[]);return need.some(key=>state.access[key])};
 /** Esconde menus, grupos e subabas sem acesso. */
 function applyAccess(){
   const has=key=>Boolean(state.access[key]);
-  document.querySelectorAll("[data-menu]").forEach(button=>{const menu=button.dataset.menu;button.hidden=menu==="atividades"?!(has("atividades")||has("atividades-config")):menu==="acessos"?!has("admin"):menu==="compras"?!has("indicadores"):!has(menu)});
+  document.querySelectorAll("[data-menu]").forEach(button=>{const menu=button.dataset.menu;button.hidden=menu==="atividades"?!(has("atividades")||has("atividades-config")):menu==="acessos"?!has("admin"):!has(menu)});
   document.querySelectorAll("[data-indicator]").forEach(button=>{button.hidden=!has("indicadores")});
   document.querySelector('[data-activity="turno"]').hidden=!has("atividades");
   document.querySelector('[data-activity="configuracao"]').hidden=!has("atividades-config");

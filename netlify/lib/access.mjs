@@ -55,8 +55,7 @@ export const REQUIRED = {
   [ACTIONS.manageSofStandards]: ["admin"],
   // Editar navio e ocorrências da Base SOF: só o administrador.
   [ACTIONS.editSof]: ["admin"],
-  // Compras: por enquanto, quem vê os indicadores (o usuário vai separar os acessos depois).
-  [ACTIONS.readPurchases]: ["indicadores"]
+  [ACTIONS.readPurchases]: ["compras"]
 };
 
 export function can(user, action) {

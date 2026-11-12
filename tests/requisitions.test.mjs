@@ -201,6 +201,12 @@ test("feriados: lista inicial com Carnaval, Sexta-feira Santa e Corpus Christi, 
 
 test("acessos antigos: quem tinha Atividades ganha Requisições uma vez só", () => {
   assert.deepEqual(upgradeProfile({ permissions: ["atividades"] }).permissions, ["atividades", "requisicoes"]);
-  assert.deepEqual(upgradeProfile({ permissions: ["indicadores"] }).permissions, ["indicadores"]);
-  assert.equal(upgradeProfile({ permissions: ["atividades"], profileVersion: 2 }), null, "já migrado: o administrador pode ter tirado");
+  assert.deepEqual(upgradeProfile({ permissions: ["lineup"] }).permissions, ["lineup"]);
+  assert.deepEqual(upgradeProfile({ permissions: ["atividades"], profileVersion: 2 }).permissions, ["atividades"], "já migrado: o administrador pode ter tirado");
+});
+
+test("acessos antigos: quem tinha Indicadores ganha Compras uma vez só", () => {
+  assert.deepEqual(upgradeProfile({ permissions: ["indicadores"], profileVersion: 2 }).permissions, ["indicadores", "compras"]);
+  assert.deepEqual(upgradeProfile({ permissions: ["lineup"], profileVersion: 2 }).permissions, ["lineup"]);
+  assert.equal(upgradeProfile({ permissions: ["indicadores"], profileVersion: 3 }), null, "já migrado: o administrador pode ter tirado");
 });
